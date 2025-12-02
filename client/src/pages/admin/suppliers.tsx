@@ -468,15 +468,15 @@ export default function AdminSuppliersPage() {
                         {supplier.type}
                       </Badge>
                     </TableCell>
-                    <TableCell>{supplier.stats.totalProducts.toLocaleString()}</TableCell>
+                    <TableCell>{(supplier.totalProducts || 0).toLocaleString()}</TableCell>
                     <TableCell>
                       <div className="flex items-center gap-2">
-                        {supplier.stats.successRate >= 95 ? (
+                        {(supplier.rating || 5) >= 4.5 ? (
                           <CheckCircle className="h-4 w-4 text-chart-2" />
                         ) : (
                           <XCircle className="h-4 w-4 text-chart-4" />
                         )}
-                        {supplier.stats.successRate}%
+                        {((supplier.rating || 5) * 20).toFixed(0)}%
                       </div>
                     </TableCell>
                     <TableCell>

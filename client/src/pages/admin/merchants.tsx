@@ -146,7 +146,7 @@ export default function AdminMerchantsPage() {
               </div>
             </TableCell>
             <TableCell>
-              ${merchant.stats.totalRevenue.toLocaleString()}
+              ${((merchant.totalRevenue || 0) / 100).toLocaleString()}
             </TableCell>
             <TableCell>
               {merchant.shopifyStore?.isConnected ? (
@@ -267,7 +267,7 @@ export default function AdminMerchantsPage() {
               </div>
               <div>
                 <p className="text-2xl font-bold">
-                  ${merchants?.reduce((acc, m) => acc + m.stats.totalRevenue, 0).toLocaleString() || 0}
+                  ${merchants?.reduce((acc, m) => acc + (m.totalRevenue || 0), 0).toLocaleString() || 0}
                 </p>
                 <p className="text-xs text-muted-foreground">Total Revenue</p>
               </div>
@@ -349,11 +349,11 @@ export default function AdminMerchantsPage() {
                 </div>
                 <div className="space-y-2">
                   <p className="text-sm text-muted-foreground">Total Revenue</p>
-                  <p className="font-medium">${selectedMerchant.stats.totalRevenue.toLocaleString()}</p>
+                  <p className="font-medium">${((selectedMerchant.totalRevenue || 0) / 100).toLocaleString()}</p>
                 </div>
                 <div className="space-y-2">
                   <p className="text-sm text-muted-foreground">Total Orders</p>
-                  <p className="font-medium">{selectedMerchant.stats.totalOrders.toLocaleString()}</p>
+                  <p className="font-medium">{(selectedMerchant.totalOrders || 0).toLocaleString()}</p>
                 </div>
                 <div className="space-y-2">
                   <p className="text-sm text-muted-foreground">Shopify Store</p>

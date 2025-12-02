@@ -84,8 +84,8 @@ export default function AdminOrdersPage() {
   const pendingOrders = filteredOrders?.filter((o) => o.status === "pending") || [];
   const processingOrders = filteredOrders?.filter((o) => o.status === "processing") || [];
 
-  const totalRevenue = orders?.reduce((acc, o) => acc + o.financials.total, 0) || 0;
-  const totalProfit = orders?.reduce((acc, o) => acc + o.financials.totalProfit, 0) || 0;
+  const totalRevenue = orders?.reduce((acc, o) => acc + (o.total || 0), 0) || 0;
+  const totalProfit = orders?.reduce((acc, o) => acc + (o.totalProfit || 0), 0) || 0;
 
   const handleViewDetails = (order: Order) => {
     setSelectedOrder(order);
@@ -247,9 +247,9 @@ export default function AdminOrdersPage() {
                             <p className="text-xs text-muted-foreground">{order.customerEmail}</p>
                           </div>
                         </TableCell>
-                        <TableCell>${order.financials.total.toFixed(2)}</TableCell>
+                        <TableCell>${((order.total || 0) / 100).toFixed(2)}</TableCell>
                         <TableCell className="text-chart-2">
-                          ${order.financials.totalProfit.toFixed(2)}
+                          ${((order.totalProfit || 0) / 100).toFixed(2)}
                         </TableCell>
                         <TableCell>
                           <Badge variant={orderStatusColors[order.status]}>
@@ -301,7 +301,7 @@ export default function AdminOrdersPage() {
                         </TableCell>
                         <TableCell>{getMerchantName(order.merchantId)}</TableCell>
                         <TableCell>{order.customerEmail}</TableCell>
-                        <TableCell>${order.financials.total.toFixed(2)}</TableCell>
+                        <TableCell>${((order.total || 0) / 100).toFixed(2)}</TableCell>
                         <TableCell>
                           <Badge variant="outline">Pending</Badge>
                         </TableCell>
@@ -340,7 +340,7 @@ export default function AdminOrdersPage() {
                         </TableCell>
                         <TableCell>{getMerchantName(order.merchantId)}</TableCell>
                         <TableCell>{order.customerEmail}</TableCell>
-                        <TableCell>${order.financials.total.toFixed(2)}</TableCell>
+                        <TableCell>${((order.total || 0) / 100).toFixed(2)}</TableCell>
                         <TableCell>
                           <Badge variant="secondary">Processing</Badge>
                         </TableCell>
@@ -456,23 +456,23 @@ export default function AdminOrdersPage() {
                 <div className="space-y-2">
                   <div className="flex justify-between text-sm">
                     <span className="text-muted-foreground">Subtotal</span>
-                    <span>${selectedOrder.financials.subtotal.toFixed(2)}</span>
+                    <span>${((selectedOrder.subtotal || 0) / 100).toFixed(2)}</span>
                   </div>
                   <div className="flex justify-between text-sm">
                     <span className="text-muted-foreground">Shipping</span>
-                    <span>${selectedOrder.financials.shipping.toFixed(2)}</span>
+                    <span>${((selectedOrder.shippingCost || 0) / 100).toFixed(2)}</span>
                   </div>
                   <div className="flex justify-between text-sm">
                     <span className="text-muted-foreground">Tax</span>
-                    <span>${selectedOrder.financials.tax.toFixed(2)}</span>
+                    <span>${((selectedOrder.tax || 0) / 100).toFixed(2)}</span>
                   </div>
                   <div className="flex justify-between font-medium pt-2 border-t">
                     <span>Total</span>
-                    <span>${selectedOrder.financials.total.toFixed(2)}</span>
+                    <span>${((selectedOrder.total || 0) / 100).toFixed(2)}</span>
                   </div>
                   <div className="flex justify-between text-sm text-chart-2">
                     <span>Profit</span>
-                    <span>${selectedOrder.financials.totalProfit.toFixed(2)}</span>
+                    <span>${((selectedOrder.totalProfit || 0) / 100).toFixed(2)}</span>
                   </div>
                 </div>
               </div>
