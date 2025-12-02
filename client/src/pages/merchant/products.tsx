@@ -68,14 +68,14 @@ export default function MyProductsPage() {
   const [editPrice, setEditPrice] = useState("");
 
   const { data: products, isLoading } = useQuery<Product[]>({
-    queryKey: ["/api/products"],
+    queryKey: ["/api/merchant/products"],
   });
 
   const updateMutation = useMutation({
-    mutationFn: ({ id, data }: { id: string; data: Partial<Product> }) =>
-      apiRequest("PATCH", `/api/products/${id}`, data),
+    mutationFn: ({ id, data }: { id: number; data: Partial<Product> }) =>
+      apiRequest("PUT", `/api/merchant/products/${id}`, data),
     onSuccess: () => {
-      queryClient.invalidateQueries({ queryKey: ["/api/products"] });
+      queryClient.invalidateQueries({ queryKey: ["/api/merchant/products"] });
       toast({ title: "Product updated successfully" });
       setIsEditOpen(false);
     },
@@ -85,10 +85,10 @@ export default function MyProductsPage() {
   });
 
   const deleteMutation = useMutation({
-    mutationFn: (id: string) => apiRequest("DELETE", `/api/products/${id}`),
+    mutationFn: (id: number) => apiRequest("DELETE", `/api/merchant/products/${id}`),
     onSuccess: () => {
-      queryClient.invalidateQueries({ queryKey: ["/api/products"] });
-      queryClient.invalidateQueries({ queryKey: ["/api/merchants/stats"] });
+      queryClient.invalidateQueries({ queryKey: ["/api/merchant/products"] });
+      queryClient.invalidateQueries({ queryKey: ["/api/merchant/dashboard"] });
       toast({ title: "Product removed successfully" });
     },
     onError: () => {
@@ -97,9 +97,9 @@ export default function MyProductsPage() {
   });
 
   const pushToShopifyMutation = useMutation({
-    mutationFn: (id: string) => apiRequest("POST", `/api/products/${id}/push-to-shopify`),
+    mutationFn: (id: number) => apiRequest("POST", `/api/merchant/products/${id}/push-to-shopify`),
     onSuccess: () => {
-      queryClient.invalidateQueries({ queryKey: ["/api/products"] });
+      queryClient.invalidateQueries({ queryKey: ["/api/merchant/products"] });
       toast({ title: "Product pushed to Shopify" });
     },
     onError: () => {
@@ -135,7 +135,7 @@ export default function MyProductsPage() {
           <h1 className="text-3xl font-bold" data-testid="text-products-title">My Products</h1>
           <p className="text-muted-foreground">Manage your imported products</p>
         </div>
-        <Link href="/dashboard/catalog">
+        <Link href="/merchant/catalog">
           <Button className="gap-2" data-testid="button-import-more">
             <Plus className="h-4 w-4" />
             Import Products
@@ -338,7 +338,7 @@ export default function MyProductsPage() {
               <Package className="h-16 w-16 mx-auto mb-4 opacity-50" />
               <h3 className="text-lg font-medium mb-2">No products yet</h3>
               <p className="mb-4">Import products from the catalog to get started</p>
-              <Link href="/dashboard/catalog">
+              <Link href="/merchant/catalog">
                 <Button className="gap-2">
                   <Plus className="h-4 w-4" />
                   Browse Catalog

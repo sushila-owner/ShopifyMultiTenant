@@ -46,7 +46,7 @@ export default function CustomersPage() {
   const [isDetailsOpen, setIsDetailsOpen] = useState(false);
 
   const { data: customers, isLoading } = useQuery<Customer[]>({
-    queryKey: ["/api/customers"],
+    queryKey: ["/api/merchant/customers"],
   });
 
   const filteredCustomers = customers?.filter(
@@ -56,9 +56,9 @@ export default function CustomersPage() {
       c.email.toLowerCase().includes(search.toLowerCase())
   );
 
-  const totalSpent = customers?.reduce((acc, c) => acc + c.stats.totalSpent, 0) || 0;
+  const totalSpent = customers?.reduce((acc, c) => acc + (c.totalSpent || 0), 0) || 0;
   const avgOrderValue = customers?.length
-    ? customers.reduce((acc, c) => acc + c.stats.averageOrderValue, 0) / customers.length
+    ? customers.reduce((acc, c) => acc + (c.averageOrderValue || 0), 0) / customers.length
     : 0;
 
   const handleViewDetails = (customer: Customer) => {
@@ -200,19 +200,19 @@ export default function CustomersPage() {
                         </div>
                       </div>
                     </TableCell>
-                    <TableCell>{customer.stats.totalOrders}</TableCell>
+                    <TableCell>{customer.totalOrders || 0}</TableCell>
                     <TableCell className="font-medium">
-                      ${customer.stats.totalSpent.toFixed(2)}
+                      ${((customer.totalSpent || 0) / 100).toFixed(2)}
                     </TableCell>
-                    <TableCell>${customer.stats.averageOrderValue.toFixed(2)}</TableCell>
+                    <TableCell>${((customer.averageOrderValue || 0) / 100).toFixed(2)}</TableCell>
                     <TableCell>
-                      <Badge variant={tierColors[customer.tier]} className="capitalize">
-                        {customer.tier}
+                      <Badge variant={tierColors[customer.tier || 'bronze']} className="capitalize">
+                        {customer.tier || 'bronze'}
                       </Badge>
                     </TableCell>
                     <TableCell>
-                      {customer.stats.lastOrderDate
-                        ? new Date(customer.stats.lastOrderDate).toLocaleDateString()
+                      {customer.lastOrderAt
+                        ? new Date(customer.lastOrderAt).toLocaleDateString()
                         : "Never"}
                     </TableCell>
                     <TableCell className="text-right">
@@ -259,8 +259,8 @@ export default function CustomersPage() {
                   <h3 className="text-xl font-semibold">
                     {selectedCustomer.firstName} {selectedCustomer.lastName}
                   </h3>
-                  <Badge variant={tierColors[selectedCustomer.tier]} className="capitalize mt-1">
-                    {selectedCustomer.tier} Member
+                  <Badge variant={tierColors[selectedCustomer.tier || 'bronze']} className="capitalize mt-1">
+                    {selectedCustomer.tier || 'bronze'} Member
                   </Badge>
                 </div>
               </div>
@@ -291,21 +291,21 @@ export default function CustomersPage() {
               <div className="grid grid-cols-2 gap-4 p-4 rounded-lg bg-muted/50">
                 <div>
                   <p className="text-sm text-muted-foreground">Total Orders</p>
-                  <p className="text-2xl font-bold">{selectedCustomer.stats.totalOrders}</p>
+                  <p className="text-2xl font-bold">{selectedCustomer.totalOrders || 0}</p>
                 </div>
                 <div>
                   <p className="text-sm text-muted-foreground">Total Spent</p>
-                  <p className="text-2xl font-bold">${selectedCustomer.stats.totalSpent.toFixed(2)}</p>
+                  <p className="text-2xl font-bold">${((selectedCustomer.totalSpent || 0) / 100).toFixed(2)}</p>
                 </div>
                 <div>
                   <p className="text-sm text-muted-foreground">Avg. Order Value</p>
                   <p className="text-xl font-bold">
-                    ${selectedCustomer.stats.averageOrderValue.toFixed(2)}
+                    ${((selectedCustomer.averageOrderValue || 0) / 100).toFixed(2)}
                   </p>
                 </div>
                 <div>
                   <p className="text-sm text-muted-foreground">Loyalty Points</p>
-                  <p className="text-xl font-bold">{selectedCustomer.loyaltyPoints}</p>
+                  <p className="text-xl font-bold">{selectedCustomer.loyaltyPoints || 0}</p>
                 </div>
               </div>
 

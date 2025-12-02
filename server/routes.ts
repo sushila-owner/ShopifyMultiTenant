@@ -562,6 +562,27 @@ export async function registerRoutes(
     }
   });
 
+  app.post("/api/merchant/orders/:id/fulfill", authMiddleware, merchantOnly, async (req: AuthRequest, res: Response) => {
+    try {
+      if (!req.user?.merchantId) {
+        return res.status(400).json({ success: false, error: "No merchant associated" });
+      }
+
+      const order = await storage.getOrder(parseInt(req.params.id));
+      if (!order || order.merchantId !== req.user.merchantId) {
+        return res.status(404).json({ success: false, error: "Order not found" });
+      }
+
+      const updatedOrder = await storage.updateOrder(parseInt(req.params.id), {
+        fulfillmentStatus: "fulfilled",
+        status: "completed",
+      });
+      res.json({ success: true, data: updatedOrder });
+    } catch (error: any) {
+      res.status(400).json({ success: false, error: error.message });
+    }
+  });
+
   // Customers
   app.get("/api/merchant/customers", authMiddleware, merchantOnly, async (req: AuthRequest, res: Response) => {
     try {

@@ -49,26 +49,25 @@ export default function CatalogPage() {
     pricingValue: 20,
   });
 
-  const { data: products, isLoading } = useQuery<Product[]>({
-    queryKey: ["/api/catalog"],
+  const { data: catalogData, isLoading } = useQuery<{ products: Product[]; suppliers: Supplier[] }>({
+    queryKey: ["/api/merchant/catalog"],
   });
 
-  const { data: suppliers } = useQuery<Supplier[]>({
-    queryKey: ["/api/admin/suppliers"],
-  });
+  const products = catalogData?.products;
+  const suppliers = catalogData?.suppliers;
 
   const importMutation = useMutation({
-    mutationFn: (data: { productIds: string[]; pricingRule: { type: string; value: number } }) =>
-      apiRequest("POST", "/api/products/import", data),
+    mutationFn: async (data: { productId: number; pricingRule: { type: string; value: number } }) =>
+      apiRequest("POST", "/api/merchant/products/import", data),
     onSuccess: () => {
-      queryClient.invalidateQueries({ queryKey: ["/api/products"] });
-      queryClient.invalidateQueries({ queryKey: ["/api/merchants/stats"] });
-      toast({ title: "Products imported successfully" });
+      queryClient.invalidateQueries({ queryKey: ["/api/merchant/products"] });
+      queryClient.invalidateQueries({ queryKey: ["/api/merchant/dashboard"] });
+      toast({ title: "Product imported successfully" });
       setSelectedProducts([]);
       setIsImportDialogOpen(false);
     },
     onError: () => {
-      toast({ title: "Failed to import products", variant: "destructive" });
+      toast({ title: "Failed to import product", variant: "destructive" });
     },
   });
 
@@ -82,7 +81,7 @@ export default function CatalogPage() {
 
   const categories = [...new Set(products?.map((p) => p.category).filter(Boolean))];
 
-  const getSupplierName = (supplierId: string) => {
+  const getSupplierName = (supplierId: number) => {
     return suppliers?.find((s) => s.id === supplierId)?.name || "Unknown";
   };
 
@@ -104,11 +103,13 @@ export default function CatalogPage() {
     }
   };
 
-  const handleImport = () => {
-    importMutation.mutate({
-      productIds: selectedProducts,
-      pricingRule: importSettings,
-    });
+  const handleImport = async () => {
+    for (const productId of selectedProducts) {
+      await importMutation.mutateAsync({
+        productId: Number(productId),
+        pricingRule: importSettings,
+      });
+    }
   };
 
   const calculateMerchantPrice = (supplierPrice: number) => {

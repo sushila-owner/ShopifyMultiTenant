@@ -173,3 +173,44 @@ The application follows a "New York" style from shadcn with professional B2B aes
 - `/components/*-sidebar.tsx` - Role-specific navigation
 - `/pages` - Route-level page components organized by role
 - `/lib` - Utilities, hooks, and context providers
+
+## Recent Changes
+
+**December 2, 2025:**
+- Converted 18+ Zod schemas to Drizzle ORM tables with full multi-tenant structure
+- Implemented complete storage layer with CRUD operations for all entities (users, merchants, suppliers, products, orders, customers, subscriptions)
+- Built comprehensive API routes: authentication (login/register with bcrypt + JWT), admin endpoints (dashboard stats, suppliers, merchants, products, orders), and merchant endpoints
+- Connected frontend to backend: updated queryClient with Authorization headers, fixed auth context to store merchant data
+- Fixed routing and navigation: login/register redirects properly to /admin or /merchant based on role
+- Updated all internal links from /dashboard/* to /merchant/*
+- Fixed API endpoint references in merchant pages:
+  - Catalog: `/api/merchant/catalog`
+  - Products: `/api/merchant/products`
+  - Orders: `/api/merchant/orders`
+  - Customers: `/api/merchant/customers`
+- Added order fulfill endpoint (`POST /api/merchant/orders/:id/fulfill`)
+- Fixed data references to match schema (flat fields instead of nested objects for orders and customers)
+
+## API Endpoints
+
+### Authentication
+- `POST /api/auth/register` - User registration
+- `POST /api/auth/login` - User login with JWT token
+- `GET /api/auth/me` - Get current user
+
+### Admin Routes (requires admin role)
+- `GET /api/admin/dashboard` - Admin dashboard stats
+- `GET/POST /api/admin/suppliers` - Supplier management
+- `GET/POST /api/admin/products` - Global product catalog
+- `GET /api/admin/merchants` - Merchant listing
+- `GET /api/admin/orders` - All orders across merchants
+
+### Merchant Routes (requires merchant role)
+- `GET /api/merchant/dashboard` - Merchant dashboard stats
+- `GET /api/merchant/catalog` - Browse global product catalog
+- `GET/POST /api/merchant/products` - Merchant's imported products
+- `PUT/DELETE /api/merchant/products/:id` - Update/delete product
+- `POST /api/merchant/products/import` - Import product from catalog
+- `GET /api/merchant/orders` - Merchant's orders
+- `POST /api/merchant/orders/:id/fulfill` - Fulfill an order
+- `GET/POST /api/merchant/customers` - Customer management

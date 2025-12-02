@@ -73,13 +73,13 @@ export default function MerchantOrdersPage() {
   const [isDetailsOpen, setIsDetailsOpen] = useState(false);
 
   const { data: orders, isLoading } = useQuery<Order[]>({
-    queryKey: ["/api/orders"],
+    queryKey: ["/api/merchant/orders"],
   });
 
   const fulfillMutation = useMutation({
-    mutationFn: (id: string) => apiRequest("POST", `/api/orders/${id}/fulfill`),
+    mutationFn: (id: number) => apiRequest("POST", `/api/merchant/orders/${id}/fulfill`),
     onSuccess: () => {
-      queryClient.invalidateQueries({ queryKey: ["/api/orders"] });
+      queryClient.invalidateQueries({ queryKey: ["/api/merchant/orders"] });
       toast({ title: "Order fulfilled successfully" });
     },
     onError: () => {
@@ -98,8 +98,8 @@ export default function MerchantOrdersPage() {
   const pendingOrders = filteredOrders?.filter((o) => o.status === "pending") || [];
   const processingOrders = filteredOrders?.filter((o) => o.status === "processing") || [];
 
-  const totalRevenue = orders?.reduce((acc, o) => acc + o.financials.total, 0) || 0;
-  const totalProfit = orders?.reduce((acc, o) => acc + o.financials.totalProfit, 0) || 0;
+  const totalRevenue = orders?.reduce((acc, o) => acc + (o.total || 0), 0) || 0;
+  const totalProfit = orders?.reduce((acc, o) => acc + (o.totalProfit || 0), 0) || 0;
 
   const handleViewDetails = (order: Order) => {
     setSelectedOrder(order);
@@ -261,9 +261,9 @@ export default function MerchantOrdersPage() {
                           </div>
                         </TableCell>
                         <TableCell>{order.items.length} items</TableCell>
-                        <TableCell>${order.financials.total.toFixed(2)}</TableCell>
+                        <TableCell>${((order.total || 0) / 100).toFixed(2)}</TableCell>
                         <TableCell className="text-chart-2 font-medium">
-                          ${order.financials.totalProfit.toFixed(2)}
+                          ${((order.totalProfit || 0) / 100).toFixed(2)}
                         </TableCell>
                         <TableCell>
                           <Badge variant={orderStatusColors[order.status]}>{order.status}</Badge>
@@ -320,7 +320,7 @@ export default function MerchantOrdersPage() {
                             <p className="font-medium">{order.orderNumber}</p>
                           </TableCell>
                           <TableCell>{order.customerEmail}</TableCell>
-                          <TableCell>${order.financials.total.toFixed(2)}</TableCell>
+                          <TableCell>${((order.total || 0) / 100).toFixed(2)}</TableCell>
                           <TableCell className="text-right">
                             <Button
                               size="sm"
@@ -363,7 +363,7 @@ export default function MerchantOrdersPage() {
                             <p className="font-medium">{order.orderNumber}</p>
                           </TableCell>
                           <TableCell>{order.customerEmail}</TableCell>
-                          <TableCell>${order.financials.total.toFixed(2)}</TableCell>
+                          <TableCell>${((order.total || 0) / 100).toFixed(2)}</TableCell>
                           <TableCell className="text-right">
                             <Button variant="ghost" size="sm" onClick={() => handleViewDetails(order)}>
                               <Eye className="mr-2 h-3 w-3" />
@@ -475,27 +475,27 @@ export default function MerchantOrdersPage() {
                 <div className="space-y-2">
                   <div className="flex justify-between text-sm">
                     <span className="text-muted-foreground">Subtotal</span>
-                    <span>${selectedOrder.financials.subtotal.toFixed(2)}</span>
+                    <span>${((selectedOrder.subtotal || 0) / 100).toFixed(2)}</span>
                   </div>
                   <div className="flex justify-between text-sm">
                     <span className="text-muted-foreground">Shipping</span>
-                    <span>${selectedOrder.financials.shipping.toFixed(2)}</span>
+                    <span>${((selectedOrder.shipping || 0) / 100).toFixed(2)}</span>
                   </div>
                   <div className="flex justify-between text-sm">
                     <span className="text-muted-foreground">Tax</span>
-                    <span>${selectedOrder.financials.tax.toFixed(2)}</span>
+                    <span>${((selectedOrder.tax || 0) / 100).toFixed(2)}</span>
                   </div>
                   <div className="flex justify-between font-medium pt-2 border-t">
                     <span>Total</span>
-                    <span>${selectedOrder.financials.total.toFixed(2)}</span>
+                    <span>${((selectedOrder.total || 0) / 100).toFixed(2)}</span>
                   </div>
                   <div className="flex justify-between text-sm">
                     <span className="text-muted-foreground">Your Cost</span>
-                    <span>${selectedOrder.financials.totalCost.toFixed(2)}</span>
+                    <span>${((selectedOrder.totalCost || 0) / 100).toFixed(2)}</span>
                   </div>
                   <div className="flex justify-between font-medium text-chart-2">
                     <span>Your Profit</span>
-                    <span>${selectedOrder.financials.totalProfit.toFixed(2)}</span>
+                    <span>${((selectedOrder.totalProfit || 0) / 100).toFixed(2)}</span>
                   </div>
                 </div>
               </div>

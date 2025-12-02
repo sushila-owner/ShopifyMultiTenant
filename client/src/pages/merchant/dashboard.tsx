@@ -351,7 +351,7 @@ export default function MerchantDashboard() {
         </CardHeader>
         <CardContent>
           <div className="grid gap-4 md:grid-cols-4">
-            <Link href="/dashboard/catalog">
+            <Link href="/merchant/catalog">
               <Button variant="outline" className="w-full justify-start gap-2 h-auto py-4" data-testid="button-import-products">
                 <Package className="h-5 w-5 text-primary" />
                 <div className="text-left">
@@ -360,7 +360,7 @@ export default function MerchantDashboard() {
                 </div>
               </Button>
             </Link>
-            <Link href="/dashboard/orders">
+            <Link href="/merchant/orders">
               <Button variant="outline" className="w-full justify-start gap-2 h-auto py-4" data-testid="button-manage-orders">
                 <ShoppingCart className="h-5 w-5 text-chart-2" />
                 <div className="text-left">
@@ -369,7 +369,7 @@ export default function MerchantDashboard() {
                 </div>
               </Button>
             </Link>
-            <Link href="/dashboard/customers">
+            <Link href="/merchant/customers">
               <Button variant="outline" className="w-full justify-start gap-2 h-auto py-4" data-testid="button-view-customers">
                 <Users className="h-5 w-5 text-chart-3" />
                 <div className="text-left">
@@ -378,7 +378,7 @@ export default function MerchantDashboard() {
                 </div>
               </Button>
             </Link>
-            <Link href="/dashboard/analytics">
+            <Link href="/merchant/analytics">
               <Button variant="outline" className="w-full justify-start gap-2 h-auto py-4" data-testid="button-view-analytics">
                 <TrendingUp className="h-5 w-5 text-chart-4" />
                 <div className="text-left">
