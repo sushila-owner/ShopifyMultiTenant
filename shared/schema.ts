@@ -5,7 +5,8 @@ import { z } from "zod";
 
 // ==================== ENUMS ====================
 export const userRoleEnum = pgEnum("user_role", ["admin", "merchant", "staff"]);
-export const subscriptionStatusEnum = pgEnum("subscription_status", ["trial", "active", "cancelled", "expired", "past_due"]);
+export const subscriptionStatusEnum = pgEnum("subscription_status", ["trial", "active", "cancelled", "expired", "past_due", "free_for_life"]);
+export const adPlatformEnum = pgEnum("ad_platform", ["instagram", "facebook", "tiktok", "pinterest", "general"]);
 export const supplierTypeEnum = pgEnum("supplier_type", ["gigab2b", "shopify", "amazon", "woocommerce", "custom"]);
 export const productStatusEnum = pgEnum("product_status", ["draft", "active", "archived"]);
 export const syncStatusEnum = pgEnum("sync_status", ["pending", "synced", "failed"]);
@@ -23,14 +24,21 @@ export const invitationStatusEnum = pgEnum("invitation_status", ["pending", "acc
 export const plans = pgTable("plans", {
   id: serial("id").primaryKey(),
   name: text("name").notNull().unique(),
+  slug: text("slug").notNull().unique(),
   displayName: text("display_name").notNull(),
   description: text("description").notNull(),
   monthlyPrice: integer("monthly_price").notNull(),
   yearlyPrice: integer("yearly_price").notNull(),
   productLimit: integer("product_limit").notNull(),
-  orderLimit: integer("order_limit").notNull(),
+  orderLimit: integer("order_limit").notNull().default(-1),
   teamMemberLimit: integer("team_member_limit").notNull(),
   supplierLimit: integer("supplier_limit").default(-1),
+  dailyAdsLimit: integer("daily_ads_limit").default(0),
+  hasAiAds: boolean("has_ai_ads").default(false),
+  hasVideoAds: boolean("has_video_ads").default(false),
+  isWhiteLabel: boolean("is_white_label").default(false),
+  hasVipSupport: boolean("has_vip_support").default(false),
+  badge: text("badge"),
   features: jsonb("features").$type<string[]>().default([]),
   isPopular: boolean("is_popular").default(false),
   isActive: boolean("is_active").default(true),
@@ -311,6 +319,7 @@ export const subscriptions = pgTable("subscriptions", {
   id: serial("id").primaryKey(),
   merchantId: integer("merchant_id").notNull().unique(),
   planId: integer("plan_id").notNull(),
+  planSlug: text("plan_slug").notNull().default("free"),
   status: subscriptionStatusEnum("status").default("trial"),
   billingInterval: billingIntervalEnum("billing_interval").default("monthly"),
   currentPeriodStart: timestamp("current_period_start").notNull(),
@@ -323,10 +332,42 @@ export const subscriptions = pgTable("subscriptions", {
   productsUsed: integer("products_used").default(0),
   ordersUsed: integer("orders_used").default(0),
   teamMembersUsed: integer("team_members_used").default(0),
+  lifetimeSales: integer("lifetime_sales").default(0),
+  progressToFreeForLife: integer("progress_to_free_for_life").default(0),
+  adsEnabled: boolean("ads_enabled").default(false),
+  dailyAdsLimit: integer("daily_ads_limit").default(0),
+  adsGeneratedToday: integer("ads_generated_today").default(0),
+  lastAdsGeneratedAt: timestamp("last_ads_generated_at"),
+  freeForLifeUnlockedAt: timestamp("free_for_life_unlocked_at"),
   createdAt: timestamp("created_at").defaultNow().notNull(),
   updatedAt: timestamp("updated_at").defaultNow().notNull(),
 }, (table) => ({
   merchantIdx: index("subscriptions_merchant_idx").on(table.merchantId),
+}));
+
+// ==================== AD CREATIVES TABLE ====================
+export const adCreatives = pgTable("ad_creatives", {
+  id: serial("id").primaryKey(),
+  merchantId: integer("merchant_id").notNull(),
+  productId: integer("product_id"),
+  imageUrl: text("image_url"),
+  videoUrl: text("video_url"),
+  platform: adPlatformEnum("platform").default("general"),
+  headline: text("headline"),
+  adCopy: text("ad_copy"),
+  callToAction: text("call_to_action"),
+  hashtags: jsonb("hashtags").$type<string[]>().default([]),
+  format: text("format").default("square"),
+  isAiGenerated: boolean("is_ai_generated").default(true),
+  generatedAt: timestamp("generated_at").defaultNow().notNull(),
+  sentViaEmail: boolean("sent_via_email").default(false),
+  emailSentAt: timestamp("email_sent_at"),
+  downloadCount: integer("download_count").default(0),
+  createdAt: timestamp("created_at").defaultNow().notNull(),
+}, (table) => ({
+  merchantIdx: index("ad_creatives_merchant_idx").on(table.merchantId),
+  productIdx: index("ad_creatives_product_idx").on(table.productId),
+  generatedAtIdx: index("ad_creatives_generated_at_idx").on(table.generatedAt),
 }));
 
 // ==================== STAFF INVITATIONS TABLE ====================
@@ -477,6 +518,17 @@ export const staffInvitationsRelations = relations(staffInvitations, ({ one }) =
   }),
 }));
 
+export const adCreativesRelations = relations(adCreatives, ({ one }) => ({
+  merchant: one(merchants, {
+    fields: [adCreatives.merchantId],
+    references: [merchants.id],
+  }),
+  product: one(products, {
+    fields: [adCreatives.productId],
+    references: [products.id],
+  }),
+}));
+
 // ==================== INSERT SCHEMAS ====================
 export const insertUserSchema = createInsertSchema(users).omit({
   id: true,
@@ -569,6 +621,13 @@ export const insertSyncLogSchema = createInsertSchema(syncLogs).omit({
 });
 export type InsertSyncLog = z.infer<typeof insertSyncLogSchema>;
 export type SyncLog = typeof syncLogs.$inferSelect;
+
+export const insertAdCreativeSchema = createInsertSchema(adCreatives).omit({
+  id: true,
+  createdAt: true,
+});
+export type InsertAdCreative = z.infer<typeof insertAdCreativeSchema>;
+export type AdCreative = typeof adCreatives.$inferSelect;
 
 // ==================== AUTH SCHEMAS ====================
 export const loginSchema = z.object({

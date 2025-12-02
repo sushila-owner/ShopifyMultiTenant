@@ -1,0 +1,250 @@
+BUILD SUBSCRIPTION SYSTEM WITH DAILY ADS
+
+════════════════════════════════════════════════════════════════════════════
+PLANS
+════════════════════════════════════════════════════════════════════════════
+
+1. FREE - $0
+   - 100 products
+   - Unlimited orders
+   - No ads
+
+2. STARTER - $29/month
+   - 500 products
+   - Unlimited orders
+   - 5 ads/day via email
+
+3. GROWTH - $49/month
+   - 1,000 products
+   - Unlimited orders
+   - 10 AI ads/day via email
+
+4. PROFESSIONAL - $99/month
+   - 10,000 products
+   - Unlimited orders
+   - 20 AI ads/day (images + videos)
+
+5. MILLIONAIRE CHOICE - $499/month 🚀
+   - Unlimited products
+   - Unlimited orders
+   - Unlimited AI ads/day
+   - White-label
+   - VIP support
+   - Badge: "Future Millionaire 💎"
+
+6. FREE FOR LIFE - $0 🎉
+   - Auto-unlock at $50,000 total sales
+   - Everything unlimited forever
+   - All Millionaire features free
+
+════════════════════════════════════════════════════════════════════════════
+RULES
+════════════════════════════════════════════════════════════════════════════
+
+✅ Orders unlimited in ALL plans
+✅ Only products have limits
+✅ Paid plans get daily ad creatives via email (6 AM daily)
+✅ FREE plan gets no ads
+✅ When merchant hits $50k sales → auto upgrade to FREE FOR LIFE
+✅ FREE FOR LIFE = Millionaire plan but $0 forever
+
+════════════════════════════════════════════════════════════════════════════
+DATABASE
+════════════════════════════════════════════════════════════════════════════
+
+Subscriptions:
+{
+  merchantId: ObjectId,
+  planSlug: 'starter',
+  price: 29,
+  status: 'active' | 'free_for_life',
+  limits: { products: 500, orders: -1 },
+  usage: { products: 234, orders: 5432 },
+  adsCreatives: { enabled: true, dailyLimit: 5 },
+  lifetimeStats: {
+    totalSales: 35000,
+    progressToFree: 70  // 35000/50000 * 100
+  }
+}
+
+AdsCreatives:
+{
+  merchantId: ObjectId,
+  productId: ObjectId,
+  url: 'https://cdn/ad.jpg',
+  platform: 'instagram',
+  copy: {
+    headline: 'Get 50% Off!',
+    text: 'Shop now...',
+    cta: 'Buy Now',
+    hashtags: ['#sale']
+  }
+}
+
+════════════════════════════════════════════════════════════════════════════
+DAILY ADS JOB (Cron at 6 AM)
+════════════════════════════════════════════════════════════════════════════
+
+Every day at 6 AM:
+
+1. Find all merchants with paid plans
+2. Get their top products
+3. Generate ad creatives using AI:
+   - Create images with product + text overlay
+   - Generate ad copy using OpenAI
+   - Create multiple formats (square, story, video)
+4. Save to database
+5. Send email with all creatives
+6. Merchant can download from dashboard
+
+Code:
+cron.schedule('0 6 * * *', async () => {
+  const merchants = await Subscription.find({ 
+    status: 'active',
+    'adsCreatives.enabled': true 
+  });
+  
+  for (const sub of merchants) {
+    const products = await Product.find({ merchantId: sub.merchantId })
+      .limit(10);
+    
+    const creatives = [];
+    for (let i = 0; i < sub.adsCreatives.dailyLimit; i++) {
+      const creative = await generateAd(products[i % products.length]);
+      creatives.push(creative);
+    }
+    
+    await sendEmail({
+      to: merchant.email,
+      subject: '🎨 Your Daily Ad Creatives',
+      creatives: creatives
+    });
+  }
+});
+
+════════════════════════════════════════════════════════════════════════════
+AI AD GENERATION
+════════════════════════════════════════════════════════════════════════════
+
+const generateAd = async (product) => {
+  // 1. Generate copy
+  const copy = await openai.chat.completions.create({
+    model: 'gpt-4',
+    messages: [{
+      role: 'user',
+      content: `Create ad copy for: ${product.title}`
+    }]
+  });
+  
+  // 2. Create image with text overlay
+  const image = await sharp(product.image)
+    .resize(1080, 1080)
+    .composite([{ input: textOverlay }])
+    .toBuffer();
+  
+  // 3. Upload to S3
+  const url = await uploadToS3(image);
+  
+  // 4. Save
+  return await AdsCreative.create({
+    merchantId: product.merchantId,
+    productId: product._id,
+    url,
+    copy
+  });
+};
+
+════════════════════════════════════════════════════════════════════════════
+EMAIL TEMPLATE
+════════════════════════════════════════════════════════════════════════════
+
+Subject: 🎨 Your 5 Fresh Ad Creatives - January 15
+
+Body:
+Hi [Merchant Name]!
+
+Your daily ad creatives are ready:
+
+[Creative 1 Image]
+Headline: "Get 50% Off Today!"
+Copy: "Limited time offer..."
+CTA: Shop Now
+#sale #fashion #deals
+
+[Download] [Use Now]
+
+[Creative 2 Image]
+...
+
+View all in dashboard: [Link]
+
+════════════════════════════════════════════════════════════════════════════
+CHECK LIMITS
+════════════════════════════════════════════════════════════════════════════
+
+Before creating product:
+const sub = await Subscription.findOne({ merchantId });
+
+// Free for life or unlimited
+if (sub.status === 'free_for_life' || sub.limits.products === -1) {
+  return next();
+}
+
+// Check limit
+if (sub.usage.products >= sub.limits.products) {
+  return res.status(403).json({
+    error: 'Product limit reached',
+    message: 'Upgrade or reach $50k sales for free unlimited!'
+  });
+}
+
+After order:
+sub.lifetimeStats.totalSales += order.total;
+
+// Check free for life unlock
+if (sub.lifetimeStats.totalSales >= 50000) {
+  sub.status = 'free_for_life';
+  sub.limits = { products: -1, orders: -1 };
+  await stripe.subscriptions.cancel(sub.stripeSubscriptionId);
+  
+  await sendEmail({
+    subject: '🎉 FREE FOR LIFE UNLOCKED!',
+    message: 'You hit $50k! Everything free forever!'
+  });
+}
+
+════════════════════════════════════════════════════════════════════════════
+API ROUTES
+════════════════════════════════════════════════════════════════════════════
+
+GET    /api/subscription               → Current plan
+POST   /api/subscription/upgrade       → Change plan
+GET    /api/ads/today                  → Today's ads
+GET    /api/ads/history                → Past ads
+POST   /api/ads/download/:id           → Download ad
+
+════════════════════════════════════════════════════════════════════════════
+UI - DASHBOARD
+════════════════════════════════════════════════════════════════════════════
+
+Progress Bar:
+$35,000 / $50,000 to FREE FOR LIFE
+████████████░░░░░░░░ 70%
+Only $15,000 more!
+
+Today's Ads:
+[Ad 1] [Ad 2] [Ad 3] [Ad 4] [Ad 5]
+[Download All]
+
+════════════════════════════════════════════════════════════════════════════
+SUMMARY
+════════════════════════════════════════════════════════════════════════════
+
+✅ Orders unlimited everywhere
+✅ Products limited by plan
+✅ Paid plans get daily ads via email
+✅ AI generates ads automatically at 6 AM
+✅ $50k sales = FREE FOR LIFE
+✅ Millionaire plan = $499 with unlimited everything
+
+BUILD IT.
