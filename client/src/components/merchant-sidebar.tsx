@@ -1,0 +1,203 @@
+import { Link, useLocation } from "wouter";
+import {
+  Sidebar,
+  SidebarContent,
+  SidebarFooter,
+  SidebarGroup,
+  SidebarGroupContent,
+  SidebarGroupLabel,
+  SidebarHeader,
+  SidebarMenu,
+  SidebarMenuButton,
+  SidebarMenuItem,
+} from "@/components/ui/sidebar";
+import { Avatar, AvatarFallback } from "@/components/ui/avatar";
+import { Badge } from "@/components/ui/badge";
+import { Progress } from "@/components/ui/progress";
+import {
+  LayoutDashboard,
+  Package,
+  ShoppingCart,
+  Users,
+  BarChart3,
+  Settings,
+  LogOut,
+  Store,
+  Search,
+  CreditCard,
+  UserPlus,
+  Plug,
+} from "lucide-react";
+import { useAuth } from "@/lib/auth";
+import { useQuery } from "@tanstack/react-query";
+
+const mainMenuItems = [
+  { title: "Dashboard", url: "/dashboard", icon: LayoutDashboard },
+  { title: "Product Catalog", url: "/dashboard/catalog", icon: Search },
+  { title: "My Products", url: "/dashboard/products", icon: Package },
+  { title: "Orders", url: "/dashboard/orders", icon: ShoppingCart },
+  { title: "Customers", url: "/dashboard/customers", icon: Users },
+];
+
+const businessMenuItems = [
+  { title: "Analytics", url: "/dashboard/analytics", icon: BarChart3 },
+  { title: "Integrations", url: "/dashboard/integrations", icon: Plug },
+  { title: "Team", url: "/dashboard/team", icon: UserPlus },
+];
+
+const settingsMenuItems = [
+  { title: "Subscription", url: "/dashboard/subscription", icon: CreditCard },
+  { title: "Settings", url: "/dashboard/settings", icon: Settings },
+];
+
+export function MerchantSidebar() {
+  const [location] = useLocation();
+  const { user, logout } = useAuth();
+
+  const { data: stats } = useQuery<{ currentProductCount: number; productLimit: number }>({
+    queryKey: ["/api/merchants/stats"],
+  });
+
+  const isActive = (url: string) => {
+    if (url === "/dashboard") return location === "/dashboard";
+    return location.startsWith(url);
+  };
+
+  const productUsage = stats ? (stats.currentProductCount / stats.productLimit) * 100 : 0;
+
+  return (
+    <Sidebar>
+      <SidebarHeader className="border-b border-sidebar-border">
+        <div className="flex items-center gap-3 px-2 py-2">
+          <div className="flex h-9 w-9 items-center justify-center rounded-md bg-primary">
+            <Store className="h-5 w-5 text-primary-foreground" />
+          </div>
+          <div className="flex flex-col">
+            <span className="text-sm font-semibold">Apex Mart</span>
+            <span className="text-xs text-muted-foreground">Merchant Dashboard</span>
+          </div>
+        </div>
+      </SidebarHeader>
+
+      <SidebarContent>
+        <SidebarGroup>
+          <SidebarGroupLabel>Main</SidebarGroupLabel>
+          <SidebarGroupContent>
+            <SidebarMenu>
+              {mainMenuItems.map((item) => (
+                <SidebarMenuItem key={item.title}>
+                  <SidebarMenuButton
+                    asChild
+                    isActive={isActive(item.url)}
+                    data-testid={`nav-${item.title.toLowerCase().replace(/\s+/g, "-")}`}
+                  >
+                    <Link href={item.url}>
+                      <item.icon className="h-4 w-4" />
+                      <span>{item.title}</span>
+                    </Link>
+                  </SidebarMenuButton>
+                </SidebarMenuItem>
+              ))}
+            </SidebarMenu>
+          </SidebarGroupContent>
+        </SidebarGroup>
+
+        <SidebarGroup>
+          <SidebarGroupLabel>Business</SidebarGroupLabel>
+          <SidebarGroupContent>
+            <SidebarMenu>
+              {businessMenuItems.map((item) => (
+                <SidebarMenuItem key={item.title}>
+                  <SidebarMenuButton
+                    asChild
+                    isActive={isActive(item.url)}
+                    data-testid={`nav-${item.title.toLowerCase()}`}
+                  >
+                    <Link href={item.url}>
+                      <item.icon className="h-4 w-4" />
+                      <span>{item.title}</span>
+                    </Link>
+                  </SidebarMenuButton>
+                </SidebarMenuItem>
+              ))}
+            </SidebarMenu>
+          </SidebarGroupContent>
+        </SidebarGroup>
+
+        <SidebarGroup>
+          <SidebarGroupLabel>Account</SidebarGroupLabel>
+          <SidebarGroupContent>
+            <SidebarMenu>
+              {settingsMenuItems.map((item) => (
+                <SidebarMenuItem key={item.title}>
+                  <SidebarMenuButton
+                    asChild
+                    isActive={isActive(item.url)}
+                    data-testid={`nav-${item.title.toLowerCase()}`}
+                  >
+                    <Link href={item.url}>
+                      <item.icon className="h-4 w-4" />
+                      <span>{item.title}</span>
+                    </Link>
+                  </SidebarMenuButton>
+                </SidebarMenuItem>
+              ))}
+            </SidebarMenu>
+          </SidebarGroupContent>
+        </SidebarGroup>
+
+        {/* Product Usage Indicator */}
+        {stats && (
+          <SidebarGroup>
+            <SidebarGroupLabel>Product Usage</SidebarGroupLabel>
+            <SidebarGroupContent>
+              <div className="px-2 py-2">
+                <div className="flex justify-between text-xs mb-2">
+                  <span className="text-muted-foreground">Products</span>
+                  <span className="font-medium">
+                    {stats.currentProductCount} / {stats.productLimit}
+                  </span>
+                </div>
+                <Progress value={productUsage} className="h-2" />
+                {productUsage > 80 && (
+                  <p className="text-xs text-chart-4 mt-1">
+                    Approaching limit. Consider upgrading.
+                  </p>
+                )}
+              </div>
+            </SidebarGroupContent>
+          </SidebarGroup>
+        )}
+      </SidebarContent>
+
+      <SidebarFooter className="border-t border-sidebar-border">
+        <SidebarMenu>
+          <SidebarMenuItem>
+            <div className="flex items-center gap-3 px-2 py-2">
+              <Avatar className="h-8 w-8">
+                <AvatarFallback className="bg-primary/10 text-primary text-xs">
+                  {user?.name?.charAt(0).toUpperCase() || "M"}
+                </AvatarFallback>
+              </Avatar>
+              <div className="flex flex-col flex-1 min-w-0">
+                <span className="text-sm font-medium truncate">{user?.name || "Merchant"}</span>
+                <span className="text-xs text-muted-foreground truncate">{user?.email}</span>
+              </div>
+              <Badge variant="outline" className="text-xs">Pro</Badge>
+            </div>
+          </SidebarMenuItem>
+          <SidebarMenuItem>
+            <SidebarMenuButton
+              onClick={logout}
+              className="text-destructive hover:text-destructive"
+              data-testid="button-logout"
+            >
+              <LogOut className="h-4 w-4" />
+              <span>Log out</span>
+            </SidebarMenuButton>
+          </SidebarMenuItem>
+        </SidebarMenu>
+      </SidebarFooter>
+    </Sidebar>
+  );
+}
