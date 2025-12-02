@@ -1,6 +1,6 @@
 import {
   users, merchants, suppliers, products, customers, orders,
-  plans, subscriptions, staffInvitations, notifications, activityLogs, syncLogs,
+  plans, subscriptions, staffInvitations, notifications, activityLogs, syncLogs, adCreatives,
   type User, type InsertUser,
   type Merchant, type InsertMerchant,
   type Supplier, type InsertSupplier,
@@ -13,6 +13,7 @@ import {
   type Notification, type InsertNotification,
   type ActivityLog, type InsertActivityLog,
   type SyncLog, type InsertSyncLog,
+  type AdCreative, type InsertAdCreative,
   type AdminDashboardStats, type MerchantDashboardStats,
 } from "@shared/schema";
 import { db } from "./db";
@@ -68,6 +69,7 @@ export interface IStorage {
   // Plans
   getPlan(id: number): Promise<Plan | undefined>;
   getPlanByName(name: string): Promise<Plan | undefined>;
+  getPlanBySlug(slug: string): Promise<Plan | undefined>;
   createPlan(plan: InsertPlan): Promise<Plan>;
   updatePlan(id: number, data: Partial<InsertPlan>): Promise<Plan | undefined>;
   getAllPlans(): Promise<Plan[]>;
@@ -78,6 +80,16 @@ export interface IStorage {
   getSubscriptionByMerchant(merchantId: number): Promise<Subscription | undefined>;
   createSubscription(subscription: InsertSubscription): Promise<Subscription>;
   updateSubscription(id: number, data: Partial<InsertSubscription>): Promise<Subscription | undefined>;
+  updateSubscriptionLifetimeSales(merchantId: number, amount: number): Promise<Subscription | undefined>;
+  checkAndUnlockFreeForLife(merchantId: number): Promise<boolean>;
+  resetDailyAdsCount(): Promise<void>;
+
+  // Ad Creatives
+  getAdCreative(id: number): Promise<AdCreative | undefined>;
+  createAdCreative(adCreative: InsertAdCreative): Promise<AdCreative>;
+  getAdCreativesByMerchant(merchantId: number): Promise<AdCreative[]>;
+  getTodaysAdCreativeCount(merchantId: number): Promise<number>;
+  incrementAdDownloadCount(id: number): Promise<AdCreative | undefined>;
 
   // Staff Invitations
   getStaffInvitation(id: number): Promise<StaffInvitation | undefined>;
@@ -327,6 +339,11 @@ export class DatabaseStorage implements IStorage {
     return plan || undefined;
   }
 
+  async getPlanBySlug(slug: string): Promise<Plan | undefined> {
+    const [plan] = await db.select().from(plans).where(eq(plans.slug, slug));
+    return plan || undefined;
+  }
+
   async createPlan(insertPlan: InsertPlan): Promise<Plan> {
     const [plan] = await db.insert(plans).values(insertPlan).returning();
     return plan;
@@ -375,6 +392,118 @@ export class DatabaseStorage implements IStorage {
       .where(eq(subscriptions.id, id))
       .returning();
     return subscription || undefined;
+  }
+
+  async updateSubscriptionLifetimeSales(merchantId: number, amount: number): Promise<Subscription | undefined> {
+    const subscription = await this.getSubscriptionByMerchant(merchantId);
+    if (!subscription) return undefined;
+
+    const FREE_FOR_LIFE_THRESHOLD = 5000000; // $50,000 in cents
+    const newLifetimeSales = (subscription.lifetimeSales || 0) + amount;
+    const progressPercentage = Math.min(Math.round((newLifetimeSales / FREE_FOR_LIFE_THRESHOLD) * 100), 100);
+
+    const [updated] = await db
+      .update(subscriptions)
+      .set({
+        lifetimeSales: newLifetimeSales,
+        progressToFreeForLife: progressPercentage,
+        updatedAt: new Date(),
+      })
+      .where(eq(subscriptions.merchantId, merchantId))
+      .returning();
+
+    // Auto-unlock FREE FOR LIFE if threshold reached
+    if (newLifetimeSales >= FREE_FOR_LIFE_THRESHOLD && subscription.status !== 'free_for_life') {
+      await this.checkAndUnlockFreeForLife(merchantId);
+    }
+
+    return updated || undefined;
+  }
+
+  async checkAndUnlockFreeForLife(merchantId: number): Promise<boolean> {
+    const subscription = await this.getSubscriptionByMerchant(merchantId);
+    if (!subscription) return false;
+
+    const FREE_FOR_LIFE_THRESHOLD = 5000000; // $50,000 in cents
+    if ((subscription.lifetimeSales || 0) >= FREE_FOR_LIFE_THRESHOLD && subscription.status !== 'free_for_life') {
+      await db
+        .update(subscriptions)
+        .set({
+          status: 'free_for_life',
+          freeForLifeUnlockedAt: new Date(),
+          adsEnabled: true,
+          dailyAdsLimit: -1, // Unlimited
+          updatedAt: new Date(),
+        })
+        .where(eq(subscriptions.merchantId, merchantId));
+      return true;
+    }
+    return false;
+  }
+
+  async resetDailyAdsCount(): Promise<void> {
+    await db
+      .update(subscriptions)
+      .set({ adsGeneratedToday: 0, lastAdsGeneratedAt: null });
+  }
+
+  // ==================== AD CREATIVES ====================
+  async getAdCreative(id: number): Promise<AdCreative | undefined> {
+    const [adCreative] = await db.select().from(adCreatives).where(eq(adCreatives.id, id));
+    return adCreative || undefined;
+  }
+
+  async createAdCreative(insertAdCreative: InsertAdCreative): Promise<AdCreative> {
+    const [adCreative] = await db.insert(adCreatives).values(insertAdCreative).returning();
+    
+    // Update the subscription's ads generated count
+    const subscription = await this.getSubscriptionByMerchant(insertAdCreative.merchantId);
+    if (subscription) {
+      await db
+        .update(subscriptions)
+        .set({
+          adsGeneratedToday: (subscription.adsGeneratedToday || 0) + 1,
+          lastAdsGeneratedAt: new Date(),
+          updatedAt: new Date(),
+        })
+        .where(eq(subscriptions.merchantId, insertAdCreative.merchantId));
+    }
+
+    return adCreative;
+  }
+
+  async getAdCreativesByMerchant(merchantId: number): Promise<AdCreative[]> {
+    return db.select().from(adCreatives)
+      .where(eq(adCreatives.merchantId, merchantId))
+      .orderBy(desc(adCreatives.createdAt));
+  }
+
+  async getTodaysAdCreativeCount(merchantId: number): Promise<number> {
+    const today = new Date();
+    today.setHours(0, 0, 0, 0);
+
+    const [result] = await db
+      .select({ count: count() })
+      .from(adCreatives)
+      .where(and(
+        eq(adCreatives.merchantId, merchantId),
+        gte(adCreatives.generatedAt, today)
+      ));
+
+    return Number(result?.count || 0);
+  }
+
+  async incrementAdDownloadCount(id: number): Promise<AdCreative | undefined> {
+    const adCreative = await this.getAdCreative(id);
+    if (!adCreative) return undefined;
+
+    const [updated] = await db
+      .update(adCreatives)
+      .set({ downloadCount: (adCreative.downloadCount || 0) + 1 })
+      .where(eq(adCreatives.id, id))
+      .returning();
+
+    return updated || undefined;
   }
 
   // ==================== STAFF INVITATIONS ====================
@@ -572,26 +701,34 @@ export class DatabaseStorage implements IStorage {
 
   // ==================== SEED DATA ====================
   async seedDefaultPlans(): Promise<void> {
-    const existingPlans = await this.getAllPlans();
-    if (existingPlans.length > 0) return;
+    // Delete existing plans and re-seed with the 6 new tiers
+    await db.delete(plans);
 
     const defaultPlans: InsertPlan[] = [
       {
         name: "free",
+        slug: "free",
         displayName: "Free",
-        description: "Perfect for getting started",
+        description: "Get started with dropshipping",
         monthlyPrice: 0,
         yearlyPrice: 0,
         productLimit: 25,
         orderLimit: 50,
         teamMemberLimit: 1,
         supplierLimit: 2,
-        features: ["25 products", "50 orders/month", "1 team member", "2 suppliers", "Basic analytics"],
+        dailyAdsLimit: 0,
+        hasAiAds: false,
+        hasVideoAds: false,
+        isWhiteLabel: false,
+        hasVipSupport: false,
+        badge: null,
+        features: ["25 products", "50 orders/month", "1 team member", "2 suppliers", "Basic analytics", "Email support"],
         isPopular: false,
         sortOrder: 0,
       },
       {
         name: "starter",
+        slug: "starter",
         displayName: "Starter",
         description: "For growing businesses",
         monthlyPrice: 2900,
@@ -600,37 +737,100 @@ export class DatabaseStorage implements IStorage {
         orderLimit: 500,
         teamMemberLimit: 3,
         supplierLimit: 5,
-        features: ["100 products", "500 orders/month", "3 team members", "5 suppliers", "Advanced analytics", "Priority support"],
+        dailyAdsLimit: 1,
+        hasAiAds: true,
+        hasVideoAds: false,
+        isWhiteLabel: false,
+        hasVipSupport: false,
+        badge: null,
+        features: ["100 products", "500 orders/month", "3 team members", "5 suppliers", "1 AI ad/day", "Advanced analytics", "Priority email support"],
         isPopular: false,
         sortOrder: 1,
       },
       {
-        name: "pro",
-        displayName: "Pro",
-        description: "For scaling operations",
-        monthlyPrice: 7900,
-        yearlyPrice: 79000,
-        productLimit: 500,
-        orderLimit: 2000,
-        teamMemberLimit: 10,
-        supplierLimit: -1,
-        features: ["500 products", "2000 orders/month", "10 team members", "Unlimited suppliers", "Custom pricing rules", "API access", "Dedicated support"],
+        name: "growth",
+        slug: "growth",
+        displayName: "Growth",
+        description: "Scale your business faster",
+        monthlyPrice: 4900,
+        yearlyPrice: 49000,
+        productLimit: 250,
+        orderLimit: 1500,
+        teamMemberLimit: 5,
+        supplierLimit: 10,
+        dailyAdsLimit: 2,
+        hasAiAds: true,
+        hasVideoAds: false,
+        isWhiteLabel: false,
+        hasVipSupport: false,
+        badge: null,
+        features: ["250 products", "1,500 orders/month", "5 team members", "10 suppliers", "2 AI ads/day", "Custom pricing rules", "Chat support"],
         isPopular: true,
         sortOrder: 2,
       },
       {
-        name: "enterprise",
-        displayName: "Enterprise",
-        description: "For large organizations",
-        monthlyPrice: 19900,
-        yearlyPrice: 199000,
+        name: "professional",
+        slug: "professional",
+        displayName: "Professional",
+        description: "For serious dropshippers",
+        monthlyPrice: 9900,
+        yearlyPrice: 99000,
+        productLimit: 1000,
+        orderLimit: 5000,
+        teamMemberLimit: 10,
+        supplierLimit: -1,
+        dailyAdsLimit: 3,
+        hasAiAds: true,
+        hasVideoAds: true,
+        isWhiteLabel: false,
+        hasVipSupport: false,
+        badge: "POPULAR",
+        features: ["1,000 products", "5,000 orders/month", "10 team members", "Unlimited suppliers", "3 AI ads/day", "Video ads", "API access", "Phone support"],
+        isPopular: false,
+        sortOrder: 3,
+      },
+      {
+        name: "millionaire",
+        slug: "millionaire",
+        displayName: "Millionaire",
+        description: "Enterprise-grade features",
+        monthlyPrice: 24900,
+        yearlyPrice: 249000,
         productLimit: -1,
         orderLimit: -1,
         teamMemberLimit: -1,
         supplierLimit: -1,
-        features: ["Unlimited products", "Unlimited orders", "Unlimited team members", "Unlimited suppliers", "White-label options", "Custom integrations", "Dedicated account manager"],
+        dailyAdsLimit: 5,
+        hasAiAds: true,
+        hasVideoAds: true,
+        isWhiteLabel: true,
+        hasVipSupport: true,
+        badge: "BEST VALUE",
+        features: ["Unlimited products", "Unlimited orders", "Unlimited team members", "Unlimited suppliers", "5 AI ads/day", "Video ads", "White-label branding", "VIP support", "Dedicated account manager"],
         isPopular: false,
-        sortOrder: 3,
+        sortOrder: 4,
+      },
+      {
+        name: "free_for_life",
+        slug: "free_for_life",
+        displayName: "FREE FOR LIFE",
+        description: "Unlocked at $50K lifetime sales",
+        monthlyPrice: 0,
+        yearlyPrice: 0,
+        productLimit: -1,
+        orderLimit: -1,
+        teamMemberLimit: -1,
+        supplierLimit: -1,
+        dailyAdsLimit: -1,
+        hasAiAds: true,
+        hasVideoAds: true,
+        isWhiteLabel: true,
+        hasVipSupport: true,
+        badge: "EARNED",
+        features: ["Unlimited everything", "Unlimited AI ads", "Video ads", "White-label branding", "VIP support", "All future features included", "Lifetime access"],
+        isPopular: false,
+        isActive: false, // Hidden from regular plan selection
+        sortOrder: 5,
       },
     ];
 
