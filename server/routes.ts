@@ -804,16 +804,183 @@ export async function registerRoutes(
         currentPlan = await storage.getPlan(subscription.planId);
       }
 
+      // Get FREE FOR LIFE plan for progress tracking
+      const freeForLifePlan = await storage.getPlanBySlug("free_for_life");
+
       res.json({
         success: true,
         data: {
           subscription,
           currentPlan,
           availablePlans: plans,
+          freeForLifePlan,
+          freeForLifeThreshold: 5000000, // $50,000 in cents
         },
       });
     } catch (error: any) {
       res.status(500).json({ success: false, error: error.message });
+    }
+  });
+
+  // Upgrade subscription
+  app.post("/api/merchant/subscription/upgrade", authMiddleware, merchantOnly, async (req: AuthRequest, res: Response) => {
+    try {
+      if (!req.user?.merchantId) {
+        return res.status(400).json({ success: false, error: "No merchant associated" });
+      }
+
+      const { planSlug, billingInterval } = req.body;
+
+      const newPlan = await storage.getPlanBySlug(planSlug);
+      if (!newPlan) {
+        return res.status(404).json({ success: false, error: "Plan not found" });
+      }
+
+      const subscription = await storage.getSubscriptionByMerchant(req.user.merchantId);
+      if (!subscription) {
+        return res.status(404).json({ success: false, error: "No subscription found" });
+      }
+
+      // Update subscription
+      const now = new Date();
+      const periodEnd = new Date(now);
+      periodEnd.setMonth(periodEnd.getMonth() + (billingInterval === "yearly" ? 12 : 1));
+
+      const updatedSubscription = await storage.updateSubscription(subscription.id, {
+        planId: newPlan.id,
+        planSlug: newPlan.slug,
+        status: "active",
+        billingInterval: billingInterval || "monthly",
+        currentPeriodStart: now,
+        currentPeriodEnd: periodEnd,
+        adsEnabled: (newPlan.dailyAdsLimit || 0) > 0,
+        dailyAdsLimit: newPlan.dailyAdsLimit || 0,
+      });
+
+      // Update merchant's product limit
+      await storage.updateMerchant(req.user.merchantId, {
+        subscriptionPlanId: newPlan.id,
+        subscriptionStatus: "active",
+        productLimit: newPlan.productLimit,
+      });
+
+      res.json({ success: true, data: updatedSubscription });
+    } catch (error: any) {
+      res.status(400).json({ success: false, error: error.message });
+    }
+  });
+
+  // Check FREE FOR LIFE eligibility
+  app.post("/api/merchant/subscription/check-free-for-life", authMiddleware, merchantOnly, async (req: AuthRequest, res: Response) => {
+    try {
+      if (!req.user?.merchantId) {
+        return res.status(400).json({ success: false, error: "No merchant associated" });
+      }
+
+      const unlocked = await storage.checkAndUnlockFreeForLife(req.user.merchantId);
+      const subscription = await storage.getSubscriptionByMerchant(req.user.merchantId);
+
+      res.json({
+        success: true,
+        data: {
+          unlocked,
+          subscription,
+          lifetimeSales: subscription?.lifetimeSales || 0,
+          progressPercentage: subscription?.progressToFreeForLife || 0,
+        },
+      });
+    } catch (error: any) {
+      res.status(500).json({ success: false, error: error.message });
+    }
+  });
+
+  // ==================== AD CREATIVES ROUTES ====================
+  app.get("/api/merchant/ads", authMiddleware, merchantOnly, async (req: AuthRequest, res: Response) => {
+    try {
+      if (!req.user?.merchantId) {
+        return res.status(400).json({ success: false, error: "No merchant associated" });
+      }
+
+      const adCreatives = await storage.getAdCreativesByMerchant(req.user.merchantId);
+      const subscription = await storage.getSubscriptionByMerchant(req.user.merchantId);
+      const currentPlan = subscription ? await storage.getPlan(subscription.planId) : null;
+
+      const todaysCount = await storage.getTodaysAdCreativeCount(req.user.merchantId);
+      const dailyLimit = subscription?.dailyAdsLimit ?? currentPlan?.dailyAdsLimit ?? 0;
+
+      res.json({
+        success: true,
+        data: {
+          ads: adCreatives,
+          adsEnabled: subscription?.adsEnabled ?? false,
+          dailyLimit: dailyLimit === -1 ? "unlimited" : dailyLimit,
+          adsGeneratedToday: todaysCount,
+          remainingToday: dailyLimit === -1 ? "unlimited" : Math.max(0, dailyLimit - todaysCount),
+        },
+      });
+    } catch (error: any) {
+      res.status(500).json({ success: false, error: error.message });
+    }
+  });
+
+  app.post("/api/merchant/ads/generate", authMiddleware, merchantOnly, async (req: AuthRequest, res: Response) => {
+    try {
+      if (!req.user?.merchantId) {
+        return res.status(400).json({ success: false, error: "No merchant associated" });
+      }
+
+      const subscription = await storage.getSubscriptionByMerchant(req.user.merchantId);
+      if (!subscription?.adsEnabled) {
+        return res.status(403).json({ success: false, error: "Ads feature not enabled for your plan" });
+      }
+
+      const dailyLimit = subscription.dailyAdsLimit ?? 0;
+      const todaysCount = await storage.getTodaysAdCreativeCount(req.user.merchantId);
+
+      if (dailyLimit !== -1 && todaysCount >= dailyLimit) {
+        return res.status(403).json({ 
+          success: false, 
+          error: "Daily ad generation limit reached. Upgrade your plan for more.",
+          data: { dailyLimit, generated: todaysCount }
+        });
+      }
+
+      const { productId, platform, format } = req.body;
+
+      // For now, generate a placeholder ad creative (AI integration would go here)
+      const adCreative = await storage.createAdCreative({
+        merchantId: req.user.merchantId,
+        productId: productId || null,
+        platform: platform || "general",
+        format: format || "square",
+        headline: "Your Amazing Product",
+        adCopy: "Discover the best deals on quality products. Limited time offer!",
+        callToAction: "Shop Now",
+        hashtags: ["#deals", "#shopping", "#sale"],
+        isAiGenerated: true,
+      });
+
+      res.json({ success: true, data: adCreative });
+    } catch (error: any) {
+      res.status(400).json({ success: false, error: error.message });
+    }
+  });
+
+  app.post("/api/merchant/ads/:id/download", authMiddleware, merchantOnly, async (req: AuthRequest, res: Response) => {
+    try {
+      if (!req.user?.merchantId) {
+        return res.status(400).json({ success: false, error: "No merchant associated" });
+      }
+
+      const adCreative = await storage.getAdCreative(parseInt(req.params.id));
+      if (!adCreative || adCreative.merchantId !== req.user.merchantId) {
+        return res.status(404).json({ success: false, error: "Ad creative not found" });
+      }
+
+      const updated = await storage.incrementAdDownloadCount(adCreative.id);
+      res.json({ success: true, data: updated });
+    } catch (error: any) {
+      res.status(400).json({ success: false, error: error.message });
     }
   });
 
