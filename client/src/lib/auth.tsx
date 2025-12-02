@@ -43,12 +43,13 @@ export function AuthProvider({ children }: { children: ReactNode }) {
       });
       const data = await res.json();
       if (data.success && data.data) {
+        const userData = { ...data.data.user, merchant: data.data.merchant };
         localStorage.setItem("apex_token", data.data.token);
-        localStorage.setItem("apex_user", JSON.stringify(data.data.user));
-        setUser(data.data.user);
+        localStorage.setItem("apex_user", JSON.stringify(userData));
+        setUser(userData);
         return { success: true };
       }
-      return { success: false, error: data.message || "Login failed" };
+      return { success: false, error: data.error || data.message || "Login failed" };
     } catch {
       return { success: false, error: "Network error" };
     }
@@ -63,12 +64,13 @@ export function AuthProvider({ children }: { children: ReactNode }) {
       });
       const result = await res.json();
       if (result.success && result.data) {
+        const userData = { ...result.data.user, merchant: result.data.merchant };
         localStorage.setItem("apex_token", result.data.token);
-        localStorage.setItem("apex_user", JSON.stringify(result.data.user));
-        setUser(result.data.user);
+        localStorage.setItem("apex_user", JSON.stringify(userData));
+        setUser(userData);
         return { success: true };
       }
-      return { success: false, error: result.message || "Registration failed" };
+      return { success: false, error: result.error || result.message || "Registration failed" };
     } catch {
       return { success: false, error: "Network error" };
     }

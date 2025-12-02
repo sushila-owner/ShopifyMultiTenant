@@ -32,15 +32,15 @@ export default function MerchantDashboard() {
   const { user } = useAuth();
 
   const { data: stats, isLoading: statsLoading } = useQuery<MerchantDashboardStats>({
-    queryKey: ["/api/merchants/stats"],
+    queryKey: ["/api/merchant/dashboard"],
   });
 
   const { data: recentOrders, isLoading: ordersLoading } = useQuery<Order[]>({
-    queryKey: ["/api/orders"],
+    queryKey: ["/api/merchant/orders"],
   });
 
   const { data: products, isLoading: productsLoading } = useQuery<Product[]>({
-    queryKey: ["/api/products"],
+    queryKey: ["/api/merchant/products"],
   });
 
   const productUsage = stats ? (stats.currentProductCount / stats.productLimit) * 100 : 0;
@@ -62,7 +62,7 @@ export default function MerchantDashboard() {
               Shopify Connected
             </Badge>
           ) : (
-            <Link href="/dashboard/integrations">
+            <Link href="/merchant/integrations">
               <Button variant="outline" className="gap-2" data-testid="button-connect-shopify">
                 <Plug className="h-4 w-4" />
                 Connect Shopify
@@ -85,7 +85,7 @@ export default function MerchantDashboard() {
                   Upgrade your plan for more.
                 </p>
               </div>
-              <Link href="/dashboard/subscription">
+              <Link href="/merchant/billing">
                 <Button size="sm" data-testid="button-upgrade-plan">Upgrade</Button>
               </Link>
             </div>
@@ -188,7 +188,7 @@ export default function MerchantDashboard() {
               {stats?.currentProductCount || 0} of {stats?.productLimit || 50} products
             </CardDescription>
           </div>
-          <Link href="/dashboard/catalog">
+          <Link href="/merchant/catalog">
             <Button variant="outline" size="sm" className="gap-1" data-testid="button-browse-catalog">
               Browse Catalog
               <ArrowRight className="h-4 w-4" />
@@ -212,7 +212,7 @@ export default function MerchantDashboard() {
               <CardTitle>Recent Orders</CardTitle>
               <CardDescription>Latest orders from your store</CardDescription>
             </div>
-            <Link href="/dashboard/orders">
+            <Link href="/merchant/orders">
               <Button variant="ghost" size="sm" className="gap-1" data-testid="button-view-orders">
                 View all
                 <ArrowRight className="h-4 w-4" />
@@ -260,7 +260,7 @@ export default function MerchantDashboard() {
                         </Badge>
                       </TableCell>
                       <TableCell className="text-right font-medium">
-                        ${order.financials.total.toFixed(2)}
+                        ${((order.total || 0) / 100).toFixed(2)}
                       </TableCell>
                     </TableRow>
                   ))}
@@ -283,7 +283,7 @@ export default function MerchantDashboard() {
               <CardTitle>My Products</CardTitle>
               <CardDescription>Products in your catalog</CardDescription>
             </div>
-            <Link href="/dashboard/products">
+            <Link href="/merchant/products">
               <Button variant="ghost" size="sm" className="gap-1" data-testid="button-view-products">
                 View all
                 <ArrowRight className="h-4 w-4" />
@@ -332,7 +332,7 @@ export default function MerchantDashboard() {
               <div className="text-center py-8 text-muted-foreground">
                 <Package className="h-12 w-12 mx-auto mb-4 opacity-50" />
                 <p>No products imported</p>
-                <Link href="/dashboard/catalog">
+                <Link href="/merchant/catalog">
                   <Button variant="link" className="mt-2">
                     Browse the catalog
                   </Button>

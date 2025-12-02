@@ -63,7 +63,7 @@ const statsCards = [
 
 export default function AdminDashboard() {
   const { data: stats, isLoading: statsLoading } = useQuery<AdminDashboardStats>({
-    queryKey: ["/api/admin/stats"],
+    queryKey: ["/api/admin/dashboard"],
   });
 
   const { data: merchants, isLoading: merchantsLoading } = useQuery<Merchant[]>({
@@ -240,7 +240,7 @@ export default function AdminDashboard() {
                     </div>
                     <div className="flex items-center gap-3">
                       <div className="text-right">
-                        <p className="text-sm font-medium">{supplier.stats.totalProducts}</p>
+                        <p className="text-sm font-medium">{supplier.totalProducts}</p>
                         <p className="text-xs text-muted-foreground">products</p>
                       </div>
                       <Badge variant={supplier.isActive ? "default" : "secondary"}>

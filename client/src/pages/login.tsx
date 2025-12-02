@@ -38,7 +38,7 @@ export default function LoginPage() {
           if (user.role === "admin") {
             setLocation("/admin");
           } else {
-            setLocation("/dashboard");
+            setLocation("/merchant");
           }
         }
         toast({
