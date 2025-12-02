@@ -38,7 +38,7 @@ export default function LoginPage() {
           if (user.role === "admin") {
             setLocation("/admin");
           } else {
-            setLocation("/merchant");
+            setLocation("/dashboard");
           }
         }
         toast({
@@ -171,7 +171,7 @@ export default function LoginPage() {
               <p className="text-xs text-muted-foreground text-center mb-2">Demo Accounts:</p>
               <div className="space-y-1 text-xs text-muted-foreground">
                 <p><strong>Admin:</strong> admin@apexmart.com / admin123</p>
-                <p><strong>Merchant:</strong> merchant@example.com / merchant123</p>
+                <p><strong>Merchant:</strong> merchant@test.com / merchant123</p>
               </div>
             </div>
           </CardContent>

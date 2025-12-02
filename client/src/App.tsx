@@ -1,4 +1,4 @@
-import { Switch, Route, Redirect, useLocation } from "wouter";
+import { Switch, Route, Redirect } from "wouter";
 import { queryClient } from "./lib/queryClient";
 import { QueryClientProvider } from "@tanstack/react-query";
 import { Toaster } from "@/components/ui/toaster";
@@ -34,7 +34,6 @@ import SettingsPage from "@/pages/merchant/settings";
 
 function ProtectedRoute({ children, requireAdmin = false }: { children: React.ReactNode; requireAdmin?: boolean }) {
   const { user, isLoading } = useAuth();
-  const [, setLocation] = useLocation();
 
   if (isLoading) {
     return (
@@ -45,18 +44,15 @@ function ProtectedRoute({ children, requireAdmin = false }: { children: React.Re
   }
 
   if (!user) {
-    setLocation("/login");
-    return null;
+    return <Redirect to="/login" />;
   }
 
   if (requireAdmin && user.role !== "admin") {
-    setLocation("/dashboard");
-    return null;
+    return <Redirect to="/dashboard" />;
   }
 
   if (!requireAdmin && user.role === "admin") {
-    setLocation("/admin");
-    return null;
+    return <Redirect to="/admin" />;
   }
 
   return <>{children}</>;
