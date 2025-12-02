@@ -1,0 +1,908 @@
+You are building a complete full-stack multi-tenant SaaS platform named "Apex Mart Wholesale" - 
+a powerful wholesale marketplace connecting suppliers with merchants who sell on Shopify and 
+other e-commerce platforms.
+
+════════════════════════════════════════════════════════════════════════════════════════════════
+🏗️ PLATFORM ARCHITECTURE
+════════════════════════════════════════════════════════════════════════════════════════════════
+
+CORE CONCEPT:
+- Admin controls the entire platform and manages suppliers
+- Each merchant has their own isolated account and Shopify store
+- Merchants import products from admin-configured suppliers
+- Orders auto-fulfill through suppliers
+- Complete data isolation between merchants
+- Subscription-based pricing with product limits
+
+════════════════════════════════════════════════════════════════════════════════════════════════
+👥 USER ROLES & ACCESS CONTROL
+════════════════════════════════════════════════════════════════════════════════════════════════
+
+1. SUPER ADMIN ROLE
+   Email: admin@apexmart.com (configurable)
+   Access: /admin/* routes
+   
+   Capabilities:
+   ✅ Add/edit/delete suppliers (GigaB2B, Shopify stores, Amazon, custom APIs)
+   ✅ Sync products from suppliers to global catalog
+   ✅ View and manage ALL merchants (suspend, delete, edit)
+   ✅ View ALL products across all merchants
+   ✅ View ALL orders across entire platform
+   ✅ Configure subscription plans and pricing
+   ✅ Override merchant limits manually
+   ✅ Platform-wide analytics (revenue, orders, products)
+   ✅ System settings and configurations
+   ✅ Manage admin users
+   ✅ View sync logs and system health
+   ✅ Financial reports (commissions, payouts, revenue)
+   ✅ Configure platform integrations (Stripe, Shopify App API keys)
+   ✅ Send platform-wide announcements
+   
+   Restrictions:
+   ❌ Cannot access individual merchant Shopify stores directly
+   ❌ Does not manage merchant customers (merchants do)
+
+2. MERCHANT ROLE
+   Email: merchant1@example.com, merchant2@example.com, etc.
+   Access: /dashboard/* routes
+   
+   Capabilities:
+   ✅ Connect their own Shopify store (OAuth per merchant)
+   ✅ Browse global product catalog (synced by admin)
+   ✅ Import products to their account with custom pricing
+   ✅ Push products to their Shopify store (one-click)
+   ✅ Set pricing rules (fixed markup or percentage)
+   ✅ Receive orders from their Shopify store (webhooks)
+   ✅ Auto-fulfill orders through suppliers
+   ✅ Track order fulfillment and shipments
+   ✅ Manage their customers (CRM)
+   ✅ View their analytics only (sales, profit, trending products)
+   ✅ Invite and manage staff members
+   ✅ Subscribe to plans (Free, Starter, Pro, Enterprise)
+   ✅ Manage billing and payment methods
+   ✅ Configure their settings (branding, notifications)
+   ✅ Access their API keys
+   
+   Restrictions:
+   ❌ Cannot see other merchants' data (products, orders, customers, analytics)
+   ❌ Cannot add suppliers (only admin can)
+   ❌ Cannot access admin panel
+   ❌ Cannot exceed product limit of their subscription plan
+   ❌ Cannot modify global product catalog
+
+3. STAFF ROLE (Under Merchant)
+   Email: staff@merchantdomain.com
+   Access: /dashboard/* routes (limited based on permissions)
+   
+   Capabilities:
+   ✅ Assigned by merchant owner
+   ✅ Role-based permissions (can manage products, orders, customers)
+   ✅ View merchant dashboard (limited)
+   ✅ Process orders
+   ✅ Manage products (if permitted)
+   
+   Restrictions:
+   ❌ Cannot manage billing/subscription
+   ❌ Cannot invite other staff
+   ❌ Cannot access settings
+   ❌ Cannot view financial reports
+
+════════════════════════════════════════════════════════════════════════════════════════════════
+🗄️ DATABASE SCHEMA (Multi-Tenant Architecture)
+════════════════════════════════════════════════════════════════════════════════════════════════
+
+CRITICAL RULE: Every merchant-specific resource MUST have merchantId field for data isolation
+
+1. USERS COLLECTION
+{
+  _id: ObjectId,
+  email: string (unique),
+  password: string (bcrypt hashed),
+  name: string,
+  role: enum ['admin', 'merchant', 'staff'],
+  merchantId: ObjectId | null, // null for admin, required for merchant/staff
+  avatar: string,
+  phone: string,
+  isActive: boolean,
+  isEmailVerified: boolean,
+  twoFactorEnabled: boolean,
+  twoFactorSecret: string,
+  lastLogin: Date,
+  permissions: string[], // for staff: ['products.read', 'orders.write', etc.]
+  createdAt: Date,
+  updatedAt: Date
+}
+
+Indexes: email (unique), merchantId, role
+
+2. MERCHANTS COLLECTION
+{
+  _id: ObjectId,
+  businessName: string,
+  ownerEmail: string,
+  ownerId: ObjectId, // Reference to User
+  businessType: string,
+  taxId: string,
+  address: {
+    street: string,
+    city: string,
+    state: string,
+    country: string,
+    zipCode: string
+  },
+  shopifyStore: {
+    domain: string, // merchant-store.myshopify.com
+    accessToken: string (encrypted), // Store-specific token
+    scopes: string[],
+    installedAt: Date,
+    isConnected: boolean
+  },
+  woocommerceStore: {
+    siteUrl: string,
+    consumerKey: string (encrypted),
+    consumerSecret: string (encrypted),
+    isConnected: boolean
+  },
+  subscriptionPlanId: ObjectId,
+  subscriptionStatus: enum ['trial', 'active', 'cancelled', 'expired'],
+  productLimit: number, // Based on plan
+  currentProductCount: number,
+  trialEndsAt: Date,
+  subscriptionEndsAt: Date,
+  stripeCustomerId: string,
+  stripeSubscriptionId: string,
+  billing: {
+    cardLast4: string,
+    cardBrand: string,
+    nextBillingDate: Date
+  },
+  settings: {
+    branding: {
+      logo: string,
+      primaryColor: string,
+      companyName: string
+    },
+    notifications: {
+      emailOnOrder: boolean,
+      emailOnLowStock: boolean,
+      smsNotifications: boolean
+    },
+    defaultPricingRule: {
+      type: enum ['fixed', 'percentage'],
+      value: number
+    },
+    autoFulfillment: boolean,
+    autoSyncInventory: boolean
+  },
+  isActive: boolean,
+  isSuspended: boolean,
+  suspensionReason: string,
+  stats: {
+    totalOrders: number,
+    totalRevenue: number,
+    totalProducts: number
+  },
+  createdAt: Date,
+  updatedAt: Date
+}
+
+Indexes: ownerId, shopifyStore.domain, subscriptionPlanId
+
+3. SUPPLIERS COLLECTION (Admin Only)
+{
+  _id: ObjectId,
+  name: string,
+  type: enum ['gigab2b', 'shopify', 'amazon', 'woocommerce', 'custom'],
+  description: string,
+  logo: string,
+  apiCredentials: {
+    // Encrypted credentials
+    apiKey: string,
+    apiSecret: string,
+    baseUrl: string,
+    accessToken: string,
+    refreshToken: string,
+    customHeaders: object
+  },
+  config: {
+    productSyncEnabled: boolean,
+    inventorySyncEnabled: boolean,
+    orderFulfillmentEnabled: boolean,
+    syncInterval: number, // minutes
+    lastSyncAt: Date,
+    nextSyncAt: Date
+  },
+  isActive: boolean,
+  rating: number,
+  stats: {
+    totalProducts: number,
+    totalOrders: number,
+    avgFulfillmentTime: number, // hours
+    successRate: number // percentage
+  },
+  createdBy: ObjectId, // Admin user
+  createdAt: Date,
+  updatedAt: Date
+}
+
+Indexes: type, isActive, createdBy
+
+4. PRODUCTS COLLECTION (Multi-Tenant)
+{
+  _id: ObjectId,
+  merchantId: ObjectId | null, // null = global product, ObjectId = merchant-specific
+  supplierId: ObjectId, // Which supplier this product comes from
+  title: string,
+  description: string,
+  category: string,
+  tags: string[],
+  images: [{
+    url: string,
+    alt: string,
+    position: number
+  }],
+  variants: [{
+    _id: ObjectId,
+    sku: string,
+    barcode: string,
+    title: string,
+    price: number,
+    compareAtPrice: number,
+    cost: number, // Supplier cost
+    inventoryQuantity: number,
+    weight: number,
+    weightUnit: string,
+    options: {
+      size: string,
+      color: string,
+      material: string
+    },
+    image: string
+  }],
+  supplierProductId: string, // ID in supplier's system
+  supplierSku: string,
+  supplierPrice: number, // Cost from supplier
+  merchantPrice: number, // Price merchant sells at (if merchant-specific)
+  pricingRule: {
+    type: enum ['fixed', 'percentage'],
+    value: number
+  },
+  inventory: {
+    quantity: number,
+    lowStockThreshold: number,
+    trackInventory: boolean
+  },
+  status: enum ['draft', 'active', 'archived'],
+  isGlobal: boolean, // true = available to all merchants, false = merchant-specific
+  shopifyProductId: string, // ID in merchant's Shopify store (if imported)
+  syncStatus: enum ['pending', 'synced', 'failed'],
+  lastSyncedAt: Date,
+  importedAt: Date,
+  createdBy: enum ['admin', 'merchant', 'system'],
+  createdAt: Date,
+  updatedAt: Date
+}
+
+Indexes: merchantId, supplierId, isGlobal, shopifyProductId, status
+Query Examples:
+- Global products: { isGlobal: true, status: 'active' }
+- Merchant products: { merchantId: '...', status: 'active' }
+
+5. ORDERS COLLECTION (Merchant-Specific)
+{
+  _id: ObjectId,
+  merchantId: ObjectId, // CRITICAL: Every order belongs to a merchant
+  orderNumber: string, // Auto-generated (ORD-20250101-0001)
+  shopifyOrderId: string, // From merchant's Shopify store
+  customerId: ObjectId,
+  customerEmail: string,
+  shippingAddress: {
+    firstName: string,
+    lastName: string,
+    address1: string,
+    address2: string,
+    city: string,
+    province: string,
+    country: string,
+    zip: string,
+    phone: string
+  },
+  billingAddress: object,
+  items: [{
+    productId: ObjectId,
+    variantId: ObjectId,
+    supplierId: ObjectId, // Which supplier fulfills this item
+    title: string,
+    variantTitle: string,
+    sku: string,
+    quantity: number,
+    price: number, // Merchant's selling price
+    cost: number, // Cost from supplier
+    profit: number, // price - cost
+    supplierOrderId: string, // Order ID in supplier's system
+    fulfillmentStatus: enum ['pending', 'processing', 'shipped', 'delivered', 'cancelled'],
+    trackingNumber: string,
+    trackingUrl: string,
+    carrier: string
+  }],
+  financials: {
+    subtotal: number,
+    tax: number,
+    shipping: number,
+    discount: number,
+    total: number,
+    totalCost: number, // Cost of all items from suppliers
+    totalProfit: number // total - totalCost
+  },
+  status: enum ['pending', 'processing', 'completed', 'cancelled', 'refunded'],
+  paymentStatus: enum ['pending', 'paid', 'refunded', 'failed'],
+  fulfillmentStatus: enum ['unfulfilled', 'partial', 'fulfilled', 'cancelled'],
+  tags: string[],
+  notes: string,
+  internalNotes: string,
+  timeline: [{
+    status: string,
+    message: string,
+    createdAt: Date,
+    createdBy: ObjectId
+  }],
+  supplierOrders: [{ // Orders sent to suppliers
+    supplierId: ObjectId,
+    supplierOrderId: string,
+    status: string,
+    items: ObjectId[],
+    createdAt: Date
+  }],
+  cancelledAt: Date,
+  refundedAt: Date,
+  createdAt: Date,
+  updatedAt: Date
+}
+
+Indexes: merchantId, orderNumber, shopifyOrderId, status, createdAt
+
+6. CUSTOMERS COLLECTION (Merchant-Specific)
+{
+  _id: ObjectId,
+  merchantId: ObjectId, // CRITICAL: Each merchant has their own customers
+  shopifyCustomerId: string,
+  email: string,
+  firstName: string,
+  lastName: string,
+  phone: string,
+  addresses: [object],
+  defaultAddress: object,
+  tags: string[],
+  stats: {
+    totalOrders: number,
+    totalSpent: number,
+    averageOrderValue: number,
+    lastOrderDate: Date
+  },
+  loyaltyPoints: number,
+  tier: enum ['bronze', 'silver', 'gold', 'platinum'],
+  notes: string,
+  isActive: boolean,
+  createdAt: Date,
+  updatedAt: Date
+}
+
+Indexes: merchantId, email, shopifyCustomerId
+
+7. SUBSCRIPTIONS COLLECTION
+{
+  _id: ObjectId,
+  merchantId: ObjectId,
+  planId: ObjectId,
+  status: enum ['trial', 'active', 'cancelled', 'expired', 'past_due'],
+  billingInterval: enum ['monthly', 'yearly'],
+  currentPeriodStart: Date,
+  currentPeriodEnd: Date,
+  trialStart: Date,
+  trialEnd: Date,
+  cancelledAt: Date,
+  stripeSubscriptionId: string,
+  stripeCustomerId: string,
+  pricing: {
+    setupFee: number,
+    monthlyFee: number,
+    yearlyFee: number
+  },
+  limits: {
+    products: number,
+    orders: number, // per month
+    teamMembers: number,
+    apiCalls: number
+  },
+  usage: {
+    products: number,
+    orders: number,
+    teamMembers: number,
+    apiCalls: number
+  },
+  createdAt: Date,
+  updatedAt: Date
+}
+
+8. PLANS COLLECTION
+{
+  _id: ObjectId,
+  name: string, // 'Free', 'Starter', 'Professional', 'Enterprise'
+  displayName: string,
+  description: string,
+  pricing: {
+    setupFee: number,
+    monthly: number,
+    yearly: number,
+    yearlyDiscount: number // percentage
+  },
+  limits: {
+    products: number, // 50, 500, 5000, unlimited
+    orders: number, // per month
+    teamMembers: number,
+    suppliers: number,
+    apiCallsPerDay: number,
+    storageGB: number
+  },
+  features: [string], // ['AI Features', 'Multi-channel', 'White Label', etc.]
+  isPopular: boolean,
+  isActive: boolean,
+  sortOrder: number,
+  createdAt: Date,
+  updatedAt: Date
+}
+
+9. INVENTORY COLLECTION (Real-time stock tracking)
+{
+  _id: ObjectId,
+  productId: ObjectId,
+  variantId: ObjectId,
+  merchantId: ObjectId,
+  supplierId: ObjectId,
+  sku: string,
+  quantity: number,
+  reserved: number, // Quantity in pending orders
+  available: number, // quantity - reserved
+  lowStockThreshold: number,
+  lastSyncedAt: Date,
+  history: [{
+    change: number, // +10 or -5
+    reason: enum ['sync', 'sale', 'adjustment', 'return'],
+    orderId: ObjectId,
+    note: string,
+    createdAt: Date
+  }],
+  createdAt: Date,
+  updatedAt: Date
+}
+
+10. SYNC_LOGS COLLECTION (Track all sync operations)
+{
+  _id: ObjectId,
+  type: enum ['product', 'inventory', 'order', 'tracking'],
+  supplierId: ObjectId,
+  merchantId: ObjectId,
+  status: enum ['success', 'failed', 'partial'],
+  itemsProcessed: number,
+  itemsFailed: number,
+  errors: [{
+    itemId: string,
+    message: string
+  }],
+  duration: number, // milliseconds
+  startedAt: Date,
+  completedAt: Date,
+  createdAt: Date
+}
+
+11. ACTIVITY_LOGS COLLECTION (Audit trail)
+{
+  _id: ObjectId,
+  userId: ObjectId,
+  merchantId: ObjectId,
+  action: string, // 'product.created', 'order.fulfilled', 'user.login'
+  resource: string, // 'Product', 'Order', 'User'
+  resourceId: ObjectId,
+  details: object,
+  ipAddress: string,
+  userAgent: string,
+  createdAt: Date
+}
+
+12. NOTIFICATIONS COLLECTION
+{
+  _id: ObjectId,
+  userId: ObjectId,
+  merchantId: ObjectId,
+  type: enum ['order', 'product', 'inventory', 'system', 'billing'],
+  title: string,
+  message: string,
+  actionUrl: string,
+  isRead: boolean,
+  readAt: Date,
+  createdAt: Date
+}
+
+13. API_KEYS COLLECTION (For merchant API access)
+{
+  _id: ObjectId,
+  merchantId: ObjectId,
+  name: string,
+  key: string (hashed),
+  permissions: string[],
+  lastUsedAt: Date,
+  expiresAt: Date,
+  isActive: boolean,
+  createdBy: ObjectId,
+  createdAt: Date
+}
+
+14. WEBHOOKS COLLECTION (Custom webhooks for merchants)
+{
+  _id: ObjectId,
+  merchantId: ObjectId,
+  url: string,
+  events: string[], // ['order.created', 'product.updated', etc.]
+  secret: string,
+  isActive: boolean,
+  failureCount: number,
+  lastTriggeredAt: Date,
+  createdAt: Date
+}
+
+15. EMAIL_CAMPAIGNS COLLECTION
+{
+  _id: ObjectId,
+  merchantId: ObjectId,
+  name: string,
+  subject: string,
+  content: string,
+  recipients: [{
+    customerId: ObjectId,
+    email: string,
+    status: enum ['pending', 'sent', 'failed', 'opened', 'clicked']
+  }],
+  scheduledAt: Date,
+  sentAt: Date,
+  stats: {
+    sent: number,
+    opened: number,
+    clicked: number,
+    bounced: number
+  },
+  createdAt: Date
+}
+
+16. DISCOUNTS COLLECTION
+{
+  _id: ObjectId,
+  merchantId: ObjectId,
+  code: string,
+  type: enum ['percentage', 'fixed', 'free_shipping'],
+  value: number,
+  minOrderValue: number,
+  maxUses: number,
+  usedCount: number,
+  startsAt: Date,
+  endsAt: Date,
+  isActive: boolean,
+  createdAt: Date
+}
+
+17. REVIEWS COLLECTION
+{
+  _id: ObjectId,
+  merchantId: ObjectId,
+  productId: ObjectId,
+  customerId: ObjectId,
+  orderId: ObjectId,
+  rating: number, // 1-5
+  title: string,
+  comment: string,
+  isApproved: boolean,
+  isPublished: boolean,
+  merchantReply: string,
+  repliedAt: Date,
+  createdAt: Date
+}
+
+18. SETTINGS COLLECTION (Platform-wide settings)
+{
+  _id: ObjectId,
+  key: string (unique),
+  value: any,
+  type: enum ['string', 'number', 'boolean', 'json'],
+  description: string,
+  isPublic: boolean,
+  updatedBy: ObjectId,
+  updatedAt: Date
+}
+
+════════════════════════════════════════════════════════════════════════════════════════════════
+🔐 AUTHENTICATION & AUTHORIZATION SYSTEM
+════════════════════════════════════════════════════════════════════════════════════════════════
+
+1. AUTHENTICATION FLOW
+
+Registration (Merchant):
+POST /api/auth/register
+{
+  "email": "merchant@example.com",
+  "password": "SecurePass123!",
+  "name": "John Doe",
+  "businessName": "My Wholesale Store",
+  "businessType": "retail"
+}
+
+Response:
+{
+  "success": true,
+  "message": "Account created successfully",
+  "data": {
+    "user": {
+      "id": "user_id",
+      "email": "merchant@example.com",
+      "name": "John Doe",
+      "role": "merchant",
+      "merchantId": "merchant_id"
+    },
+    "merchant": {
+      "id": "merchant_id",
+      "businessName": "My Wholesale Store",
+      "subscriptionStatus": "trial",
+      "trialEndsAt": "2025-12-28T00:00:00Z"
+    },
+    "token": "jwt_token",
+    "refreshToken": "refresh_token"
+  }
+}
+
+Login (Admin or Merchant):
+POST /api/auth/login
+{
+  "email": "admin@apexmart.com", // or merchant email
+  "password": "password123"
+}
+
+Response:
+{
+  "success": true,
+  "data": {
+    "user": {
+      "id": "user_id",
+      "email": "admin@apexmart.com",
+      "name": "Super Admin",
+      "role": "admin", // or "merchant" or "staff"
+      "merchantId": null // or merchant_id
+    },
+    "token": "jwt_token",
+    "refreshToken": "refresh_token"
+  }
+}
+
+Frontend Logic:
+if (user.role === 'admin') {
+  router.push('/admin/dashboard');
+} else if (user.role === 'merchant' || user.role === 'staff') {
+  router.push('/dashboard');
+}
+
+2. JWT TOKEN STRUCTURE
+{
+  "userId": "user_id",
+  "email": "user@example.com",
+  "role": "admin" | "merchant" | "staff",
+  "merchantId": "merchant_id" | null,
+  "permissions": ["products.read", "orders.write"],
+  "iat": 1234567890,
+  "exp": 1234567890
+}
+
+3. MIDDLEWARE FUNCTIONS
+
+// Authenticate - Verify JWT token
+const authenticate = async (req, res, next) => {
+  try {
+    const token = req.headers.authorization?.split(' ')[1];
+    if (!token) throw new Error('No token provided');
+    
+    const decoded = jwt.verify(token, JWT_SECRET);
+    const user = await User.findById(decoded.userId);
+    
+    if (!user || !user.isActive) throw new Error('Invalid user');
+    
+    req.user = user;
+    next();
+  } catch (error) {
+    res.status(401).json({ error: 'Unauthorized' });
+  }
+};
+
+// Require Admin Role
+const requireAdmin = (req, res, next) => {
+  if (req.user.role !== 'admin') {
+    return res.status(403).json({ error: 'Admin access required' });
+  }
+  next();
+};
+
+// Require Merchant or Staff Role
+const requireMerchant = (req, res, next) => {
+  if (!['merchant', 'staff'].includes(req.user.role)) {
+    return res.status(403).json({ error: 'Merchant access required' });
+  }
+  next();
+};
+
+// Data Isolation - Force merchantId filter for non-admin
+const scopeToMerchant = (req, res, next) => {
+  if (req.user.role === 'admin') {
+    // Admin can see all data (optional merchantId filter)
+    req.merchantFilter = req.query.merchantId ? { merchantId: req.query.merchantId } : {};
+  } else {
+    // Force merchant/staff to only see their own data
+    req.merchantFilter = { merchantId: req.user.merchantId };
+  }
+  next();
+};
+
+// Validate Ownership - Ensure user owns the resource
+const validateOwnership = (Model) => async (req, res, next) => {
+  try {
+    const resource = await Model.findById(req.params.id);
+    
+    if (!resource) {
+      return res.status(404).json({ error: 'Resource not found' });
+    }
+    
+    // Admin can access everything
+    if (req.user.role === 'admin') {
+      req.resource = resource;
+      return next();
+    }
+    
+    // Check if resource belongs to user's merchant
+    if (resource.merchantId?.toString() !== req.user.merchantId?.toString()) {
+      return res.status(403).json({ error: 'Access denied' });
+    }
+    
+    req.resource = resource;
+    next();
+  } catch (error) {
+    res.status(500).json({ error: error.message });
+  }
+};
+
+// Check Permission (for staff)
+const checkPermission = (permission) => (req, res, next) => {
+  if (req.user.role === 'admin' || req.user.role === 'merchant') {
+    return next(); // Admin and merchant have all permissions
+  }
+  
+  if (!req.user.permissions.includes(permission)) {
+    return res.status(403).json({ error: 'Permission denied' });
+  }
+  
+  next();
+};
+
+// Check Subscription Limit
+const checkProductLimit = async (req, res, next) => {
+  try {
+    if (req.user.role === 'admin') return next();
+    
+    const merchant = await Merchant.findById(req.user.merchantId);
+    const subscription = await Subscription.findOne({ merchantId: merchant._id });
+    
+    if (merchant.currentProductCount >= subscription.limits.products) {
+      return res.status(403).json({ 
+        error: 'Product limit reached. Please upgrade your plan.' 
+      });
+    }
+    
+    next();
+  } catch (error) {
+    res.status(500).json({ error: error.message });
+  }
+};
+
+════════════════════════════════════════════════════════════════════════════════════════════════
+🛣️ API ROUTES STRUCTURE
+════════════════════════════════════════════════════════════════════════════════════════════════
+
+ADMIN ROUTES (Protected: requireAdmin)
+
+POST   /api/auth/login                              → Admin/Merchant login
+POST   /api/auth/register                           → Merchant registration
+POST   /api/auth/logout                             → Logout
+POST   /api/auth/refresh-token                      → Refresh JWT
+POST   /api/auth/forgot-password                    → Request password reset
+POST   /api/auth/reset-password                     → Reset password
+POST   /api/auth/verify-email                       → Verify email
+POST   /api/auth/2fa/enable                         → Enable 2FA
+POST   /api/auth/2fa/verify                         → Verify 2FA code
+GET    /api/auth/me                                 → Get current user
+
+--- ADMIN ONLY ROUTES ---
+GET    /api/admin/dashboard                         → Platform statistics
+GET    /api/admin/merchants                         → List all merchants
+GET    /api/admin/merchants/:id                     → Get merchant details
+PUT    /api/admin/merchants/:id                     → Update merchant
+DELETE /api/admin/merchants/:id                     → Delete merchant
+PUT    /api/admin/merchants/:id/suspend             → Suspend merchant
+PUT    /api/admin/merchants/:id/activate            → Activate merchant
+PUT    /api/admin/merchants/:id/limits              → Override subscription limits
+
+GET    /api/admin/suppliers                         → List all suppliers
+POST   /api/admin/suppliers                         → Add new supplier
+GET    /api/admin/suppliers/:id                     → Get supplier details
+PUT    /api/admin/suppliers/:id                     → Update supplier
+DELETE /api/admin/suppliers/:id                     → Delete supplier
+POST   /api/admin/suppliers/:id/sync                → Trigger product sync
+GET    /api/admin/suppliers/:id/products            → Get supplier products
+POST   /api/admin/suppliers/:id/test-connection     → Test API connection
+
+GET    /api/admin/products                          → All products (all merchants)
+POST   /api/admin/products/sync                     → Sync from all suppliers
+POST   /api/admin/products/bulk-import              → Bulk import CSV
+GET    /api/admin/products/:id                      → Product details
+PUT    /api/admin/products/:id                      → Update product
+DELETE /api/admin/products/:id                      → Delete product
+
+GET    /api/admin/orders                            → All orders (all merchants)
+GET    /api/admin/orders/:id                        → Order details
+PUT    /api/admin/orders/:id                        → Update order
+
+GET    /api/admin/plans                             → List subscription plans
+POST   /api/admin/plans                             → Create plan
+PUT    /api/admin/plans/:id                         → Update plan
+DELETE /api/admin/plans/:id                         → Delete plan
+
+GET    /api/admin/subscriptions                     → All subscriptions
+GET    /api/admin/subscriptions/:id                 → Subscription details
+PUT    /api/admin/subscriptions/:id/cancel          → Cancel subscription
+
+GET    /api/admin/analytics/overview                → Platform-wide analytics
+GET    /api/admin/analytics/revenue                 → Revenue analytics
+GET    /api/admin/analytics/merchants               → Merchant analytics
+GET    /api/admin/analytics/products                → Product analytics
+GET    /api/admin/analytics/suppliers               → Supplier performance
+
+GET    /api/admin/sync-logs                         → All sync logs
+GET    /api/admin/sync-logs/:id                     → Sync log details
+
+GET    /api/admin/activity-logs                     → All activity logs
+GET    /api/admin/settings                          → Platform settings
+PUT    /api/admin/settings                          → Update settings
+
+MERCHANT ROUTES (Protected: requireMerchant + scopeToMerchant)
+
+GET    /api/dashboard/stats                         → Merchant dashboard stats
+
+GET    /api/products                                → Merchant's products only
+GET    /api/products/catalog                        → Browse global catalog
+POST   /api/products/:id/import                     → Import product from catalog
+PUT    /api/products/:id                            → Update merchant's product
+DELETE /api/products/:id                            → Delete merchant's product
+POST   /api/products/:id/push-to-shopify            → Push to Shopify store
+POST   /api/products/bulk-import                    → Bulk import CSV
+GET    /api/products/search                         → Search products
+
+GET    /api/inventory                               → Merchant's inventory
+PUT    /api/inventory/:id                           → Update inventory
+POST   /api/inventory/:id/adjust                    → Adjust stock
+GET    /api/inventory/alerts                        → Low stock alerts
+
+GET    /api/orders                                  → Merchant's orders only
+GET    /api/orders/:id                              → Order details
+PUT    /api/orders/:id                              → Update order
+POST   /api/orders/:id/fulfill                      → Fulfill order
+POST   /api/orders/:id/cancel                       → Cancel order
+POST   /api/orders/:id/refund                       → Refund order
+GET    /api/orders/:id/tracking                     → Get tracking info
+
+GET    /api/customers                               → Merchant's customers
+GET    /api/customers/:id                           → Customer details
+PUT    /api/customers/:id                           → Update customer
+POST   /api/customers/:id/loyalty-points            → Add loyalty points
+GET    /api/customers/:id/​​​​​​​​​​​​​​​​
