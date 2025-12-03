@@ -58,13 +58,9 @@ const plans = [
     name: "Free",
     price: 0,
     period: "forever",
-    description: "Perfect for getting started",
-    limits: {
-      products: 50,
-      orders: 100,
-      teamMembers: 1,
-    },
-    features: ["50 Products", "100 Orders/month", "1 Team Member", "Basic Analytics", "Email Support"],
+    description: "Get started with dropshipping",
+    badge: null,
+    features: ["25 Products", "50 Orders/month", "1 Team Member", "Basic Analytics", "Email Support"],
     popular: false,
   },
   {
@@ -72,38 +68,35 @@ const plans = [
     price: 29,
     period: "month",
     description: "For growing businesses",
-    limits: {
-      products: 500,
-      orders: 1000,
-      teamMembers: 3,
-    },
-    features: ["500 Products", "1,000 Orders/month", "3 Team Members", "Advanced Analytics", "Priority Support", "Custom Pricing Rules"],
+    badge: null,
+    features: ["100 Products", "500 Orders/month", "3 Team Members", "1 AI Ad/day", "Priority Support"],
     popular: false,
   },
   {
-    name: "Professional",
-    price: 79,
+    name: "Growth",
+    price: 49,
     period: "month",
-    description: "For scaling operations",
-    limits: {
-      products: 5000,
-      orders: 10000,
-      teamMembers: 10,
-    },
-    features: ["5,000 Products", "10,000 Orders/month", "10 Team Members", "Full Analytics Suite", "24/7 Support", "API Access", "White Label"],
+    description: "Scale your business faster",
+    badge: null,
+    features: ["250 Products", "1,500 Orders/month", "5 Team Members", "2 AI Ads/day", "Chat Support"],
     popular: true,
   },
   {
-    name: "Enterprise",
-    price: 199,
+    name: "Professional",
+    price: 99,
     period: "month",
-    description: "For large-scale operations",
-    limits: {
-      products: -1,
-      orders: -1,
-      teamMembers: -1,
-    },
-    features: ["Unlimited Products", "Unlimited Orders", "Unlimited Team", "Custom Integrations", "Dedicated Manager", "SLA Guarantee", "Custom Features"],
+    description: "For serious dropshippers",
+    badge: "POPULAR",
+    features: ["1,000 Products", "5,000 Orders/month", "10 Team Members", "3 AI Ads/day", "Video Ads", "API Access"],
+    popular: false,
+  },
+  {
+    name: "Millionaire",
+    price: 499,
+    period: "month",
+    description: "Enterprise-grade features",
+    badge: "FUTURE MILLIONAIRE CHOICE",
+    features: ["Unlimited Products", "Unlimited Orders", "Unlimited Team", "5 AI Ads/day", "White-Label", "VIP Support", "Dedicated Manager"],
     popular: false,
   },
 ];
@@ -344,19 +337,26 @@ export default function LandingPage() {
               Choose the plan that fits your business. Upgrade or downgrade anytime.
             </p>
           </div>
-          <div className="grid md:grid-cols-2 lg:grid-cols-4 gap-6 max-w-7xl mx-auto">
+          <div className="grid md:grid-cols-2 lg:grid-cols-3 xl:grid-cols-5 gap-6 max-w-7xl mx-auto">
             {plans.map((plan) => (
               <Card
                 key={plan.name}
-                className={`relative ${plan.popular ? "border-primary shadow-lg" : ""}`}
+                className={`relative ${plan.popular ? "border-primary shadow-lg" : ""} ${plan.badge === "FUTURE MILLIONAIRE CHOICE" ? "border-amber-500 shadow-lg" : ""}`}
                 data-testid={`card-plan-${plan.name.toLowerCase()}`}
               >
-                {plan.popular && (
+                {plan.popular && !plan.badge && (
                   <div className="absolute -top-3 left-1/2 -translate-x-1/2">
                     <Badge className="bg-primary text-primary-foreground">Most Popular</Badge>
                   </div>
                 )}
-                <CardContent className="p-6">
+                {plan.badge && (
+                  <div className="absolute -top-3 left-1/2 -translate-x-1/2">
+                    <Badge className={plan.badge === "FUTURE MILLIONAIRE CHOICE" ? "bg-amber-500 text-amber-950 whitespace-nowrap text-xs" : "bg-primary text-primary-foreground"}>
+                      {plan.badge}
+                    </Badge>
+                  </div>
+                )}
+                <CardContent className="p-6 pt-8">
                   <h3 className="text-xl font-semibold mb-2">{plan.name}</h3>
                   <p className="text-sm text-muted-foreground mb-4">{plan.description}</p>
                   <div className="mb-6">
@@ -365,7 +365,7 @@ export default function LandingPage() {
                   </div>
                   <Link href="/register">
                     <Button
-                      className="w-full mb-6"
+                      className={`w-full mb-6 ${plan.badge === "FUTURE MILLIONAIRE CHOICE" ? "bg-amber-500 hover:bg-amber-600 text-amber-950" : ""}`}
                       variant={plan.popular ? "default" : "outline"}
                       data-testid={`button-plan-${plan.name.toLowerCase()}`}
                     >
