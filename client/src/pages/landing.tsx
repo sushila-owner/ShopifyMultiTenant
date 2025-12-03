@@ -3,8 +3,7 @@ import { Button } from "@/components/ui/button";
 import { Card, CardContent } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
 import { ThemeToggle } from "@/components/theme-toggle";
-import { LanguageSwitcher } from "@/components/language-switcher";
-import { CurrencySwitcher } from "@/components/currency-switcher";
+import { GlobeSettings, CurrencyDisplay } from "@/components/globe-settings";
 import { useI18n } from "@/lib/i18n";
 import { useCurrency } from "@/lib/currency";
 import {
@@ -20,7 +19,11 @@ import {
   ArrowRight,
   Truck,
   CreditCard,
+  Menu,
+  X,
 } from "lucide-react";
+import { Sheet, SheetContent, SheetTrigger, SheetClose, SheetTitle, SheetDescription } from "@/components/ui/sheet";
+import { useState } from "react";
 import { SiShopify } from "react-icons/si";
 import logoImage from "@assets/F66C5CC9-75FA-449A-AAF8-3CBF0FAC2486_1764749832622.png";
 
@@ -97,38 +100,152 @@ const planConfigs: PlanConfig[] = [
 export default function LandingPage() {
   const { t } = useI18n();
   const { formatPrice } = useCurrency();
+  const [mobileMenuOpen, setMobileMenuOpen] = useState(false);
 
   return (
     <div className="min-h-screen bg-background">
       {/* Header */}
       <header className="sticky top-0 z-50 w-full border-b bg-background/95 backdrop-blur supports-[backdrop-filter]:bg-background/60">
         <div className="container mx-auto flex h-16 items-center justify-between px-4 md:px-8">
-          <Link href="/">
-            <div className="flex items-center gap-2 cursor-pointer" data-testid="link-logo">
-              <img src={logoImage} alt="Apex Mart Wholesale" className="h-9 w-9 rounded-md object-cover" />
-              <span className="text-xl font-bold">Apex Mart Wholesale</span>
-            </div>
-          </Link>
-          <nav className="hidden md:flex items-center gap-6">
-            <a href="#features" className="text-sm font-medium text-muted-foreground hover:text-foreground transition-colors" data-testid="link-features">
+          <div className="flex items-center gap-2">
+            <Sheet open={mobileMenuOpen} onOpenChange={setMobileMenuOpen}>
+              <SheetTrigger asChild>
+                <Button variant="ghost" size="icon" className="lg:hidden" data-testid="button-mobile-menu">
+                  <Menu className="h-5 w-5" />
+                  <span className="sr-only">Toggle menu</span>
+                </Button>
+              </SheetTrigger>
+              <SheetContent side="left" className="w-[280px] sm:w-[320px]">
+                <SheetTitle className="sr-only">Navigation Menu</SheetTitle>
+                <SheetDescription className="sr-only">Main navigation links for Apex Mart Wholesale</SheetDescription>
+                <div className="flex flex-col h-full">
+                  <div className="flex items-center gap-3 pb-6 border-b">
+                    <img 
+                      src={logoImage} 
+                      alt="Apex Mart Wholesale" 
+                      className="h-10 w-10 rounded-lg object-cover" 
+                    />
+                    <div>
+                      <span className="text-lg font-bold">Apex Mart</span>
+                      <span className="text-lg font-bold text-primary ml-1">Wholesale</span>
+                    </div>
+                  </div>
+                  <nav className="flex flex-col gap-2 py-6">
+                    <SheetClose asChild>
+                      <a 
+                        href="#features" 
+                        className="flex items-center gap-3 px-3 py-2.5 rounded-md text-base font-medium hover:bg-accent transition-colors"
+                        data-testid="mobile-link-features"
+                      >
+                        <Zap className="h-5 w-5 text-muted-foreground" />
+                        {t("nav.features")}
+                      </a>
+                    </SheetClose>
+                    <SheetClose asChild>
+                      <a 
+                        href="#pricing" 
+                        className="flex items-center gap-3 px-3 py-2.5 rounded-md text-base font-medium hover:bg-accent transition-colors"
+                        data-testid="mobile-link-pricing"
+                      >
+                        <CreditCard className="h-5 w-5 text-muted-foreground" />
+                        {t("nav.pricing")}
+                      </a>
+                    </SheetClose>
+                    <SheetClose asChild>
+                      <a 
+                        href="#how-it-works" 
+                        className="flex items-center gap-3 px-3 py-2.5 rounded-md text-base font-medium hover:bg-accent transition-colors"
+                        data-testid="mobile-link-how-it-works"
+                      >
+                        <BarChart3 className="h-5 w-5 text-muted-foreground" />
+                        {t("nav.howItWorks")}
+                      </a>
+                    </SheetClose>
+                  </nav>
+                  <div className="mt-auto pt-6 border-t space-y-3">
+                    <SheetClose asChild>
+                      <Link href="/login">
+                        <Button variant="outline" className="w-full" data-testid="mobile-button-login">
+                          {t("nav.login")}
+                        </Button>
+                      </Link>
+                    </SheetClose>
+                    <SheetClose asChild>
+                      <Link href="/register">
+                        <Button className="w-full" data-testid="mobile-button-get-started">
+                          {t("nav.getStarted")}
+                        </Button>
+                      </Link>
+                    </SheetClose>
+                  </div>
+                </div>
+              </SheetContent>
+            </Sheet>
+            
+            <Link href="/">
+              <div className="flex items-center gap-3 cursor-pointer group" data-testid="link-logo">
+                <img 
+                  src={logoImage} 
+                  alt="Apex Mart Wholesale" 
+                  className="h-10 w-10 rounded-lg object-cover shadow-sm ring-1 ring-border/50 group-hover:ring-primary/30 transition-all" 
+                />
+                <div className="hidden sm:block">
+                  <span className="text-lg font-bold tracking-tight">Apex Mart</span>
+                  <span className="text-lg font-bold tracking-tight text-primary ml-1">Wholesale</span>
+                </div>
+              </div>
+            </Link>
+          </div>
+          
+          <nav className="hidden lg:flex items-center gap-8">
+            <a 
+              href="#features" 
+              className="text-sm font-medium text-muted-foreground hover:text-foreground transition-colors relative after:absolute after:bottom-0 after:left-0 after:h-0.5 after:w-0 hover:after:w-full after:bg-primary after:transition-all" 
+              data-testid="link-features"
+            >
               {t("nav.features")}
             </a>
-            <a href="#pricing" className="text-sm font-medium text-muted-foreground hover:text-foreground transition-colors" data-testid="link-pricing">
+            <a 
+              href="#pricing" 
+              className="text-sm font-medium text-muted-foreground hover:text-foreground transition-colors relative after:absolute after:bottom-0 after:left-0 after:h-0.5 after:w-0 hover:after:w-full after:bg-primary after:transition-all" 
+              data-testid="link-pricing"
+            >
               {t("nav.pricing")}
             </a>
-            <a href="#how-it-works" className="text-sm font-medium text-muted-foreground hover:text-foreground transition-colors" data-testid="link-how-it-works">
+            <a 
+              href="#how-it-works" 
+              className="text-sm font-medium text-muted-foreground hover:text-foreground transition-colors relative after:absolute after:bottom-0 after:left-0 after:h-0.5 after:w-0 hover:after:w-full after:bg-primary after:transition-all" 
+              data-testid="link-how-it-works"
+            >
               {t("nav.howItWorks")}
             </a>
           </nav>
-          <div className="flex items-center gap-2">
-            <LanguageSwitcher />
-            <CurrencySwitcher />
+
+          <div className="flex items-center gap-1 md:gap-2">
+            <GlobeSettings />
+            <div className="hidden sm:flex items-center">
+              <CurrencyDisplay />
+            </div>
             <ThemeToggle />
+            <div className="h-5 w-px bg-border mx-1 hidden md:block" />
             <Link href="/login">
-              <Button variant="ghost" data-testid="button-login">{t("nav.login")}</Button>
+              <Button 
+                variant="ghost" 
+                size="sm"
+                className="font-medium hidden md:flex"
+                data-testid="button-login"
+              >
+                {t("nav.login")}
+              </Button>
             </Link>
             <Link href="/register">
-              <Button data-testid="button-get-started">{t("nav.getStarted")}</Button>
+              <Button 
+                size="sm"
+                className="font-medium shadow-sm hidden sm:flex"
+                data-testid="button-get-started"
+              >
+                {t("nav.getStarted")}
+              </Button>
             </Link>
           </div>
         </div>
@@ -396,8 +513,8 @@ export default function LandingPage() {
                   </div>
                 )}
                 <CardContent className="p-6 pt-8">
-                  <h3 className="text-xl font-semibold mb-2">{t(plan.nameKey)}</h3>
-                  <p className="text-sm text-muted-foreground mb-4">{t(plan.descriptionKey)}</p>
+                  <h3 className="text-xl font-semibold mb-2">{t(plan.nameKey as any)}</h3>
+                  <p className="text-sm text-muted-foreground mb-4">{t(plan.descriptionKey as any)}</p>
                   <div className="mb-6">
                     <span className="text-4xl font-bold">{formatPrice(plan.price)}</span>
                     <span className="text-muted-foreground">/{plan.period === "forever" ? t("pricing.forever") : t("pricing.month")}</span>
@@ -415,7 +532,7 @@ export default function LandingPage() {
                     {plan.featureKeys.map((featureKey) => (
                       <li key={featureKey} className="flex items-center gap-2 text-sm">
                         <Check className="h-4 w-4 text-chart-2 flex-shrink-0" />
-                        <span>{t(featureKey)}</span>
+                        <span>{t(featureKey as any)}</span>
                       </li>
                     ))}
                   </ul>
