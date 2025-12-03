@@ -22,7 +22,6 @@ import {
   BarChart3,
   Settings,
   LogOut,
-  Store,
   Search,
   CreditCard,
   UserPlus,
@@ -30,6 +29,7 @@ import {
 } from "lucide-react";
 import { useAuth } from "@/lib/auth";
 import { useQuery } from "@tanstack/react-query";
+import logoImage from "@assets/F66C5CC9-75FA-449A-AAF8-3CBF0FAC2486_1764749832622.png";
 
 const mainMenuItems = [
   { title: "Dashboard", url: "/dashboard", icon: LayoutDashboard },
@@ -69,9 +69,7 @@ export function MerchantSidebar() {
     <Sidebar>
       <SidebarHeader className="border-b border-sidebar-border">
         <div className="flex items-center gap-3 px-2 py-2">
-          <div className="flex h-9 w-9 items-center justify-center rounded-md bg-primary">
-            <Store className="h-5 w-5 text-primary-foreground" />
-          </div>
+          <img src={logoImage} alt="Apex Mart" className="h-9 w-9 rounded-md object-cover" />
           <div className="flex flex-col">
             <span className="text-sm font-semibold">Apex Mart</span>
             <span className="text-xs text-muted-foreground">Merchant Dashboard</span>

@@ -9,8 +9,9 @@ import { Form, FormControl, FormField, FormItem, FormLabel, FormMessage } from "
 import { useToast } from "@/hooks/use-toast";
 import { useAuth } from "@/lib/auth";
 import { loginSchema, type LoginInput } from "@shared/schema";
-import { Store, Loader2, Eye, EyeOff } from "lucide-react";
+import { Loader2, Eye, EyeOff } from "lucide-react";
 import { ThemeToggle } from "@/components/theme-toggle";
+import logoImage from "@assets/F66C5CC9-75FA-449A-AAF8-3CBF0FAC2486_1764749832622.png";
 
 export default function LoginPage() {
   const [, setLocation] = useLocation();
@@ -74,9 +75,7 @@ export default function LoginPage() {
       <header className="flex items-center justify-between p-4 md:p-6">
         <Link href="/">
           <div className="flex items-center gap-2 cursor-pointer" data-testid="link-logo">
-            <div className="flex h-9 w-9 items-center justify-center rounded-md bg-primary">
-              <Store className="h-5 w-5 text-primary-foreground" />
-            </div>
+            <img src={logoImage} alt="Apex Mart" className="h-9 w-9 rounded-md object-cover" />
             <span className="text-xl font-bold">Apex Mart</span>
           </div>
         </Link>

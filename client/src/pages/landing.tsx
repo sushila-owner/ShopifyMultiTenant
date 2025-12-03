@@ -14,11 +14,11 @@ import {
   BarChart3,
   Check,
   ArrowRight,
-  Store,
   Truck,
   CreditCard,
 } from "lucide-react";
 import { SiShopify } from "react-icons/si";
+import logoImage from "@assets/F66C5CC9-75FA-449A-AAF8-3CBF0FAC2486_1764749832622.png";
 
 const features = [
   {
@@ -116,9 +116,7 @@ export default function LandingPage() {
         <div className="container mx-auto flex h-16 items-center justify-between px-4 md:px-8">
           <Link href="/">
             <div className="flex items-center gap-2 cursor-pointer" data-testid="link-logo">
-              <div className="flex h-9 w-9 items-center justify-center rounded-md bg-primary">
-                <Store className="h-5 w-5 text-primary-foreground" />
-              </div>
+              <img src={logoImage} alt="Apex Mart" className="h-9 w-9 rounded-md object-cover" />
               <span className="text-xl font-bold">Apex Mart</span>
             </div>
           </Link>
@@ -413,9 +411,7 @@ export default function LandingPage() {
           <div className="grid grid-cols-2 md:grid-cols-4 gap-8 mb-8">
             <div className="col-span-2 md:col-span-1">
               <div className="flex items-center gap-2 mb-4">
-                <div className="flex h-8 w-8 items-center justify-center rounded-md bg-primary">
-                  <Store className="h-4 w-4 text-primary-foreground" />
-                </div>
+                <img src={logoImage} alt="Apex Mart" className="h-8 w-8 rounded-md object-cover" />
                 <span className="text-lg font-bold">Apex Mart</span>
               </div>
               <p className="text-sm text-muted-foreground">
