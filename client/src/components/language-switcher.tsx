@@ -28,7 +28,7 @@ export function LanguageSwitcher() {
             className={language.code === lang.code ? "bg-accent" : ""}
             data-testid={`language-option-${lang.code}`}
           >
-            <span className="mr-2">{lang.flag}</span>
+            <span className="mr-2 text-xs font-semibold text-muted-foreground uppercase w-6">{lang.code}</span>
             <span>{lang.nativeName}</span>
             <span className="ml-2 text-muted-foreground">({lang.name})</span>
           </DropdownMenuItem>

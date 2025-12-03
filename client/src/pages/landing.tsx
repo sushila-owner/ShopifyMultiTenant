@@ -24,54 +24,71 @@ import {
 import { SiShopify } from "react-icons/si";
 import logoImage from "@assets/F66C5CC9-75FA-449A-AAF8-3CBF0FAC2486_1764749832622.png";
 
-const plans = [
+type PlanConfig = {
+  id: string;
+  nameKey: string;
+  price: number;
+  period: "forever" | "month";
+  descriptionKey: string;
+  badge: null | "popular" | "millionaire";
+  featureKeys: string[];
+  popular: boolean;
+  freeForLife: boolean;
+};
+
+const planConfigs: PlanConfig[] = [
   {
-    name: "Free",
+    id: "free",
+    nameKey: "pricing.free",
     price: 0,
     period: "forever",
-    description: "Get started with dropshipping",
+    descriptionKey: "pricing.freeDescription",
     badge: null,
-    features: ["25 Products", "50 Orders/month", "1 Team Member", "Basic Analytics", "Email Support"],
+    featureKeys: ["pricing.features.products25", "pricing.features.orders50", "pricing.features.team1", "pricing.features.basicAnalytics", "pricing.features.emailSupport"],
     popular: false,
     freeForLife: false,
   },
   {
-    name: "Starter",
+    id: "starter",
+    nameKey: "pricing.starter",
     price: 29,
     period: "month",
-    description: "For growing businesses",
+    descriptionKey: "pricing.starterDescription",
     badge: null,
-    features: ["100 Products", "500 Orders/month", "3 Team Members", "1 AI Ad/day", "Priority Support"],
+    featureKeys: ["pricing.features.products100", "pricing.features.orders500", "pricing.features.team3", "pricing.features.aiAd1", "pricing.features.prioritySupport"],
     popular: false,
     freeForLife: true,
   },
   {
-    name: "Growth",
+    id: "growth",
+    nameKey: "pricing.growth",
     price: 49,
     period: "month",
-    description: "Scale your business faster",
+    descriptionKey: "pricing.growthDescription",
     badge: null,
-    features: ["250 Products", "1,500 Orders/month", "5 Team Members", "2 AI Ads/day", "Chat Support"],
+    featureKeys: ["pricing.features.products250", "pricing.features.orders1500", "pricing.features.team5", "pricing.features.aiAd2", "pricing.features.chatSupport"],
     popular: true,
     freeForLife: true,
   },
   {
-    name: "Professional",
+    id: "professional",
+    nameKey: "pricing.professional",
     price: 99,
     period: "month",
-    description: "For serious dropshippers",
-    badge: "POPULAR",
-    features: ["1,000 Products", "5,000 Orders/month", "10 Team Members", "3 AI Ads/day", "Video Ads", "API Access"],
+    descriptionKey: "pricing.professionalDescription",
+    badge: "popular",
+    featureKeys: ["pricing.features.products1000", "pricing.features.orders5000", "pricing.features.team10", "pricing.features.aiAd3", "pricing.features.videoAds", "pricing.features.apiAccess"],
     popular: false,
     freeForLife: true,
   },
   {
-    name: "Millionaire",
+    id: "millionaire",
+    nameKey: "pricing.millionaire",
     price: 499,
     period: "month",
-    description: "Enterprise-grade features",
-    badge: "FUTURE MILLIONAIRE CHOICE",
-    features: ["Unlimited Products", "Unlimited Orders", "Unlimited Team", "5 AI Ads/day", "White-Label", "VIP Support", "Dedicated Manager"],
+    descriptionKey: "pricing.millionaireDescription",
+    badge: "millionaire",
+    featureKeys: ["pricing.features.unlimitedProducts", "pricing.features.unlimitedOrders", "pricing.features.unlimitedTeam", "pricing.features.aiAd5", "pricing.features.whiteLabel", "pricing.features.vipSupport", "pricing.features.dedicatedManager"],
     popular: false,
     freeForLife: true,
   },
@@ -360,11 +377,11 @@ export default function LandingPage() {
             </p>
           </div>
           <div className="grid md:grid-cols-2 lg:grid-cols-3 xl:grid-cols-5 gap-6 max-w-7xl mx-auto">
-            {plans.map((plan) => (
+            {planConfigs.map((plan) => (
               <Card
-                key={plan.name}
-                className={`relative ${plan.popular ? "border-primary shadow-lg" : ""} ${plan.badge === "FUTURE MILLIONAIRE CHOICE" ? "border-amber-500 shadow-lg" : ""}`}
-                data-testid={`card-plan-${plan.name.toLowerCase()}`}
+                key={plan.id}
+                className={`relative ${plan.popular ? "border-primary shadow-lg" : ""} ${plan.badge === "millionaire" ? "border-amber-500 shadow-lg" : ""}`}
+                data-testid={`card-plan-${plan.id}`}
               >
                 {plan.popular && !plan.badge && (
                   <div className="absolute -top-3 left-1/2 -translate-x-1/2">
@@ -373,32 +390,32 @@ export default function LandingPage() {
                 )}
                 {plan.badge && (
                   <div className="absolute -top-3 left-1/2 -translate-x-1/2">
-                    <Badge className={plan.badge === "FUTURE MILLIONAIRE CHOICE" ? "bg-amber-500 text-amber-950 whitespace-nowrap text-xs" : "bg-primary text-primary-foreground"}>
-                      {plan.badge === "FUTURE MILLIONAIRE CHOICE" ? t("pricing.millionaireChoice") : t("pricing.popular")}
+                    <Badge className={plan.badge === "millionaire" ? "bg-amber-500 text-amber-950 whitespace-nowrap text-xs" : "bg-primary text-primary-foreground"}>
+                      {plan.badge === "millionaire" ? t("pricing.millionaireChoice") : t("pricing.popular")}
                     </Badge>
                   </div>
                 )}
                 <CardContent className="p-6 pt-8">
-                  <h3 className="text-xl font-semibold mb-2">{plan.name}</h3>
-                  <p className="text-sm text-muted-foreground mb-4">{plan.description}</p>
+                  <h3 className="text-xl font-semibold mb-2">{t(plan.nameKey)}</h3>
+                  <p className="text-sm text-muted-foreground mb-4">{t(plan.descriptionKey)}</p>
                   <div className="mb-6">
                     <span className="text-4xl font-bold">{formatPrice(plan.price)}</span>
                     <span className="text-muted-foreground">/{plan.period === "forever" ? t("pricing.forever") : t("pricing.month")}</span>
                   </div>
                   <Link href="/register">
                     <Button
-                      className={`w-full mb-6 ${plan.badge === "FUTURE MILLIONAIRE CHOICE" ? "bg-amber-500 hover:bg-amber-600 text-amber-950" : ""}`}
+                      className={`w-full mb-6 ${plan.badge === "millionaire" ? "bg-amber-500 hover:bg-amber-600 text-amber-950" : ""}`}
                       variant={plan.popular ? "default" : "outline"}
-                      data-testid={`button-plan-${plan.name.toLowerCase()}`}
+                      data-testid={`button-plan-${plan.id}`}
                     >
                       {plan.price === 0 ? t("pricing.startFree") : t("pricing.getStarted")}
                     </Button>
                   </Link>
                   <ul className="space-y-3">
-                    {plan.features.map((feature) => (
-                      <li key={feature} className="flex items-center gap-2 text-sm">
+                    {plan.featureKeys.map((featureKey) => (
+                      <li key={featureKey} className="flex items-center gap-2 text-sm">
                         <Check className="h-4 w-4 text-chart-2 flex-shrink-0" />
-                        <span>{feature}</span>
+                        <span>{t(featureKey)}</span>
                       </li>
                     ))}
                   </ul>
