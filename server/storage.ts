@@ -701,8 +701,12 @@ export class DatabaseStorage implements IStorage {
 
   // ==================== SEED DATA ====================
   async seedDefaultPlans(): Promise<void> {
-    // Delete existing plans and re-seed with the 6 new tiers
-    await db.delete(plans);
+    // Check if plans already exist
+    const existingPlans = await db.select().from(plans).limit(1);
+    if (existingPlans.length > 0) {
+      console.log("Plans already seeded, skipping...");
+      return;
+    }
 
     const defaultPlans: InsertPlan[] = [
       {
