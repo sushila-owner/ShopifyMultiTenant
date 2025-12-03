@@ -1,10 +1,11 @@
 import { useState } from "react";
-import { useQuery } from "@tanstack/react-query";
+import { useQuery, useMutation } from "@tanstack/react-query";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Badge } from "@/components/ui/badge";
 import { Skeleton } from "@/components/ui/skeleton";
+import { Checkbox } from "@/components/ui/checkbox";
 import {
   Table,
   TableBody,
@@ -20,7 +21,16 @@ import {
   SelectTrigger,
   SelectValue,
 } from "@/components/ui/select";
+import {
+  Dialog,
+  DialogContent,
+  DialogDescription,
+  DialogHeader,
+  DialogTitle,
+  DialogFooter,
+} from "@/components/ui/dialog";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
+import { Label } from "@/components/ui/label";
 import {
   Search,
   Package,
@@ -28,7 +38,12 @@ import {
   RefreshCw,
   Eye,
   ImageOff,
+  Pencil,
+  DollarSign,
+  Percent,
 } from "lucide-react";
+import { apiRequest, queryClient } from "@/lib/queryClient";
+import { useToast } from "@/hooks/use-toast";
 import type { Product, Supplier } from "@shared/schema";
 
 const statusColors: Record<string, "default" | "secondary" | "destructive" | "outline"> = {
@@ -37,10 +52,21 @@ const statusColors: Record<string, "default" | "secondary" | "destructive" | "ou
   archived: "outline",
 };
 
+type PricingRule = {
+  type: "percentage" | "fixed";
+  value: number;
+};
+
 export default function AdminProductsPage() {
+  const { toast } = useToast();
   const [search, setSearch] = useState("");
   const [supplierFilter, setSupplierFilter] = useState<string>("all");
   const [statusFilter, setStatusFilter] = useState<string>("all");
+  const [selectedProducts, setSelectedProducts] = useState<Set<number>>(new Set());
+  const [editingProduct, setEditingProduct] = useState<Product | null>(null);
+  const [bulkEditOpen, setBulkEditOpen] = useState(false);
+  const [pricingType, setPricingType] = useState<"percentage" | "fixed">("percentage");
+  const [pricingValue, setPricingValue] = useState("");
 
   const { data: products, isLoading } = useQuery<Product[]>({
     queryKey: ["/api/admin/products"],
@@ -48,6 +74,39 @@ export default function AdminProductsPage() {
 
   const { data: suppliers } = useQuery<Supplier[]>({
     queryKey: ["/api/admin/suppliers"],
+  });
+
+  const updatePricingMutation = useMutation({
+    mutationFn: async ({ id, pricingRule }: { id: number; pricingRule: PricingRule }) => {
+      const response = await apiRequest("PATCH", `/api/admin/products/${id}/pricing`, { pricingRule });
+      return response.json();
+    },
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ["/api/admin/products"] });
+      toast({ title: "Success", description: "Product pricing updated successfully" });
+      setEditingProduct(null);
+      setPricingValue("");
+    },
+    onError: (error: Error) => {
+      toast({ title: "Error", description: error.message, variant: "destructive" });
+    },
+  });
+
+  const bulkUpdateMutation = useMutation({
+    mutationFn: async ({ productIds, pricingRule }: { productIds: number[]; pricingRule: PricingRule }) => {
+      const response = await apiRequest("PATCH", "/api/admin/products/bulk-pricing", { productIds, pricingRule });
+      return response.json();
+    },
+    onSuccess: (data) => {
+      queryClient.invalidateQueries({ queryKey: ["/api/admin/products"] });
+      toast({ title: "Success", description: `Updated pricing for ${data.data?.updated || 0} products` });
+      setBulkEditOpen(false);
+      setSelectedProducts(new Set());
+      setPricingValue("");
+    },
+    onError: (error: Error) => {
+      toast({ title: "Error", description: error.message, variant: "destructive" });
+    },
   });
 
   const filteredProducts = products?.filter((p) => {
@@ -60,6 +119,175 @@ export default function AdminProductsPage() {
   });
 
   const globalProducts = filteredProducts?.filter((p) => p.isGlobal) || [];
+
+  const toggleSelectAll = (productsList: Product[]) => {
+    if (productsList.every((p) => selectedProducts.has(p.id))) {
+      setSelectedProducts(new Set());
+    } else {
+      setSelectedProducts(new Set(productsList.map((p) => p.id)));
+    }
+  };
+
+  const toggleSelect = (id: number) => {
+    const newSet = new Set(selectedProducts);
+    if (newSet.has(id)) {
+      newSet.delete(id);
+    } else {
+      newSet.add(id);
+    }
+    setSelectedProducts(newSet);
+  };
+
+  const handleSingleEdit = () => {
+    if (!editingProduct || !pricingValue) return;
+    const value = parseFloat(pricingValue);
+    if (isNaN(value)) {
+      toast({ title: "Error", description: "Please enter a valid number", variant: "destructive" });
+      return;
+    }
+    updatePricingMutation.mutate({
+      id: editingProduct.id,
+      pricingRule: { type: pricingType, value },
+    });
+  };
+
+  const handleBulkEdit = () => {
+    if (selectedProducts.size === 0 || !pricingValue) return;
+    const value = parseFloat(pricingValue);
+    if (isNaN(value)) {
+      toast({ title: "Error", description: "Please enter a valid number", variant: "destructive" });
+      return;
+    }
+    bulkUpdateMutation.mutate({
+      productIds: Array.from(selectedProducts),
+      pricingRule: { type: pricingType, value },
+    });
+  };
+
+  const calculatePreviewPrice = (supplierPrice: number, type: "percentage" | "fixed", value: number) => {
+    if (type === "percentage") {
+      return supplierPrice * (1 + value / 100);
+    }
+    return supplierPrice + value;
+  };
+
+  const formatPricingRule = (rule: PricingRule | null | undefined) => {
+    if (!rule) return "None";
+    if (rule.type === "percentage") return `+${rule.value}%`;
+    return `+$${rule.value.toFixed(2)}`;
+  };
+
+  const renderProductTable = (productsList: Product[], tableId: string) => (
+    <Table>
+      <TableHeader>
+        <TableRow>
+          <TableHead className="w-[40px]">
+            <Checkbox
+              checked={productsList.length > 0 && productsList.every((p) => selectedProducts.has(p.id))}
+              onCheckedChange={() => toggleSelectAll(productsList)}
+              data-testid={`checkbox-select-all-${tableId}`}
+            />
+          </TableHead>
+          <TableHead className="w-[80px]">Image</TableHead>
+          <TableHead>Product</TableHead>
+          <TableHead>Category</TableHead>
+          <TableHead>Supplier Price</TableHead>
+          <TableHead>Markup</TableHead>
+          <TableHead>Retail Price</TableHead>
+          <TableHead>Inventory</TableHead>
+          <TableHead>Status</TableHead>
+          <TableHead className="text-right">Actions</TableHead>
+        </TableRow>
+      </TableHeader>
+      <TableBody>
+        {productsList.map((product) => (
+          <TableRow key={product.id} data-testid={`row-product-${product.id}`}>
+            <TableCell>
+              <Checkbox
+                checked={selectedProducts.has(product.id)}
+                onCheckedChange={() => toggleSelect(product.id)}
+                data-testid={`checkbox-product-${product.id}`}
+              />
+            </TableCell>
+            <TableCell>
+              {product.images && product.images.length > 0 ? (
+                <img
+                  src={product.images[0].url}
+                  alt={product.title}
+                  className="h-12 w-12 rounded-md object-cover"
+                />
+              ) : (
+                <div className="h-12 w-12 rounded-md bg-muted flex items-center justify-center">
+                  <ImageOff className="h-5 w-5 text-muted-foreground" />
+                </div>
+              )}
+            </TableCell>
+            <TableCell>
+              <div>
+                <p className="font-medium line-clamp-1">{product.title}</p>
+                <p className="text-xs text-muted-foreground">
+                  SKU: {product.supplierSku || "N/A"}
+                </p>
+              </div>
+            </TableCell>
+            <TableCell>
+              <Badge variant="outline">{product.category || "Uncategorized"}</Badge>
+            </TableCell>
+            <TableCell>${product.supplierPrice.toFixed(2)}</TableCell>
+            <TableCell>
+              <Badge variant="secondary">
+                {formatPricingRule(product.pricingRule as PricingRule | null)}
+              </Badge>
+            </TableCell>
+            <TableCell className="font-medium">
+              ${(product.merchantPrice || product.supplierPrice).toFixed(2)}
+            </TableCell>
+            <TableCell>
+              <span
+                className={
+                  (product.inventory?.quantity || 0) < 10
+                    ? "text-destructive font-medium"
+                    : ""
+                }
+              >
+                {product.inventory?.quantity || 0}
+              </span>
+            </TableCell>
+            <TableCell>
+              <Badge variant={statusColors[product.status]}>
+                {product.status}
+              </Badge>
+            </TableCell>
+            <TableCell className="text-right">
+              <div className="flex items-center justify-end gap-1">
+                <Button
+                  variant="ghost"
+                  size="icon"
+                  onClick={() => {
+                    setEditingProduct(product);
+                    if (product.pricingRule) {
+                      const rule = product.pricingRule as PricingRule;
+                      setPricingType(rule.type);
+                      setPricingValue(rule.value.toString());
+                    } else {
+                      setPricingType("percentage");
+                      setPricingValue("");
+                    }
+                  }}
+                  data-testid={`button-edit-pricing-${product.id}`}
+                >
+                  <Pencil className="h-4 w-4" />
+                </Button>
+                <Button variant="ghost" size="icon" data-testid={`button-view-product-${product.id}`}>
+                  <Eye className="h-4 w-4" />
+                </Button>
+              </div>
+            </TableCell>
+          </TableRow>
+        ))}
+      </TableBody>
+    </Table>
+  );
 
   return (
     <div className="flex-1 space-y-6 p-6 md:p-8">
@@ -74,7 +302,35 @@ export default function AdminProductsPage() {
         </Button>
       </div>
 
-      {/* Filters */}
+      {selectedProducts.size > 0 && (
+        <Card className="border-primary">
+          <CardContent className="p-4">
+            <div className="flex items-center justify-between gap-4">
+              <p className="text-sm font-medium">
+                {selectedProducts.size} product{selectedProducts.size > 1 ? "s" : ""} selected
+              </p>
+              <div className="flex items-center gap-2">
+                <Button
+                  variant="outline"
+                  onClick={() => setSelectedProducts(new Set())}
+                  data-testid="button-clear-selection"
+                >
+                  Clear Selection
+                </Button>
+                <Button
+                  onClick={() => setBulkEditOpen(true)}
+                  className="gap-2"
+                  data-testid="button-bulk-edit-pricing"
+                >
+                  <DollarSign className="h-4 w-4" />
+                  Bulk Edit Markup
+                </Button>
+              </div>
+            </div>
+          </CardContent>
+        </Card>
+      )}
+
       <Card>
         <CardContent className="p-4">
           <div className="flex flex-wrap items-center gap-4">
@@ -118,7 +374,6 @@ export default function AdminProductsPage() {
         </CardContent>
       </Card>
 
-      {/* Stats */}
       <div className="grid gap-4 md:grid-cols-4">
         <Card>
           <CardContent className="p-4">
@@ -203,138 +458,10 @@ export default function AdminProductsPage() {
                 <TabsTrigger value="global">Global ({globalProducts.length})</TabsTrigger>
               </TabsList>
               <TabsContent value="all" className="mt-4">
-                <Table>
-                  <TableHeader>
-                    <TableRow>
-                      <TableHead className="w-[80px]">Image</TableHead>
-                      <TableHead>Product</TableHead>
-                      <TableHead>Category</TableHead>
-                      <TableHead>Supplier Price</TableHead>
-                      <TableHead>Inventory</TableHead>
-                      <TableHead>Status</TableHead>
-                      <TableHead className="text-right">Actions</TableHead>
-                    </TableRow>
-                  </TableHeader>
-                  <TableBody>
-                    {filteredProducts.map((product) => (
-                      <TableRow key={product.id} data-testid={`row-product-${product.id}`}>
-                        <TableCell>
-                          {product.images && product.images.length > 0 ? (
-                            <img
-                              src={product.images[0].url}
-                              alt={product.title}
-                              className="h-12 w-12 rounded-md object-cover"
-                            />
-                          ) : (
-                            <div className="h-12 w-12 rounded-md bg-muted flex items-center justify-center">
-                              <ImageOff className="h-5 w-5 text-muted-foreground" />
-                            </div>
-                          )}
-                        </TableCell>
-                        <TableCell>
-                          <div>
-                            <p className="font-medium line-clamp-1">{product.title}</p>
-                            <p className="text-xs text-muted-foreground">
-                              SKU: {product.supplierSku || "N/A"}
-                            </p>
-                          </div>
-                        </TableCell>
-                        <TableCell>
-                          <Badge variant="outline">{product.category || "Uncategorized"}</Badge>
-                        </TableCell>
-                        <TableCell>${product.supplierPrice.toFixed(2)}</TableCell>
-                        <TableCell>
-                          <span
-                            className={
-                              (product.inventory?.quantity || 0) < 10
-                                ? "text-destructive font-medium"
-                                : ""
-                            }
-                          >
-                            {product.inventory?.quantity || 0}
-                          </span>
-                        </TableCell>
-                        <TableCell>
-                          <Badge variant={statusColors[product.status]}>
-                            {product.status}
-                          </Badge>
-                        </TableCell>
-                        <TableCell className="text-right">
-                          <Button variant="ghost" size="icon" data-testid={`button-view-product-${product.id}`}>
-                            <Eye className="h-4 w-4" />
-                          </Button>
-                        </TableCell>
-                      </TableRow>
-                    ))}
-                  </TableBody>
-                </Table>
+                {renderProductTable(filteredProducts, "all")}
               </TabsContent>
               <TabsContent value="global" className="mt-4">
-                <Table>
-                  <TableHeader>
-                    <TableRow>
-                      <TableHead className="w-[80px]">Image</TableHead>
-                      <TableHead>Product</TableHead>
-                      <TableHead>Category</TableHead>
-                      <TableHead>Supplier Price</TableHead>
-                      <TableHead>Inventory</TableHead>
-                      <TableHead>Status</TableHead>
-                      <TableHead className="text-right">Actions</TableHead>
-                    </TableRow>
-                  </TableHeader>
-                  <TableBody>
-                    {globalProducts.map((product) => (
-                      <TableRow key={product.id} data-testid={`row-global-product-${product.id}`}>
-                        <TableCell>
-                          {product.images && product.images.length > 0 ? (
-                            <img
-                              src={product.images[0].url}
-                              alt={product.title}
-                              className="h-12 w-12 rounded-md object-cover"
-                            />
-                          ) : (
-                            <div className="h-12 w-12 rounded-md bg-muted flex items-center justify-center">
-                              <ImageOff className="h-5 w-5 text-muted-foreground" />
-                            </div>
-                          )}
-                        </TableCell>
-                        <TableCell>
-                          <div>
-                            <p className="font-medium line-clamp-1">{product.title}</p>
-                            <p className="text-xs text-muted-foreground">
-                              SKU: {product.supplierSku || "N/A"}
-                            </p>
-                          </div>
-                        </TableCell>
-                        <TableCell>
-                          <Badge variant="outline">{product.category || "Uncategorized"}</Badge>
-                        </TableCell>
-                        <TableCell>${product.supplierPrice.toFixed(2)}</TableCell>
-                        <TableCell>
-                          <span
-                            className={
-                              (product.inventory?.quantity || 0) < 10
-                                ? "text-destructive font-medium"
-                                : ""
-                            }
-                          >
-                            {product.inventory?.quantity || 0}
-                          </span>
-                        </TableCell>
-                        <TableCell>
-                          <Badge variant={statusColors[product.status]}>
-                            {product.status}
-                          </Badge>
-                        </TableCell>
-                        <TableCell className="text-right">
-                          <Button variant="ghost" size="icon">
-                            <Eye className="h-4 w-4" />
-                          </Button>
-                        </TableCell>
-                      </TableRow>
-                    ))}
-                  </TableBody>
-                </Table>
+                {renderProductTable(globalProducts, "global")}
               </TabsContent>
             </Tabs>
           ) : (
@@ -346,6 +473,163 @@ export default function AdminProductsPage() {
           )}
         </CardContent>
       </Card>
+
+      <Dialog open={!!editingProduct} onOpenChange={(open) => !open && setEditingProduct(null)}>
+        <DialogContent>
+          <DialogHeader>
+            <DialogTitle>Edit Product Markup</DialogTitle>
+            <DialogDescription>
+              Set the pricing markup for {editingProduct?.title}
+            </DialogDescription>
+          </DialogHeader>
+          <div className="space-y-4 py-4">
+            <div className="space-y-2">
+              <Label>Supplier Price</Label>
+              <p className="text-2xl font-bold">${editingProduct?.supplierPrice.toFixed(2)}</p>
+            </div>
+            <div className="space-y-2">
+              <Label>Markup Type</Label>
+              <Select value={pricingType} onValueChange={(v) => setPricingType(v as "percentage" | "fixed")}>
+                <SelectTrigger data-testid="select-pricing-type">
+                  <SelectValue />
+                </SelectTrigger>
+                <SelectContent>
+                  <SelectItem value="percentage">
+                    <div className="flex items-center gap-2">
+                      <Percent className="h-4 w-4" />
+                      Percentage
+                    </div>
+                  </SelectItem>
+                  <SelectItem value="fixed">
+                    <div className="flex items-center gap-2">
+                      <DollarSign className="h-4 w-4" />
+                      Fixed Amount
+                    </div>
+                  </SelectItem>
+                </SelectContent>
+              </Select>
+            </div>
+            <div className="space-y-2">
+              <Label>Markup Value</Label>
+              <div className="relative">
+                {pricingType === "fixed" && (
+                  <DollarSign className="absolute left-2.5 top-2.5 h-4 w-4 text-muted-foreground" />
+                )}
+                <Input
+                  type="number"
+                  placeholder={pricingType === "percentage" ? "e.g., 20" : "e.g., 5.00"}
+                  value={pricingValue}
+                  onChange={(e) => setPricingValue(e.target.value)}
+                  className={pricingType === "fixed" ? "pl-8" : ""}
+                  data-testid="input-pricing-value"
+                />
+                {pricingType === "percentage" && (
+                  <Percent className="absolute right-2.5 top-2.5 h-4 w-4 text-muted-foreground" />
+                )}
+              </div>
+            </div>
+            {pricingValue && editingProduct && (
+              <div className="rounded-lg border p-4 bg-muted/50">
+                <Label className="text-muted-foreground text-xs">Preview Retail Price</Label>
+                <p className="text-2xl font-bold text-primary" data-testid="text-preview-price">
+                  ${calculatePreviewPrice(
+                    editingProduct.supplierPrice,
+                    pricingType,
+                    parseFloat(pricingValue) || 0
+                  ).toFixed(2)}
+                </p>
+              </div>
+            )}
+          </div>
+          <DialogFooter>
+            <Button variant="outline" onClick={() => setEditingProduct(null)}>
+              Cancel
+            </Button>
+            <Button
+              onClick={handleSingleEdit}
+              disabled={!pricingValue || updatePricingMutation.isPending}
+              data-testid="button-save-pricing"
+            >
+              {updatePricingMutation.isPending ? "Saving..." : "Save Changes"}
+            </Button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
+
+      <Dialog open={bulkEditOpen} onOpenChange={setBulkEditOpen}>
+        <DialogContent>
+          <DialogHeader>
+            <DialogTitle>Bulk Edit Markup</DialogTitle>
+            <DialogDescription>
+              Apply the same markup to {selectedProducts.size} selected product{selectedProducts.size > 1 ? "s" : ""}
+            </DialogDescription>
+          </DialogHeader>
+          <div className="space-y-4 py-4">
+            <div className="space-y-2">
+              <Label>Markup Type</Label>
+              <Select value={pricingType} onValueChange={(v) => setPricingType(v as "percentage" | "fixed")}>
+                <SelectTrigger data-testid="select-bulk-pricing-type">
+                  <SelectValue />
+                </SelectTrigger>
+                <SelectContent>
+                  <SelectItem value="percentage">
+                    <div className="flex items-center gap-2">
+                      <Percent className="h-4 w-4" />
+                      Percentage
+                    </div>
+                  </SelectItem>
+                  <SelectItem value="fixed">
+                    <div className="flex items-center gap-2">
+                      <DollarSign className="h-4 w-4" />
+                      Fixed Amount
+                    </div>
+                  </SelectItem>
+                </SelectContent>
+              </Select>
+            </div>
+            <div className="space-y-2">
+              <Label>Markup Value</Label>
+              <div className="relative">
+                {pricingType === "fixed" && (
+                  <DollarSign className="absolute left-2.5 top-2.5 h-4 w-4 text-muted-foreground" />
+                )}
+                <Input
+                  type="number"
+                  placeholder={pricingType === "percentage" ? "e.g., 20" : "e.g., 5.00"}
+                  value={pricingValue}
+                  onChange={(e) => setPricingValue(e.target.value)}
+                  className={pricingType === "fixed" ? "pl-8" : ""}
+                  data-testid="input-bulk-pricing-value"
+                />
+                {pricingType === "percentage" && (
+                  <Percent className="absolute right-2.5 top-2.5 h-4 w-4 text-muted-foreground" />
+                )}
+              </div>
+            </div>
+            <div className="rounded-lg border p-4 bg-muted/50">
+              <p className="text-sm text-muted-foreground">
+                This will apply a{" "}
+                <span className="font-medium text-foreground">
+                  {pricingType === "percentage" ? `${pricingValue || 0}% markup` : `$${pricingValue || 0} markup`}
+                </span>{" "}
+                to all {selectedProducts.size} selected products.
+              </p>
+            </div>
+          </div>
+          <DialogFooter>
+            <Button variant="outline" onClick={() => setBulkEditOpen(false)}>
+              Cancel
+            </Button>
+            <Button
+              onClick={handleBulkEdit}
+              disabled={!pricingValue || bulkUpdateMutation.isPending}
+              data-testid="button-apply-bulk-pricing"
+            >
+              {bulkUpdateMutation.isPending ? "Applying..." : "Apply to All"}
+            </Button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
     </div>
   );
 }

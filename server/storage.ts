@@ -46,6 +46,8 @@ export interface IStorage {
   getProduct(id: number): Promise<Product | undefined>;
   createProduct(product: InsertProduct): Promise<Product>;
   updateProduct(id: number, data: Partial<InsertProduct>): Promise<Product | undefined>;
+  updateProductPricing(id: number, pricingRule: { type: "percentage" | "fixed"; value: number }): Promise<Product | undefined>;
+  bulkUpdateProductPricing(ids: number[], pricingRule: { type: "percentage" | "fixed"; value: number }): Promise<{ updated: number; products: Product[] }>;
   deleteProduct(id: number): Promise<boolean>;
   getGlobalProducts(): Promise<Product[]>;
   getProductsByMerchant(merchantId: number): Promise<Product[]>;
@@ -234,6 +236,42 @@ export class DatabaseStorage implements IStorage {
       .where(eq(products.id, id))
       .returning();
     return product || undefined;
+  }
+
+  async updateProductPricing(id: number, pricingRule: { type: "percentage" | "fixed"; value: number }): Promise<Product | undefined> {
+    const product = await this.getProduct(id);
+    if (!product) return undefined;
+
+    const supplierPrice = product.supplierPrice;
+    let merchantPrice: number;
+    if (pricingRule.type === "percentage") {
+      merchantPrice = supplierPrice * (1 + pricingRule.value / 100);
+    } else {
+      merchantPrice = supplierPrice + pricingRule.value;
+    }
+    merchantPrice = Math.round(merchantPrice * 100) / 100;
+
+    const [updated] = await db
+      .update(products)
+      .set({
+        pricingRule,
+        merchantPrice,
+        updatedAt: new Date(),
+      })
+      .where(eq(products.id, id))
+      .returning();
+    return updated || undefined;
+  }
+
+  async bulkUpdateProductPricing(ids: number[], pricingRule: { type: "percentage" | "fixed"; value: number }): Promise<{ updated: number; products: Product[] }> {
+    const updatedProducts: Product[] = [];
+    for (const id of ids) {
+      const product = await this.updateProductPricing(id, pricingRule);
+      if (product) {
+        updatedProducts.push(product);
+      }
+    }
+    return { updated: updatedProducts.length, products: updatedProducts };
   }
 
   async deleteProduct(id: number): Promise<boolean> {

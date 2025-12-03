@@ -344,6 +344,40 @@ export async function registerRoutes(
     }
   });
 
+  // Update single product pricing/markup
+  app.patch("/api/admin/products/:id/pricing", authMiddleware, adminOnly, async (req: AuthRequest, res: Response) => {
+    try {
+      const { pricingRule } = req.body;
+      if (!pricingRule || !["percentage", "fixed"].includes(pricingRule.type) || typeof pricingRule.value !== "number") {
+        return res.status(400).json({ success: false, error: "Invalid pricing rule. Must include type (percentage/fixed) and numeric value." });
+      }
+      const product = await storage.updateProductPricing(parseInt(req.params.id), pricingRule);
+      if (!product) {
+        return res.status(404).json({ success: false, error: "Product not found" });
+      }
+      res.json({ success: true, data: product });
+    } catch (error: any) {
+      res.status(400).json({ success: false, error: error.message });
+    }
+  });
+
+  // Bulk update product pricing/markup
+  app.patch("/api/admin/products/bulk-pricing", authMiddleware, adminOnly, async (req: AuthRequest, res: Response) => {
+    try {
+      const { productIds, pricingRule } = req.body;
+      if (!Array.isArray(productIds) || productIds.length === 0) {
+        return res.status(400).json({ success: false, error: "productIds must be a non-empty array" });
+      }
+      if (!pricingRule || !["percentage", "fixed"].includes(pricingRule.type) || typeof pricingRule.value !== "number") {
+        return res.status(400).json({ success: false, error: "Invalid pricing rule. Must include type (percentage/fixed) and numeric value." });
+      }
+      const result = await storage.bulkUpdateProductPricing(productIds, pricingRule);
+      res.json({ success: true, data: result });
+    } catch (error: any) {
+      res.status(400).json({ success: false, error: error.message });
+    }
+  });
+
   // All Orders (Admin)
   app.get("/api/admin/orders", authMiddleware, adminOnly, async (req: AuthRequest, res: Response) => {
     try {
