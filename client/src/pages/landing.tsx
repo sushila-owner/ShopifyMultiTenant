@@ -3,6 +3,10 @@ import { Button } from "@/components/ui/button";
 import { Card, CardContent } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
 import { ThemeToggle } from "@/components/theme-toggle";
+import { LanguageSwitcher } from "@/components/language-switcher";
+import { CurrencySwitcher } from "@/components/currency-switcher";
+import { useI18n } from "@/lib/i18n";
+import { useCurrency } from "@/lib/currency";
 import {
   ShoppingCart,
   Package,
@@ -19,39 +23,6 @@ import {
 } from "lucide-react";
 import { SiShopify } from "react-icons/si";
 import logoImage from "@assets/F66C5CC9-75FA-449A-AAF8-3CBF0FAC2486_1764749832622.png";
-
-const features = [
-  {
-    icon: Package,
-    title: "Global Product Catalog",
-    description: "Access thousands of products from verified suppliers worldwide. Import with one click.",
-  },
-  {
-    icon: Zap,
-    title: "One-Click Import",
-    description: "Import products directly to your Shopify store. Set custom pricing rules automatically.",
-  },
-  {
-    icon: Truck,
-    title: "Auto-Fulfillment",
-    description: "Orders automatically fulfilled through suppliers. Real-time tracking updates.",
-  },
-  {
-    icon: TrendingUp,
-    title: "Smart Analytics",
-    description: "Track sales, profits, and trending products. Make data-driven decisions.",
-  },
-  {
-    icon: Users,
-    title: "Team Management",
-    description: "Invite staff with role-based permissions. Control who can access what.",
-  },
-  {
-    icon: Shield,
-    title: "Enterprise Security",
-    description: "Bank-grade encryption, secure OAuth, and complete data isolation.",
-  },
-];
 
 const plans = [
   {
@@ -106,14 +77,10 @@ const plans = [
   },
 ];
 
-const stats = [
-  { value: "10K+", label: "Active Merchants" },
-  { value: "500K+", label: "Products Listed" },
-  { value: "$50M+", label: "Orders Processed" },
-  { value: "99.9%", label: "Uptime" },
-];
-
 export default function LandingPage() {
+  const { t } = useI18n();
+  const { formatPrice } = useCurrency();
+
   return (
     <div className="min-h-screen bg-background">
       {/* Header */}
@@ -127,22 +94,24 @@ export default function LandingPage() {
           </Link>
           <nav className="hidden md:flex items-center gap-6">
             <a href="#features" className="text-sm font-medium text-muted-foreground hover:text-foreground transition-colors" data-testid="link-features">
-              Features
+              {t("nav.features")}
             </a>
             <a href="#pricing" className="text-sm font-medium text-muted-foreground hover:text-foreground transition-colors" data-testid="link-pricing">
-              Pricing
+              {t("nav.pricing")}
             </a>
             <a href="#how-it-works" className="text-sm font-medium text-muted-foreground hover:text-foreground transition-colors" data-testid="link-how-it-works">
-              How It Works
+              {t("nav.howItWorks")}
             </a>
           </nav>
-          <div className="flex items-center gap-3">
+          <div className="flex items-center gap-2">
+            <LanguageSwitcher />
+            <CurrencySwitcher />
             <ThemeToggle />
             <Link href="/login">
-              <Button variant="ghost" data-testid="button-login">Log In</Button>
+              <Button variant="ghost" data-testid="button-login">{t("nav.login")}</Button>
             </Link>
             <Link href="/register">
-              <Button data-testid="button-get-started">Get Started</Button>
+              <Button data-testid="button-get-started">{t("nav.getStarted")}</Button>
             </Link>
           </div>
         </div>
@@ -156,41 +125,40 @@ export default function LandingPage() {
             <div className="space-y-8">
               <div className="inline-flex items-center gap-2 rounded-full border bg-background px-4 py-1.5 text-sm">
                 <SiShopify className="h-4 w-4 text-[#95BF47]" />
-                <span className="text-muted-foreground">Official Shopify Partner</span>
+                <span className="text-muted-foreground">{t("hero.badge")}</span>
               </div>
               <h1 className="text-4xl font-bold tracking-tight sm:text-5xl md:text-6xl">
-                The Wholesale Marketplace for{" "}
-                <span className="text-primary">Shopify Merchants</span>
+                {t("hero.title")}{" "}
+                <span className="text-primary">{t("hero.titleHighlight")}</span>
               </h1>
               <p className="text-xl text-muted-foreground max-w-xl">
-                Connect with verified suppliers, import products with one click, and automate your
-                order fulfillment. Scale your e-commerce business effortlessly.
+                {t("hero.description")}
               </p>
               <div className="flex flex-wrap gap-4">
                 <Link href="/register">
                   <Button size="lg" className="gap-2" data-testid="button-hero-start-free">
-                    Start Free Trial
+                    {t("hero.startTrial")}
                     <ArrowRight className="h-4 w-4" />
                   </Button>
                 </Link>
                 <a href="#how-it-works">
                   <Button size="lg" variant="outline" data-testid="button-hero-see-how">
-                    See How It Works
+                    {t("hero.seeHow")}
                   </Button>
                 </a>
               </div>
               <div className="flex flex-wrap items-center gap-6 pt-4 text-sm text-muted-foreground">
                 <div className="flex items-center gap-2">
                   <Check className="h-4 w-4 text-chart-2" />
-                  <span>14-day free trial</span>
+                  <span>{t("hero.benefit1")}</span>
                 </div>
                 <div className="flex items-center gap-2">
                   <Check className="h-4 w-4 text-chart-2" />
-                  <span>No credit card required</span>
+                  <span>{t("hero.benefit2")}</span>
                 </div>
                 <div className="flex items-center gap-2">
                   <Check className="h-4 w-4 text-chart-2" />
-                  <span>Cancel anytime</span>
+                  <span>{t("hero.benefit3")}</span>
                 </div>
               </div>
             </div>
@@ -244,12 +212,22 @@ export default function LandingPage() {
       <section className="border-y bg-muted/30">
         <div className="container mx-auto px-4 md:px-8 py-12">
           <div className="grid grid-cols-2 md:grid-cols-4 gap-8">
-            {stats.map((stat) => (
-              <div key={stat.label} className="text-center">
-                <p className="text-3xl md:text-4xl font-bold text-primary">{stat.value}</p>
-                <p className="text-sm text-muted-foreground mt-1">{stat.label}</p>
-              </div>
-            ))}
+            <div className="text-center">
+              <p className="text-3xl md:text-4xl font-bold text-primary">10K+</p>
+              <p className="text-sm text-muted-foreground mt-1">{t("stats.merchants")}</p>
+            </div>
+            <div className="text-center">
+              <p className="text-3xl md:text-4xl font-bold text-primary">500K+</p>
+              <p className="text-sm text-muted-foreground mt-1">{t("stats.products")}</p>
+            </div>
+            <div className="text-center">
+              <p className="text-3xl md:text-4xl font-bold text-primary">$50M+</p>
+              <p className="text-sm text-muted-foreground mt-1">{t("stats.orders")}</p>
+            </div>
+            <div className="text-center">
+              <p className="text-3xl md:text-4xl font-bold text-primary">99.9%</p>
+              <p className="text-sm text-muted-foreground mt-1">{t("stats.uptime")}</p>
+            </div>
           </div>
         </div>
       </section>
@@ -259,25 +237,67 @@ export default function LandingPage() {
         <div className="container mx-auto px-4 md:px-8">
           <div className="text-center mb-16">
             <h2 className="text-3xl font-bold sm:text-4xl mb-4">
-              Everything You Need to Scale
+              {t("features.title")}
             </h2>
             <p className="text-xl text-muted-foreground max-w-2xl mx-auto">
-              From product sourcing to order fulfillment, we've got you covered with powerful
-              tools designed for Shopify merchants.
+              {t("features.description")}
             </p>
           </div>
           <div className="grid md:grid-cols-2 lg:grid-cols-3 gap-6">
-            {features.map((feature) => (
-              <Card key={feature.title} className="hover-elevate">
-                <CardContent className="p-6">
-                  <div className="h-12 w-12 rounded-lg bg-primary/10 flex items-center justify-center mb-4">
-                    <feature.icon className="h-6 w-6 text-primary" />
-                  </div>
-                  <h3 className="text-lg font-semibold mb-2">{feature.title}</h3>
-                  <p className="text-muted-foreground">{feature.description}</p>
-                </CardContent>
-              </Card>
-            ))}
+            <Card className="hover-elevate">
+              <CardContent className="p-6">
+                <div className="h-12 w-12 rounded-lg bg-primary/10 flex items-center justify-center mb-4">
+                  <Package className="h-6 w-6 text-primary" />
+                </div>
+                <h3 className="text-lg font-semibold mb-2">{t("features.catalog.title")}</h3>
+                <p className="text-muted-foreground">{t("features.catalog.description")}</p>
+              </CardContent>
+            </Card>
+            <Card className="hover-elevate">
+              <CardContent className="p-6">
+                <div className="h-12 w-12 rounded-lg bg-primary/10 flex items-center justify-center mb-4">
+                  <Zap className="h-6 w-6 text-primary" />
+                </div>
+                <h3 className="text-lg font-semibold mb-2">{t("features.import.title")}</h3>
+                <p className="text-muted-foreground">{t("features.import.description")}</p>
+              </CardContent>
+            </Card>
+            <Card className="hover-elevate">
+              <CardContent className="p-6">
+                <div className="h-12 w-12 rounded-lg bg-primary/10 flex items-center justify-center mb-4">
+                  <Truck className="h-6 w-6 text-primary" />
+                </div>
+                <h3 className="text-lg font-semibold mb-2">{t("features.fulfillment.title")}</h3>
+                <p className="text-muted-foreground">{t("features.fulfillment.description")}</p>
+              </CardContent>
+            </Card>
+            <Card className="hover-elevate">
+              <CardContent className="p-6">
+                <div className="h-12 w-12 rounded-lg bg-primary/10 flex items-center justify-center mb-4">
+                  <TrendingUp className="h-6 w-6 text-primary" />
+                </div>
+                <h3 className="text-lg font-semibold mb-2">{t("features.analytics.title")}</h3>
+                <p className="text-muted-foreground">{t("features.analytics.description")}</p>
+              </CardContent>
+            </Card>
+            <Card className="hover-elevate">
+              <CardContent className="p-6">
+                <div className="h-12 w-12 rounded-lg bg-primary/10 flex items-center justify-center mb-4">
+                  <Users className="h-6 w-6 text-primary" />
+                </div>
+                <h3 className="text-lg font-semibold mb-2">{t("features.team.title")}</h3>
+                <p className="text-muted-foreground">{t("features.team.description")}</p>
+              </CardContent>
+            </Card>
+            <Card className="hover-elevate">
+              <CardContent className="p-6">
+                <div className="h-12 w-12 rounded-lg bg-primary/10 flex items-center justify-center mb-4">
+                  <Shield className="h-6 w-6 text-primary" />
+                </div>
+                <h3 className="text-lg font-semibold mb-2">{t("features.security.title")}</h3>
+                <p className="text-muted-foreground">{t("features.security.description")}</p>
+              </CardContent>
+            </Card>
           </div>
         </div>
       </section>
@@ -287,44 +307,43 @@ export default function LandingPage() {
         <div className="container mx-auto px-4 md:px-8">
           <div className="text-center mb-16">
             <h2 className="text-3xl font-bold sm:text-4xl mb-4">
-              How It Works
+              {t("howItWorks.title")}
             </h2>
             <p className="text-xl text-muted-foreground max-w-2xl mx-auto">
-              Get started in minutes. Connect your store, import products, and start selling.
+              {t("howItWorks.description")}
             </p>
           </div>
           <div className="grid md:grid-cols-3 gap-8 max-w-5xl mx-auto">
-            {[
-              {
-                step: "1",
-                icon: SiShopify,
-                title: "Connect Your Store",
-                description: "Securely connect your Shopify store with just one click. We use OAuth for maximum security.",
-              },
-              {
-                step: "2",
-                icon: ShoppingCart,
-                title: "Import Products",
-                description: "Browse our catalog of verified suppliers. Import products with custom pricing rules.",
-              },
-              {
-                step: "3",
-                icon: CreditCard,
-                title: "Start Selling",
-                description: "Orders are automatically fulfilled through suppliers. Track everything in real-time.",
-              },
-            ].map((item) => (
-              <div key={item.step} className="relative text-center">
-                <div className="inline-flex h-16 w-16 items-center justify-center rounded-full bg-primary text-2xl font-bold text-primary-foreground mb-6">
-                  {item.step}
-                </div>
-                <div className="h-14 w-14 rounded-xl bg-muted flex items-center justify-center mx-auto mb-4">
-                  <item.icon className="h-7 w-7 text-muted-foreground" />
-                </div>
-                <h3 className="text-xl font-semibold mb-2">{item.title}</h3>
-                <p className="text-muted-foreground">{item.description}</p>
+            <div className="relative text-center">
+              <div className="inline-flex h-16 w-16 items-center justify-center rounded-full bg-primary text-2xl font-bold text-primary-foreground mb-6">
+                1
               </div>
-            ))}
+              <div className="h-14 w-14 rounded-xl bg-muted flex items-center justify-center mx-auto mb-4">
+                <SiShopify className="h-7 w-7 text-muted-foreground" />
+              </div>
+              <h3 className="text-xl font-semibold mb-2">{t("howItWorks.step1.title")}</h3>
+              <p className="text-muted-foreground">{t("howItWorks.step1.description")}</p>
+            </div>
+            <div className="relative text-center">
+              <div className="inline-flex h-16 w-16 items-center justify-center rounded-full bg-primary text-2xl font-bold text-primary-foreground mb-6">
+                2
+              </div>
+              <div className="h-14 w-14 rounded-xl bg-muted flex items-center justify-center mx-auto mb-4">
+                <ShoppingCart className="h-7 w-7 text-muted-foreground" />
+              </div>
+              <h3 className="text-xl font-semibold mb-2">{t("howItWorks.step2.title")}</h3>
+              <p className="text-muted-foreground">{t("howItWorks.step2.description")}</p>
+            </div>
+            <div className="relative text-center">
+              <div className="inline-flex h-16 w-16 items-center justify-center rounded-full bg-primary text-2xl font-bold text-primary-foreground mb-6">
+                3
+              </div>
+              <div className="h-14 w-14 rounded-xl bg-muted flex items-center justify-center mx-auto mb-4">
+                <CreditCard className="h-7 w-7 text-muted-foreground" />
+              </div>
+              <h3 className="text-xl font-semibold mb-2">{t("howItWorks.step3.title")}</h3>
+              <p className="text-muted-foreground">{t("howItWorks.step3.description")}</p>
+            </div>
           </div>
         </div>
       </section>
@@ -334,10 +353,10 @@ export default function LandingPage() {
         <div className="container mx-auto px-4 md:px-8">
           <div className="text-center mb-16">
             <h2 className="text-3xl font-bold sm:text-4xl mb-4">
-              Simple, Transparent Pricing
+              {t("pricing.title")}
             </h2>
             <p className="text-xl text-muted-foreground max-w-2xl mx-auto">
-              Choose the plan that fits your business. Upgrade or downgrade anytime.
+              {t("pricing.description")}
             </p>
           </div>
           <div className="grid md:grid-cols-2 lg:grid-cols-3 xl:grid-cols-5 gap-6 max-w-7xl mx-auto">
@@ -349,13 +368,13 @@ export default function LandingPage() {
               >
                 {plan.popular && !plan.badge && (
                   <div className="absolute -top-3 left-1/2 -translate-x-1/2">
-                    <Badge className="bg-primary text-primary-foreground">Most Popular</Badge>
+                    <Badge className="bg-primary text-primary-foreground">{t("pricing.mostPopular")}</Badge>
                   </div>
                 )}
                 {plan.badge && (
                   <div className="absolute -top-3 left-1/2 -translate-x-1/2">
                     <Badge className={plan.badge === "FUTURE MILLIONAIRE CHOICE" ? "bg-amber-500 text-amber-950 whitespace-nowrap text-xs" : "bg-primary text-primary-foreground"}>
-                      {plan.badge}
+                      {plan.badge === "FUTURE MILLIONAIRE CHOICE" ? t("pricing.millionaireChoice") : t("pricing.popular")}
                     </Badge>
                   </div>
                 )}
@@ -363,8 +382,8 @@ export default function LandingPage() {
                   <h3 className="text-xl font-semibold mb-2">{plan.name}</h3>
                   <p className="text-sm text-muted-foreground mb-4">{plan.description}</p>
                   <div className="mb-6">
-                    <span className="text-4xl font-bold">${plan.price}</span>
-                    <span className="text-muted-foreground">/{plan.period}</span>
+                    <span className="text-4xl font-bold">{formatPrice(plan.price)}</span>
+                    <span className="text-muted-foreground">/{plan.period === "forever" ? t("pricing.forever") : t("pricing.month")}</span>
                   </div>
                   <Link href="/register">
                     <Button
@@ -372,7 +391,7 @@ export default function LandingPage() {
                       variant={plan.popular ? "default" : "outline"}
                       data-testid={`button-plan-${plan.name.toLowerCase()}`}
                     >
-                      {plan.price === 0 ? "Start Free" : "Get Started"}
+                      {plan.price === 0 ? t("pricing.startFree") : t("pricing.getStarted")}
                     </Button>
                   </Link>
                   <ul className="space-y-3">
@@ -386,8 +405,7 @@ export default function LandingPage() {
                   {plan.freeForLife && (
                     <div className="mt-4 pt-4 border-t border-dashed">
                       <p className="text-xs text-center text-muted-foreground leading-relaxed">
-                        When your sales reach <span className="font-semibold text-chart-2">$50,000</span>, current plan becomes{" "}
-                        <span className="font-bold text-chart-2">FREE FOR LIFE</span>. Choose wisely!
+                        {t("pricing.freeForLife")}
                       </p>
                     </div>
                   )}
@@ -402,15 +420,15 @@ export default function LandingPage() {
       <section className="py-20 md:py-32 bg-primary text-primary-foreground">
         <div className="container mx-auto px-4 md:px-8 text-center">
           <h2 className="text-3xl font-bold sm:text-4xl mb-4">
-            Ready to Scale Your Business?
+            {t("cta.title")}
           </h2>
           <p className="text-xl opacity-90 max-w-2xl mx-auto mb-8">
-            Join thousands of merchants who are already growing their businesses with Apex Mart Wholesale.
+            {t("cta.description")}
           </p>
           <div className="flex flex-wrap justify-center gap-4">
             <Link href="/register">
               <Button size="lg" variant="secondary" className="gap-2" data-testid="button-cta-start">
-                Start Your Free Trial
+                {t("cta.startTrial")}
                 <ArrowRight className="h-4 w-4" />
               </Button>
             </Link>
@@ -428,41 +446,41 @@ export default function LandingPage() {
                 <span className="text-lg font-bold">Apex Mart Wholesale</span>
               </div>
               <p className="text-sm text-muted-foreground">
-                The wholesale marketplace for Shopify merchants.
+                {t("footer.tagline")}
               </p>
             </div>
             <div>
-              <h4 className="font-semibold mb-4">Product</h4>
+              <h4 className="font-semibold mb-4">{t("footer.product")}</h4>
               <ul className="space-y-2 text-sm text-muted-foreground">
-                <li><a href="#features" className="hover:text-foreground transition-colors">Features</a></li>
-                <li><a href="#pricing" className="hover:text-foreground transition-colors">Pricing</a></li>
-                <li><a href="#" className="hover:text-foreground transition-colors">Integrations</a></li>
+                <li><a href="#features" className="hover:text-foreground transition-colors">{t("nav.features")}</a></li>
+                <li><a href="#pricing" className="hover:text-foreground transition-colors">{t("nav.pricing")}</a></li>
+                <li><a href="#" className="hover:text-foreground transition-colors">{t("footer.integrations")}</a></li>
               </ul>
             </div>
             <div>
-              <h4 className="font-semibold mb-4">Company</h4>
+              <h4 className="font-semibold mb-4">{t("footer.company")}</h4>
               <ul className="space-y-2 text-sm text-muted-foreground">
-                <li><a href="#" className="hover:text-foreground transition-colors">About</a></li>
-                <li><a href="#" className="hover:text-foreground transition-colors">Blog</a></li>
-                <li><a href="#" className="hover:text-foreground transition-colors">Careers</a></li>
+                <li><a href="#" className="hover:text-foreground transition-colors">{t("footer.about")}</a></li>
+                <li><a href="#" className="hover:text-foreground transition-colors">{t("footer.blog")}</a></li>
+                <li><a href="#" className="hover:text-foreground transition-colors">{t("footer.careers")}</a></li>
               </ul>
             </div>
             <div>
-              <h4 className="font-semibold mb-4">Legal</h4>
+              <h4 className="font-semibold mb-4">{t("footer.legal")}</h4>
               <ul className="space-y-2 text-sm text-muted-foreground">
-                <li><a href="#" className="hover:text-foreground transition-colors">Privacy</a></li>
-                <li><a href="#" className="hover:text-foreground transition-colors">Terms</a></li>
-                <li><a href="#" className="hover:text-foreground transition-colors">Security</a></li>
+                <li><a href="#" className="hover:text-foreground transition-colors">{t("footer.privacy")}</a></li>
+                <li><a href="#" className="hover:text-foreground transition-colors">{t("footer.terms")}</a></li>
+                <li><a href="#" className="hover:text-foreground transition-colors">{t("footer.security")}</a></li>
               </ul>
             </div>
           </div>
           <div className="border-t pt-8 flex flex-col md:flex-row justify-between items-center gap-4">
             <p className="text-sm text-muted-foreground">
-              &copy; {new Date().getFullYear()} Apex Mart Wholesale. All rights reserved.
+              &copy; {new Date().getFullYear()} Apex Mart Wholesale. {t("footer.rights")}
             </p>
             <div className="flex items-center gap-4">
               <Globe className="h-5 w-5 text-muted-foreground" />
-              <span className="text-sm text-muted-foreground">Available Worldwide</span>
+              <span className="text-sm text-muted-foreground">{t("footer.worldwide")}</span>
             </div>
           </div>
         </div>
