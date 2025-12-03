@@ -386,7 +386,7 @@ export default function LandingPage() {
                   {plan.freeForLife && (
                     <div className="mt-4 pt-4 border-t border-dashed">
                       <p className="text-xs text-center text-muted-foreground leading-relaxed">
-                        When your sales reach <span className="font-semibold text-chart-2">$50,000</span>, this plan becomes{" "}
+                        When your sales reach <span className="font-semibold text-chart-2">$50,000</span>, current plan becomes{" "}
                         <span className="font-bold text-chart-2">FREE FOR LIFE</span>. Choose wisely!
                       </p>
                     </div>
