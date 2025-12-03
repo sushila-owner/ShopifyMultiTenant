@@ -176,6 +176,18 @@ The application follows a "New York" style from shadcn with professional B2B aes
 
 ## Recent Changes
 
+**December 3, 2025 (Catalog Redesign):**
+- Completely redesigned merchant catalog page with GigaB2B-style B2B marketplace layout:
+  - Navigation tabs: All Products, New Arrivals (last 30 days), Hot Deals (products with discount), Trending (top 50 by inventory)
+  - Collapsible filter sidebar with sections: Price Range (slider + inputs), Availability (in-stock toggle + minimum quantity), Suppliers (multi-select checkboxes), Categories (multi-select checkboxes)
+  - Sort buttons with ASC/DESC toggle for Price, Stock, Date (with aria-pressed/data-sort-direction for accessibility)
+  - Grid/List view modes with responsive product cards
+  - Multi-select product import with custom pricing rules
+  - Active filters badge showing count of applied filters
+  - Search across title, category, and SKU
+- Fixed getCompareAtPrice to check all product variants for discounts (not just first variant)
+- Added stable accessibility attributes (aria-pressed, data-sort-direction) to sort buttons
+
 **December 3, 2025:**
 - Added admin product price markup editing with bulk edit capabilities:
   - Single product markup editing via dialog with percentage or fixed amount options
