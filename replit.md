@@ -176,13 +176,30 @@ The application follows a "New York" style from shadcn with professional B2B aes
 
 ## Recent Changes
 
+**December 3, 2025:**
+- Implemented comprehensive 6-tier subscription system:
+  - Free: 25 products, 50 orders, no AI ads
+  - Starter ($29/mo): 100 products, 500 orders, 1 AI ad/day
+  - Growth ($49/mo): 500 products, 2500 orders, 2 AI ads/day
+  - Professional ($99/mo): 2500 products, unlimited orders, 3 AI ads/day + video ads
+  - Millionaire ($249/mo): Unlimited products/orders, 5 AI ads/day + white-label + VIP support
+  - FREE FOR LIFE: Automatically unlocked at $50k lifetime sales - all features forever
+- Added `ad_creatives` table for AI-generated marketing content
+- Updated `subscriptions` table with lifetimeSales tracking and progressToFreeForLife
+- Added storage methods: `getPlanBySlug`, `updateSubscriptionLifetimeSales`, `checkAndUnlockFreeForLife`, ad creative CRUD
+- Built merchant subscription page with:
+  - FREE FOR LIFE progress bar showing sales milestone
+  - 6-tier plan cards with feature icons (AI ads, video, white-label, VIP support)
+  - Plan upgrade flow with mutation
+  - Current plan usage stats (products, orders, team)
+- Added API routes for subscription upgrade and ad creative generation
+
 **December 2, 2025:**
 - Converted 18+ Zod schemas to Drizzle ORM tables with full multi-tenant structure
 - Implemented complete storage layer with CRUD operations for all entities (users, merchants, suppliers, products, orders, customers, subscriptions)
 - Built comprehensive API routes: authentication (login/register with bcrypt + JWT), admin endpoints (dashboard stats, suppliers, merchants, products, orders), and merchant endpoints
 - Connected frontend to backend: updated queryClient with Authorization headers, fixed auth context to store merchant data
-- Fixed routing and navigation: login/register redirects properly to /admin or /merchant based on role
-- Updated all internal links from /dashboard/* to /merchant/*
+- Fixed routing and navigation: login/register redirects properly to /admin or /dashboard based on role
 - Fixed API endpoint references in merchant pages:
   - Catalog: `/api/merchant/catalog`
   - Products: `/api/merchant/products`
