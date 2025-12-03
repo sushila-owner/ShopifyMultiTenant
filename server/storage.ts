@@ -242,20 +242,20 @@ export class DatabaseStorage implements IStorage {
     const product = await this.getProduct(id);
     if (!product) return undefined;
 
-    const supplierPrice = product.supplierPrice;
-    let merchantPrice: number;
+    const supplierPriceCents = product.supplierPrice;
+    let merchantPriceCents: number;
     if (pricingRule.type === "percentage") {
-      merchantPrice = supplierPrice * (1 + pricingRule.value / 100);
+      merchantPriceCents = supplierPriceCents * (1 + pricingRule.value / 100);
     } else {
-      merchantPrice = supplierPrice + pricingRule.value;
+      merchantPriceCents = supplierPriceCents + (pricingRule.value * 100);
     }
-    merchantPrice = Math.round(merchantPrice * 100) / 100;
+    merchantPriceCents = Math.round(merchantPriceCents);
 
     const [updated] = await db
       .update(products)
       .set({
         pricingRule,
-        merchantPrice,
+        merchantPrice: merchantPriceCents,
         updatedAt: new Date(),
       })
       .where(eq(products.id, id))

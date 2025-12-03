@@ -57,6 +57,10 @@ type PricingRule = {
   value: number;
 };
 
+const formatPrice = (cents: number): string => {
+  return (cents / 100).toFixed(2);
+};
+
 export default function AdminProductsPage() {
   const { toast } = useToast();
   const [search, setSearch] = useState("");
@@ -164,11 +168,11 @@ export default function AdminProductsPage() {
     });
   };
 
-  const calculatePreviewPrice = (supplierPrice: number, type: "percentage" | "fixed", value: number) => {
+  const calculatePreviewPriceCents = (supplierPriceCents: number, type: "percentage" | "fixed", value: number) => {
     if (type === "percentage") {
-      return supplierPrice * (1 + value / 100);
+      return supplierPriceCents * (1 + value / 100);
     }
-    return supplierPrice + value;
+    return supplierPriceCents + (value * 100);
   };
 
   const formatPricingRule = (rule: PricingRule | null | undefined) => {
@@ -233,14 +237,14 @@ export default function AdminProductsPage() {
             <TableCell>
               <Badge variant="outline">{product.category || "Uncategorized"}</Badge>
             </TableCell>
-            <TableCell>${product.supplierPrice.toFixed(2)}</TableCell>
+            <TableCell>${formatPrice(product.supplierPrice)}</TableCell>
             <TableCell>
               <Badge variant="secondary">
                 {formatPricingRule(product.pricingRule as PricingRule | null)}
               </Badge>
             </TableCell>
             <TableCell className="font-medium">
-              ${(product.merchantPrice || product.supplierPrice).toFixed(2)}
+              ${formatPrice(product.merchantPrice || product.supplierPrice)}
             </TableCell>
             <TableCell>
               <span
@@ -485,7 +489,7 @@ export default function AdminProductsPage() {
           <div className="space-y-4 py-4">
             <div className="space-y-2">
               <Label>Supplier Price</Label>
-              <p className="text-2xl font-bold">${editingProduct?.supplierPrice.toFixed(2)}</p>
+              <p className="text-2xl font-bold">${formatPrice(editingProduct?.supplierPrice || 0)}</p>
             </div>
             <div className="space-y-2">
               <Label>Markup Type</Label>
@@ -532,11 +536,11 @@ export default function AdminProductsPage() {
               <div className="rounded-lg border p-4 bg-muted/50">
                 <Label className="text-muted-foreground text-xs">Preview Retail Price</Label>
                 <p className="text-2xl font-bold text-primary" data-testid="text-preview-price">
-                  ${calculatePreviewPrice(
+                  ${formatPrice(calculatePreviewPriceCents(
                     editingProduct.supplierPrice,
                     pricingType,
                     parseFloat(pricingValue) || 0
-                  ).toFixed(2)}
+                  ))}
                 </p>
               </div>
             )}

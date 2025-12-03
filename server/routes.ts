@@ -266,6 +266,107 @@ export async function registerRoutes(
     }
   });
 
+  // Shopify supplier integration
+  app.get("/api/admin/shopify/test", authMiddleware, adminOnly, async (req: AuthRequest, res: Response) => {
+    try {
+      const { getShopifyService } = await import("./shopify");
+      const shopify = getShopifyService();
+      if (!shopify) {
+        return res.status(400).json({ 
+          success: false, 
+          error: "Shopify credentials not configured. Please set SHOPIFY_STORE_URL and SHOPIFY_ACCESS_TOKEN." 
+        });
+      }
+      const result = await shopify.testConnection();
+      res.json({ success: result.success, data: result });
+    } catch (error: any) {
+      res.status(500).json({ success: false, error: error.message });
+    }
+  });
+
+  app.post("/api/admin/shopify/sync", authMiddleware, adminOnly, async (req: AuthRequest, res: Response) => {
+    try {
+      const { getShopifyService } = await import("./shopify");
+      const shopify = getShopifyService();
+      if (!shopify) {
+        return res.status(400).json({ 
+          success: false, 
+          error: "Shopify credentials not configured." 
+        });
+      }
+
+      // Test connection first
+      const connectionTest = await shopify.testConnection();
+      if (!connectionTest.success) {
+        return res.status(400).json({ 
+          success: false, 
+          error: `Shopify connection failed: ${connectionTest.error}` 
+        });
+      }
+
+      // Find or create Shopify supplier
+      let supplier = (await storage.getAllSuppliers()).find(s => s.type === "shopify");
+      if (!supplier) {
+        supplier = await storage.createSupplier({
+          name: connectionTest.shopName || "Shopify Store",
+          type: "shopify",
+          description: `Products synced from ${connectionTest.shopName}`,
+          isActive: true,
+          createdBy: req.user!.id,
+        });
+      }
+
+      // Get products from Shopify
+      const shopifyProducts = await shopify.getProducts();
+      
+      // Get existing products for this supplier
+      const existingProducts = await storage.getProductsBySupplier(supplier.id);
+      const existingProductIds = new Set(existingProducts.map(p => p.supplierProductId));
+
+      let created = 0;
+      let updated = 0;
+      let errors = 0;
+
+      for (const shopifyProduct of shopifyProducts) {
+        try {
+          const productData = shopify.transformToProduct(shopifyProduct, supplier.id);
+          
+          if (existingProductIds.has(shopifyProduct.id.toString())) {
+            // Update existing product
+            const existing = existingProducts.find(p => p.supplierProductId === shopifyProduct.id.toString());
+            if (existing) {
+              await storage.updateProduct(existing.id, {
+                ...productData,
+                id: undefined, // Don't update ID
+              } as any);
+              updated++;
+            }
+          } else {
+            // Create new product
+            await storage.createProduct(productData);
+            created++;
+          }
+        } catch (err: any) {
+          console.error(`Error syncing product ${shopifyProduct.id}:`, err.message);
+          errors++;
+        }
+      }
+
+      res.json({ 
+        success: true, 
+        data: { 
+          supplier: supplier.name,
+          totalProducts: shopifyProducts.length,
+          created, 
+          updated, 
+          errors 
+        } 
+      });
+    } catch (error: any) {
+      res.status(500).json({ success: false, error: error.message });
+    }
+  });
+
   // Merchants
   app.get("/api/admin/merchants", authMiddleware, adminOnly, async (req: AuthRequest, res: Response) => {
     try {

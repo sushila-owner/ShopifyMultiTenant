@@ -55,7 +55,9 @@ import {
   CheckCircle,
   XCircle,
   Loader2,
+  ShoppingBag,
 } from "lucide-react";
+import { SiShopify } from "react-icons/si";
 import {
   DropdownMenu,
   DropdownMenuContent,
@@ -98,6 +100,7 @@ export default function AdminSuppliersPage() {
   const { toast } = useToast();
   const [isDialogOpen, setIsDialogOpen] = useState(false);
   const [editingSupplier, setEditingSupplier] = useState<Supplier | null>(null);
+  const [shopifyTestResult, setShopifyTestResult] = useState<{ success: boolean; shopName?: string; error?: string } | null>(null);
 
   const { data: suppliers, isLoading } = useQuery<Supplier[]>({
     queryKey: ["/api/admin/suppliers"],
@@ -139,8 +142,8 @@ export default function AdminSuppliersPage() {
   });
 
   const updateMutation = useMutation({
-    mutationFn: ({ id, data }: { id: string; data: Partial<SupplierFormData> }) =>
-      apiRequest("PATCH", `/api/admin/suppliers/${id}`, data),
+    mutationFn: ({ id, data }: { id: number; data: Partial<SupplierFormData> }) =>
+      apiRequest("PUT", `/api/admin/suppliers/${id}`, data),
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: ["/api/admin/suppliers"] });
       toast({ title: "Supplier updated successfully" });
@@ -154,7 +157,7 @@ export default function AdminSuppliersPage() {
   });
 
   const deleteMutation = useMutation({
-    mutationFn: (id: string) => apiRequest("DELETE", `/api/admin/suppliers/${id}`),
+    mutationFn: (id: number) => apiRequest("DELETE", `/api/admin/suppliers/${id}`),
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: ["/api/admin/suppliers"] });
       toast({ title: "Supplier deleted successfully" });
@@ -165,13 +168,55 @@ export default function AdminSuppliersPage() {
   });
 
   const syncMutation = useMutation({
-    mutationFn: (id: string) => apiRequest("POST", `/api/admin/suppliers/${id}/sync`),
+    mutationFn: (id: number) => apiRequest("POST", `/api/admin/suppliers/${id}/sync`),
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: ["/api/admin/suppliers"] });
       toast({ title: "Sync started successfully" });
     },
     onError: () => {
       toast({ title: "Failed to start sync", variant: "destructive" });
+    },
+  });
+
+  const shopifyTestMutation = useMutation({
+    mutationFn: async () => {
+      const response = await apiRequest("GET", "/api/admin/shopify/test");
+      return response.json();
+    },
+    onSuccess: (result) => {
+      if (result.success && result.data?.success) {
+        setShopifyTestResult({ success: true, shopName: result.data.shopName });
+        toast({ title: "Shopify connection successful", description: `Connected to ${result.data.shopName}` });
+      } else {
+        setShopifyTestResult({ success: false, error: result.data?.error || result.error });
+        toast({ title: "Connection failed", description: result.data?.error || result.error, variant: "destructive" });
+      }
+    },
+    onError: (error: Error) => {
+      setShopifyTestResult({ success: false, error: error.message });
+      toast({ title: "Connection failed", description: error.message, variant: "destructive" });
+    },
+  });
+
+  const shopifySyncMutation = useMutation({
+    mutationFn: async () => {
+      const response = await apiRequest("POST", "/api/admin/shopify/sync");
+      return response.json();
+    },
+    onSuccess: (result) => {
+      if (result.success) {
+        queryClient.invalidateQueries({ queryKey: ["/api/admin/suppliers"] });
+        queryClient.invalidateQueries({ queryKey: ["/api/admin/products"] });
+        toast({ 
+          title: "Shopify sync complete", 
+          description: `Synced ${result.data?.totalProducts || 0} products (${result.data?.created || 0} new, ${result.data?.updated || 0} updated)` 
+        });
+      } else {
+        toast({ title: "Sync failed", description: result.error, variant: "destructive" });
+      }
+    },
+    onError: (error: Error) => {
+      toast({ title: "Sync failed", description: error.message, variant: "destructive" });
     },
   });
 
@@ -189,8 +234,8 @@ export default function AdminSuppliersPage() {
       name: supplier.name,
       type: supplier.type,
       description: supplier.description || "",
-      apiCredentials: supplier.apiCredentials,
-      config: supplier.config,
+      apiCredentials: supplier.apiCredentials || {},
+      config: supplier.config || {},
       isActive: supplier.isActive,
     });
     setIsDialogOpen(true);
@@ -203,6 +248,8 @@ export default function AdminSuppliersPage() {
       form.reset();
     }
   };
+
+  const hasShopifySupplier = suppliers?.some(s => s.type === "shopify");
 
   return (
     <div className="flex-1 space-y-6 p-6 md:p-8">
@@ -419,6 +466,72 @@ export default function AdminSuppliersPage() {
         </Dialog>
       </div>
 
+      <Card className="border-[#95BF47] bg-gradient-to-r from-[#95BF47]/5 to-transparent">
+        <CardHeader>
+          <div className="flex items-center justify-between">
+            <div className="flex items-center gap-3">
+              <div className="flex h-12 w-12 items-center justify-center rounded-lg bg-[#95BF47]/20">
+                <SiShopify className="h-7 w-7 text-[#95BF47]" />
+              </div>
+              <div>
+                <CardTitle className="flex items-center gap-2">
+                  Shopify Integration
+                  {hasShopifySupplier && <Badge variant="default">Connected</Badge>}
+                </CardTitle>
+                <CardDescription>
+                  Import products directly from your Shopify store
+                </CardDescription>
+              </div>
+            </div>
+            <div className="flex items-center gap-2">
+              <Button
+                variant="outline"
+                onClick={() => shopifyTestMutation.mutate()}
+                disabled={shopifyTestMutation.isPending}
+                data-testid="button-test-shopify"
+              >
+                {shopifyTestMutation.isPending ? (
+                  <Loader2 className="mr-2 h-4 w-4 animate-spin" />
+                ) : (
+                  <CheckCircle className="mr-2 h-4 w-4" />
+                )}
+                Test Connection
+              </Button>
+              <Button
+                onClick={() => shopifySyncMutation.mutate()}
+                disabled={shopifySyncMutation.isPending}
+                className="bg-[#95BF47] hover:bg-[#7ea03b] text-white"
+                data-testid="button-sync-shopify"
+              >
+                {shopifySyncMutation.isPending ? (
+                  <Loader2 className="mr-2 h-4 w-4 animate-spin" />
+                ) : (
+                  <RefreshCw className="mr-2 h-4 w-4" />
+                )}
+                Sync Products
+              </Button>
+            </div>
+          </div>
+        </CardHeader>
+        {shopifyTestResult && (
+          <CardContent>
+            <div className={`rounded-lg p-4 ${shopifyTestResult.success ? 'bg-chart-2/10 border border-chart-2/20' : 'bg-destructive/10 border border-destructive/20'}`}>
+              {shopifyTestResult.success ? (
+                <div className="flex items-center gap-2">
+                  <CheckCircle className="h-5 w-5 text-chart-2" />
+                  <span className="font-medium">Connected to {shopifyTestResult.shopName}</span>
+                </div>
+              ) : (
+                <div className="flex items-center gap-2">
+                  <XCircle className="h-5 w-5 text-destructive" />
+                  <span className="font-medium">Connection failed: {shopifyTestResult.error}</span>
+                </div>
+              )}
+            </div>
+          </CardContent>
+        )}
+      </Card>
+
       <Card>
         <CardHeader>
           <CardTitle>Connected Suppliers</CardTitle>
@@ -454,8 +567,12 @@ export default function AdminSuppliersPage() {
                   <TableRow key={supplier.id} data-testid={`row-supplier-${supplier.id}`}>
                     <TableCell>
                       <div className="flex items-center gap-3">
-                        <div className="flex h-10 w-10 items-center justify-center rounded-md bg-primary/10">
-                          <Truck className="h-5 w-5 text-primary" />
+                        <div className={`flex h-10 w-10 items-center justify-center rounded-md ${supplier.type === 'shopify' ? 'bg-[#95BF47]/20' : 'bg-primary/10'}`}>
+                          {supplier.type === 'shopify' ? (
+                            <SiShopify className="h-5 w-5 text-[#95BF47]" />
+                          ) : (
+                            <Truck className="h-5 w-5 text-primary" />
+                          )}
                         </div>
                         <div>
                           <p className="font-medium">{supplier.name}</p>
@@ -492,13 +609,23 @@ export default function AdminSuppliersPage() {
                           </Button>
                         </DropdownMenuTrigger>
                         <DropdownMenuContent align="end">
-                          <DropdownMenuItem
-                            onClick={() => syncMutation.mutate(supplier.id)}
-                            disabled={syncMutation.isPending}
-                          >
-                            <RefreshCw className="mr-2 h-4 w-4" />
-                            Sync Products
-                          </DropdownMenuItem>
+                          {supplier.type === 'shopify' ? (
+                            <DropdownMenuItem
+                              onClick={() => shopifySyncMutation.mutate()}
+                              disabled={shopifySyncMutation.isPending}
+                            >
+                              <RefreshCw className="mr-2 h-4 w-4" />
+                              Sync Products
+                            </DropdownMenuItem>
+                          ) : (
+                            <DropdownMenuItem
+                              onClick={() => syncMutation.mutate(supplier.id)}
+                              disabled={syncMutation.isPending}
+                            >
+                              <RefreshCw className="mr-2 h-4 w-4" />
+                              Sync Products
+                            </DropdownMenuItem>
+                          )}
                           <DropdownMenuItem onClick={() => handleEdit(supplier)}>
                             <Settings className="mr-2 h-4 w-4" />
                             Edit Settings
