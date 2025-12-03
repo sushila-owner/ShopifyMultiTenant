@@ -135,7 +135,7 @@ export default function MyProductsPage() {
           <h1 className="text-3xl font-bold" data-testid="text-products-title">My Products</h1>
           <p className="text-muted-foreground">Manage your imported products</p>
         </div>
-        <Link href="/merchant/catalog">
+        <Link href="/dashboard/catalog">
           <Button className="gap-2" data-testid="button-import-more">
             <Plus className="h-4 w-4" />
             Import Products
@@ -285,7 +285,7 @@ export default function MyProductsPage() {
                         ${profit.toFixed(2)}
                       </TableCell>
                       <TableCell>
-                        <Badge variant={statusColors[product.status]}>{product.status}</Badge>
+                        <Badge variant={statusColors[product.status || "draft"] || "secondary"}>{product.status || "draft"}</Badge>
                       </TableCell>
                       <TableCell>
                         {product.shopifyProductId ? (
@@ -338,7 +338,7 @@ export default function MyProductsPage() {
               <Package className="h-16 w-16 mx-auto mb-4 opacity-50" />
               <h3 className="text-lg font-medium mb-2">No products yet</h3>
               <p className="mb-4">Import products from the catalog to get started</p>
-              <Link href="/merchant/catalog">
+              <Link href="/dashboard/catalog">
                 <Button className="gap-2">
                   <Plus className="h-4 w-4" />
                   Browse Catalog

@@ -62,7 +62,7 @@ export default function MerchantDashboard() {
               Shopify Connected
             </Badge>
           ) : (
-            <Link href="/merchant/integrations">
+            <Link href="/dashboard/integrations">
               <Button variant="outline" className="gap-2" data-testid="button-connect-shopify">
                 <Plug className="h-4 w-4" />
                 Connect Shopify
@@ -85,7 +85,7 @@ export default function MerchantDashboard() {
                   Upgrade your plan for more.
                 </p>
               </div>
-              <Link href="/merchant/billing">
+              <Link href="/dashboard/subscription">
                 <Button size="sm" data-testid="button-upgrade-plan">Upgrade</Button>
               </Link>
             </div>
@@ -188,7 +188,7 @@ export default function MerchantDashboard() {
               {stats?.currentProductCount || 0} of {stats?.productLimit || 50} products
             </CardDescription>
           </div>
-          <Link href="/merchant/catalog">
+          <Link href="/dashboard/catalog">
             <Button variant="outline" size="sm" className="gap-1" data-testid="button-browse-catalog">
               Browse Catalog
               <ArrowRight className="h-4 w-4" />
@@ -212,7 +212,7 @@ export default function MerchantDashboard() {
               <CardTitle>Recent Orders</CardTitle>
               <CardDescription>Latest orders from your store</CardDescription>
             </div>
-            <Link href="/merchant/orders">
+            <Link href="/dashboard/orders">
               <Button variant="ghost" size="sm" className="gap-1" data-testid="button-view-orders">
                 View all
                 <ArrowRight className="h-4 w-4" />
@@ -283,7 +283,7 @@ export default function MerchantDashboard() {
               <CardTitle>My Products</CardTitle>
               <CardDescription>Products in your catalog</CardDescription>
             </div>
-            <Link href="/merchant/products">
+            <Link href="/dashboard/products">
               <Button variant="ghost" size="sm" className="gap-1" data-testid="button-view-products">
                 View all
                 <ArrowRight className="h-4 w-4" />
@@ -332,8 +332,8 @@ export default function MerchantDashboard() {
               <div className="text-center py-8 text-muted-foreground">
                 <Package className="h-12 w-12 mx-auto mb-4 opacity-50" />
                 <p>No products imported</p>
-                <Link href="/merchant/catalog">
-                  <Button variant="link" className="mt-2">
+                <Link href="/dashboard/catalog">
+                  <Button variant="ghost" className="mt-2">
                     Browse the catalog
                   </Button>
                 </Link>
@@ -351,7 +351,7 @@ export default function MerchantDashboard() {
         </CardHeader>
         <CardContent>
           <div className="grid gap-4 md:grid-cols-4">
-            <Link href="/merchant/catalog">
+            <Link href="/dashboard/catalog">
               <Button variant="outline" className="w-full justify-start gap-2 h-auto py-4" data-testid="button-import-products">
                 <Package className="h-5 w-5 text-primary" />
                 <div className="text-left">
@@ -360,7 +360,7 @@ export default function MerchantDashboard() {
                 </div>
               </Button>
             </Link>
-            <Link href="/merchant/orders">
+            <Link href="/dashboard/orders">
               <Button variant="outline" className="w-full justify-start gap-2 h-auto py-4" data-testid="button-manage-orders">
                 <ShoppingCart className="h-5 w-5 text-chart-2" />
                 <div className="text-left">
@@ -369,7 +369,7 @@ export default function MerchantDashboard() {
                 </div>
               </Button>
             </Link>
-            <Link href="/merchant/customers">
+            <Link href="/dashboard/customers">
               <Button variant="outline" className="w-full justify-start gap-2 h-auto py-4" data-testid="button-view-customers">
                 <Users className="h-5 w-5 text-chart-3" />
                 <div className="text-left">
@@ -378,7 +378,7 @@ export default function MerchantDashboard() {
                 </div>
               </Button>
             </Link>
-            <Link href="/merchant/analytics">
+            <Link href="/dashboard/analytics">
               <Button variant="outline" className="w-full justify-start gap-2 h-auto py-4" data-testid="button-view-analytics">
                 <TrendingUp className="h-5 w-5 text-chart-4" />
                 <div className="text-left">
