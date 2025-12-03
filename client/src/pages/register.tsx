@@ -39,7 +39,9 @@ export default function RegisterPage() {
           title: "Account created!",
           description: "Welcome to Apex Mart. Your 14-day trial has started.",
         });
-        setLocation("/merchant");
+        setTimeout(() => {
+          setLocation("/dashboard");
+        }, 100);
       } else {
         toast({
           title: "Registration failed",
