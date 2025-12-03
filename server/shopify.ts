@@ -49,7 +49,7 @@ export class ShopifyService {
     this.accessToken = accessToken;
   }
 
-  private async fetch<T>(endpoint: string): Promise<T> {
+  private async fetch<T>(endpoint: string): Promise<{ data: T; linkHeader: string | null }> {
     const url = `https://${this.storeUrl}/admin/api/${this.apiVersion}${endpoint}`;
     
     const response = await fetch(url, {
@@ -64,39 +64,83 @@ export class ShopifyService {
       throw new Error(`Shopify API error: ${response.status} - ${errorText}`);
     }
 
-    return response.json() as T;
+    const linkHeader = response.headers.get("Link");
+    const data = await response.json() as T;
+    
+    return { data, linkHeader };
+  }
+
+  private parseNextPageInfo(linkHeader: string | null): string | null {
+    if (!linkHeader) return null;
+    
+    // Parse Link header to find next page
+    // Format: <url>; rel="next", <url>; rel="previous"
+    const links = linkHeader.split(",");
+    for (const link of links) {
+      if (link.includes('rel="next"')) {
+        const match = link.match(/page_info=([^>&]*)/);
+        if (match) {
+          return match[1];
+        }
+      }
+    }
+    return null;
   }
 
   async testConnection(): Promise<{ success: boolean; shopName?: string; error?: string }> {
     try {
-      const response = await this.fetch<{ shop: { name: string; domain: string } }>("/shop.json");
-      return { success: true, shopName: response.shop.name };
+      const { data } = await this.fetch<{ shop: { name: string; domain: string } }>("/shop.json");
+      return { success: true, shopName: data.shop.name };
     } catch (error: any) {
       return { success: false, error: error.message };
     }
   }
 
-  async getProducts(limit: number = 250): Promise<ShopifyProduct[]> {
+  async getProducts(limit: number = 250, onProgress?: (count: number, total?: number) => void): Promise<ShopifyProduct[]> {
     const allProducts: ShopifyProduct[] = [];
     let pageInfo: string | null = null;
+    let pageCount = 0;
+    
+    // Get total count first for progress reporting
+    let totalCount: number | undefined;
+    try {
+      totalCount = await this.getProductCount();
+      console.log(`[Shopify] Starting sync of ${totalCount} products...`);
+    } catch (e) {
+      console.log(`[Shopify] Could not get product count, syncing without progress...`);
+    }
     
     do {
       const endpoint = pageInfo 
         ? `/products.json?limit=${limit}&page_info=${pageInfo}`
         : `/products.json?limit=${limit}`;
       
-      const response = await this.fetch<ShopifyProductsResponse>(endpoint);
-      allProducts.push(...response.products);
+      const { data, linkHeader } = await this.fetch<ShopifyProductsResponse>(endpoint);
+      allProducts.push(...data.products);
+      pageCount++;
       
-      pageInfo = null;
+      // Report progress
+      if (onProgress) {
+        onProgress(allProducts.length, totalCount);
+      }
+      console.log(`[Shopify] Fetched page ${pageCount}: ${allProducts.length}${totalCount ? ` / ${totalCount}` : ''} products`);
+      
+      // Get next page info from Link header
+      pageInfo = this.parseNextPageInfo(linkHeader);
+      
+      // Rate limiting: Shopify allows 2 requests per second for REST API
+      if (pageInfo) {
+        await new Promise(resolve => setTimeout(resolve, 500));
+      }
     } while (pageInfo);
 
+    console.log(`[Shopify] Sync complete: ${allProducts.length} products fetched`);
     return allProducts;
   }
 
   async getProductCount(): Promise<number> {
-    const response = await this.fetch<{ count: number }>("/products/count.json");
-    return response.count;
+    const { data } = await this.fetch<{ count: number }>("/products/count.json");
+    return data.count;
   }
 
   transformToProduct(shopifyProduct: ShopifyProduct, supplierId: number): InsertProduct {
@@ -113,12 +157,10 @@ export class ShopifyService {
       id: v.id.toString(),
       title: v.title,
       price: parseFloat(v.price),
+      cost: 0, // Cost will be set by supplier or calculated
       sku: v.sku || "",
       inventoryQuantity: v.inventory_quantity,
       compareAtPrice: v.compare_at_price ? parseFloat(v.compare_at_price) : null,
-      option1: v.option1,
-      option2: v.option2,
-      option3: v.option3,
     }));
 
     const tags = shopifyProduct.tags
