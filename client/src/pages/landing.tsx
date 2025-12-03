@@ -121,8 +121,8 @@ export default function LandingPage() {
         <div className="container mx-auto flex h-16 items-center justify-between px-4 md:px-8">
           <Link href="/">
             <div className="flex items-center gap-2 cursor-pointer" data-testid="link-logo">
-              <img src={logoImage} alt="Apex Mart" className="h-9 w-9 rounded-md object-cover" />
-              <span className="text-xl font-bold">Apex Mart</span>
+              <img src={logoImage} alt="Apex Mart Wholesale" className="h-9 w-9 rounded-md object-cover" />
+              <span className="text-xl font-bold">Apex Mart Wholesale</span>
             </div>
           </Link>
           <nav className="hidden md:flex items-center gap-6">
@@ -405,7 +405,7 @@ export default function LandingPage() {
             Ready to Scale Your Business?
           </h2>
           <p className="text-xl opacity-90 max-w-2xl mx-auto mb-8">
-            Join thousands of merchants who are already growing their businesses with Apex Mart.
+            Join thousands of merchants who are already growing their businesses with Apex Mart Wholesale.
           </p>
           <div className="flex flex-wrap justify-center gap-4">
             <Link href="/register">
@@ -424,8 +424,8 @@ export default function LandingPage() {
           <div className="grid grid-cols-2 md:grid-cols-4 gap-8 mb-8">
             <div className="col-span-2 md:col-span-1">
               <div className="flex items-center gap-2 mb-4">
-                <img src={logoImage} alt="Apex Mart" className="h-8 w-8 rounded-md object-cover" />
-                <span className="text-lg font-bold">Apex Mart</span>
+                <img src={logoImage} alt="Apex Mart Wholesale" className="h-8 w-8 rounded-md object-cover" />
+                <span className="text-lg font-bold">Apex Mart Wholesale</span>
               </div>
               <p className="text-sm text-muted-foreground">
                 The wholesale marketplace for Shopify merchants.

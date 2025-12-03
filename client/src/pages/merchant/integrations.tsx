@@ -230,7 +230,7 @@ export default function IntegrationsPage() {
               </div>
               <h4 className="font-medium">Connect Your Store</h4>
               <p className="text-sm text-muted-foreground">
-                Click connect and authorize Apex Mart to access your store. We use secure OAuth.
+                Click connect and authorize Apex Mart Wholesale to access your store. We use secure OAuth.
               </p>
             </div>
             <div className="space-y-2">

@@ -75,8 +75,8 @@ export default function LoginPage() {
       <header className="flex items-center justify-between p-4 md:p-6">
         <Link href="/">
           <div className="flex items-center gap-2 cursor-pointer" data-testid="link-logo">
-            <img src={logoImage} alt="Apex Mart" className="h-9 w-9 rounded-md object-cover" />
-            <span className="text-xl font-bold">Apex Mart</span>
+            <img src={logoImage} alt="Apex Mart Wholesale" className="h-9 w-9 rounded-md object-cover" />
+            <span className="text-xl font-bold">Apex Mart Wholesale</span>
           </div>
         </Link>
         <ThemeToggle />

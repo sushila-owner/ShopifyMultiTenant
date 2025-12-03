@@ -69,9 +69,9 @@ export function MerchantSidebar() {
     <Sidebar>
       <SidebarHeader className="border-b border-sidebar-border">
         <div className="flex items-center gap-3 px-2 py-2">
-          <img src={logoImage} alt="Apex Mart" className="h-9 w-9 rounded-md object-cover" />
+          <img src={logoImage} alt="Apex Mart Wholesale" className="h-9 w-9 rounded-md object-cover" />
           <div className="flex flex-col">
-            <span className="text-sm font-semibold">Apex Mart</span>
+            <span className="text-sm font-semibold">Apex Mart Wholesale</span>
             <span className="text-xs text-muted-foreground">Merchant Dashboard</span>
           </div>
         </div>
