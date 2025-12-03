@@ -26,6 +26,8 @@ type TranslationKey = keyof typeof translations.en;
 
 const translations = {
   en: {
+    "settings.language": "Language",
+    "settings.currency": "Currency",
     "nav.features": "Features",
     "nav.pricing": "Pricing",
     "nav.howItWorks": "How It Works",
@@ -132,6 +134,8 @@ const translations = {
     "footer.worldwide": "Available Worldwide",
   },
   es: {
+    "settings.language": "Idioma",
+    "settings.currency": "Moneda",
     "nav.features": "Características",
     "nav.pricing": "Precios",
     "nav.howItWorks": "Cómo Funciona",
@@ -238,6 +242,8 @@ const translations = {
     "footer.worldwide": "Disponible en Todo el Mundo",
   },
   fr: {
+    "settings.language": "Langue",
+    "settings.currency": "Devise",
     "nav.features": "Fonctionnalités",
     "nav.pricing": "Tarifs",
     "nav.howItWorks": "Comment ça marche",
@@ -344,6 +350,8 @@ const translations = {
     "footer.worldwide": "Disponible dans le Monde Entier",
   },
   de: {
+    "settings.language": "Sprache",
+    "settings.currency": "Währung",
     "nav.features": "Funktionen",
     "nav.pricing": "Preise",
     "nav.howItWorks": "So funktioniert's",
@@ -450,6 +458,8 @@ const translations = {
     "footer.worldwide": "Weltweit Verfügbar",
   },
   zh: {
+    "settings.language": "语言",
+    "settings.currency": "货币",
     "nav.features": "功能",
     "nav.pricing": "价格",
     "nav.howItWorks": "如何运作",
@@ -556,6 +566,8 @@ const translations = {
     "footer.worldwide": "全球可用",
   },
   ja: {
+    "settings.language": "言語",
+    "settings.currency": "通貨",
     "nav.features": "機能",
     "nav.pricing": "料金",
     "nav.howItWorks": "仕組み",
@@ -662,6 +674,8 @@ const translations = {
     "footer.worldwide": "世界中で利用可能",
   },
   ar: {
+    "settings.language": "اللغة",
+    "settings.currency": "العملة",
     "nav.features": "المميزات",
     "nav.pricing": "الأسعار",
     "nav.howItWorks": "كيف يعمل",
@@ -768,6 +782,8 @@ const translations = {
     "footer.worldwide": "متاح عالمياً",
   },
   ko: {
+    "settings.language": "언어",
+    "settings.currency": "통화",
     "nav.features": "기능",
     "nav.pricing": "가격",
     "nav.howItWorks": "작동 방식",
@@ -874,6 +890,8 @@ const translations = {
     "footer.worldwide": "전 세계 이용 가능",
   },
   pt: {
+    "settings.language": "Idioma",
+    "settings.currency": "Moeda",
     "nav.features": "Recursos",
     "nav.pricing": "Preços",
     "nav.howItWorks": "Como Funciona",
@@ -980,6 +998,8 @@ const translations = {
     "footer.worldwide": "Disponível em Todo o Mundo",
   },
   ru: {
+    "settings.language": "Язык",
+    "settings.currency": "Валюта",
     "nav.features": "Возможности",
     "nav.pricing": "Цены",
     "nav.howItWorks": "Как это работает",
@@ -1086,6 +1106,8 @@ const translations = {
     "footer.worldwide": "Доступно по всему миру",
   },
   hi: {
+    "settings.language": "भाषा",
+    "settings.currency": "मुद्रा",
     "nav.features": "विशेषताएं",
     "nav.pricing": "मूल्य",
     "nav.howItWorks": "कैसे काम करता है",
@@ -1192,6 +1214,8 @@ const translations = {
     "footer.worldwide": "विश्वभर में उपलब्ध",
   },
   it: {
+    "settings.language": "Lingua",
+    "settings.currency": "Valuta",
     "nav.features": "Funzionalità",
     "nav.pricing": "Prezzi",
     "nav.howItWorks": "Come Funziona",
