@@ -62,6 +62,7 @@ const plans = [
     badge: null,
     features: ["25 Products", "50 Orders/month", "1 Team Member", "Basic Analytics", "Email Support"],
     popular: false,
+    freeForLife: false,
   },
   {
     name: "Starter",
@@ -71,6 +72,7 @@ const plans = [
     badge: null,
     features: ["100 Products", "500 Orders/month", "3 Team Members", "1 AI Ad/day", "Priority Support"],
     popular: false,
+    freeForLife: true,
   },
   {
     name: "Growth",
@@ -80,6 +82,7 @@ const plans = [
     badge: null,
     features: ["250 Products", "1,500 Orders/month", "5 Team Members", "2 AI Ads/day", "Chat Support"],
     popular: true,
+    freeForLife: true,
   },
   {
     name: "Professional",
@@ -89,6 +92,7 @@ const plans = [
     badge: "POPULAR",
     features: ["1,000 Products", "5,000 Orders/month", "10 Team Members", "3 AI Ads/day", "Video Ads", "API Access"],
     popular: false,
+    freeForLife: true,
   },
   {
     name: "Millionaire",
@@ -98,6 +102,7 @@ const plans = [
     badge: "FUTURE MILLIONAIRE CHOICE",
     features: ["Unlimited Products", "Unlimited Orders", "Unlimited Team", "5 AI Ads/day", "White-Label", "VIP Support", "Dedicated Manager"],
     popular: false,
+    freeForLife: true,
   },
 ];
 
@@ -378,6 +383,14 @@ export default function LandingPage() {
                       </li>
                     ))}
                   </ul>
+                  {plan.freeForLife && (
+                    <div className="mt-4 pt-4 border-t border-dashed">
+                      <p className="text-xs text-center text-muted-foreground leading-relaxed">
+                        When your sales reach <span className="font-semibold text-chart-2">$50,000</span>, this plan becomes{" "}
+                        <span className="font-bold text-chart-2">FREE FOR LIFE</span>. Choose wisely!
+                      </p>
+                    </div>
+                  )}
                 </CardContent>
               </Card>
             ))}
