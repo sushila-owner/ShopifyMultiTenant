@@ -32,19 +32,24 @@ export default function LoginPage() {
     try {
       const result = await login(data.email, data.password);
       if (result.success) {
-        const storedUser = localStorage.getItem("apex_user");
-        if (storedUser) {
-          const user = JSON.parse(storedUser);
-          if (user.role === "admin") {
-            setLocation("/admin");
-          } else {
-            setLocation("/dashboard");
-          }
-        }
         toast({
           title: "Welcome back!",
           description: "You have successfully logged in.",
         });
+        // Small delay to ensure state update, then redirect
+        setTimeout(() => {
+          const storedUser = localStorage.getItem("apex_user");
+          if (storedUser) {
+            const user = JSON.parse(storedUser);
+            if (user.role === "admin") {
+              setLocation("/admin");
+            } else {
+              setLocation("/dashboard");
+            }
+          } else {
+            setLocation("/dashboard");
+          }
+        }, 100);
       } else {
         toast({
           title: "Login failed",
