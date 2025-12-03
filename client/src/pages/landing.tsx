@@ -2,7 +2,6 @@ import { Link } from "wouter";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
-import { ThemeToggle } from "@/components/theme-toggle";
 import { GlobeSettings, CurrencyDisplay } from "@/components/globe-settings";
 import { useI18n } from "@/lib/i18n";
 import { useCurrency } from "@/lib/currency";
@@ -226,7 +225,6 @@ export default function LandingPage() {
             <div className="hidden sm:flex items-center">
               <CurrencyDisplay />
             </div>
-            <ThemeToggle />
             <div className="h-5 w-px bg-border mx-1 hidden md:block" />
             <Link href="/login">
               <Button 
