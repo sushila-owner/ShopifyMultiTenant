@@ -101,8 +101,7 @@ export class ShopifyService {
 
   transformToProduct(shopifyProduct: ShopifyProduct, supplierId: number): InsertProduct {
     const primaryVariant = shopifyProduct.variants[0];
-    const supplierPriceDollars = parseFloat(primaryVariant?.price || "0");
-    const supplierPriceCents = Math.round(supplierPriceDollars * 100);
+    const supplierPrice = parseFloat(primaryVariant?.price || "0");
     
     const images = shopifyProduct.images.map((img) => ({
       url: img.src,
@@ -113,10 +112,10 @@ export class ShopifyService {
     const variants = shopifyProduct.variants.map((v) => ({
       id: v.id.toString(),
       title: v.title,
-      price: Math.round(parseFloat(v.price) * 100),
+      price: parseFloat(v.price),
       sku: v.sku || "",
       inventoryQuantity: v.inventory_quantity,
-      compareAtPrice: v.compare_at_price ? Math.round(parseFloat(v.compare_at_price) * 100) : null,
+      compareAtPrice: v.compare_at_price ? parseFloat(v.compare_at_price) : null,
       option1: v.option1,
       option2: v.option2,
       option3: v.option3,
@@ -136,8 +135,8 @@ export class ShopifyService {
       variants,
       supplierProductId: shopifyProduct.id.toString(),
       supplierSku: primaryVariant?.sku || "",
-      supplierPrice: supplierPriceCents,
-      merchantPrice: supplierPriceCents,
+      supplierPrice,
+      merchantPrice: supplierPrice,
       inventoryQuantity: primaryVariant?.inventory_quantity || 0,
       lowStockThreshold: 10,
       trackInventory: true,

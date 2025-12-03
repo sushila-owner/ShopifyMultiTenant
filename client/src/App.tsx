@@ -19,6 +19,7 @@ import AdminDashboard from "@/pages/admin/dashboard";
 import AdminSuppliers from "@/pages/admin/suppliers";
 import AdminMerchants from "@/pages/admin/merchants";
 import AdminProducts from "@/pages/admin/products";
+import AdminProductDetail from "@/pages/admin/product-detail";
 import AdminOrders from "@/pages/admin/orders";
 
 import MerchantDashboard from "@/pages/merchant/dashboard";
@@ -130,6 +131,13 @@ function Router() {
         <ProtectedRoute requireAdmin>
           <AdminLayout>
             <AdminProducts />
+          </AdminLayout>
+        </ProtectedRoute>
+      </Route>
+      <Route path="/admin/products/:id">
+        <ProtectedRoute requireAdmin>
+          <AdminLayout>
+            <AdminProductDetail />
           </AdminLayout>
         </ProtectedRoute>
       </Route>

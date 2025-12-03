@@ -424,6 +424,18 @@ export async function registerRoutes(
     }
   });
 
+  app.get("/api/admin/products/:id", authMiddleware, adminOnly, async (req: AuthRequest, res: Response) => {
+    try {
+      const product = await storage.getProduct(parseInt(req.params.id));
+      if (!product) {
+        return res.status(404).json({ success: false, error: "Product not found" });
+      }
+      res.json({ success: true, data: product });
+    } catch (error: any) {
+      res.status(500).json({ success: false, error: error.message });
+    }
+  });
+
   app.put("/api/admin/products/:id", authMiddleware, adminOnly, async (req: AuthRequest, res: Response) => {
     try {
       const product = await storage.updateProduct(parseInt(req.params.id), req.body);

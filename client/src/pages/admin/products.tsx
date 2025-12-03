@@ -1,5 +1,6 @@
 import { useState } from "react";
 import { useQuery, useMutation } from "@tanstack/react-query";
+import { Link } from "wouter";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
@@ -57,8 +58,8 @@ type PricingRule = {
   value: number;
 };
 
-const formatPrice = (cents: number): string => {
-  return (cents / 100).toFixed(2);
+const formatPrice = (price: number): string => {
+  return price.toFixed(2);
 };
 
 export default function AdminProductsPage() {
@@ -168,11 +169,11 @@ export default function AdminProductsPage() {
     });
   };
 
-  const calculatePreviewPriceCents = (supplierPriceCents: number, type: "percentage" | "fixed", value: number) => {
+  const calculatePreviewPrice = (supplierPrice: number, type: "percentage" | "fixed", value: number) => {
     if (type === "percentage") {
-      return supplierPriceCents * (1 + value / 100);
+      return supplierPrice * (1 + value / 100);
     }
-    return supplierPriceCents + (value * 100);
+    return supplierPrice + value;
   };
 
   const formatPricingRule = (rule: PricingRule | null | undefined) => {
@@ -282,9 +283,11 @@ export default function AdminProductsPage() {
                 >
                   <Pencil className="h-4 w-4" />
                 </Button>
-                <Button variant="ghost" size="icon" data-testid={`button-view-product-${product.id}`}>
-                  <Eye className="h-4 w-4" />
-                </Button>
+                <Link href={`/admin/products/${product.id}`}>
+                  <Button variant="ghost" size="icon" data-testid={`button-view-product-${product.id}`}>
+                    <Eye className="h-4 w-4" />
+                  </Button>
+                </Link>
               </div>
             </TableCell>
           </TableRow>
@@ -536,7 +539,7 @@ export default function AdminProductsPage() {
               <div className="rounded-lg border p-4 bg-muted/50">
                 <Label className="text-muted-foreground text-xs">Preview Retail Price</Label>
                 <p className="text-2xl font-bold text-primary" data-testid="text-preview-price">
-                  ${formatPrice(calculatePreviewPriceCents(
+                  ${formatPrice(calculatePreviewPrice(
                     editingProduct.supplierPrice,
                     pricingType,
                     parseFloat(pricingValue) || 0
