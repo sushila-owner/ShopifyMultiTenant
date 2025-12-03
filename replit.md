@@ -177,12 +177,22 @@ The application follows a "New York" style from shadcn with professional B2B aes
 ## Recent Changes
 
 **December 3, 2025:**
+- Added admin product price markup editing with bulk edit capabilities:
+  - Single product markup editing via dialog with percentage or fixed amount options
+  - Bulk selection with checkboxes for selecting multiple products
+  - Bulk edit dialog to apply same markup to multiple products at once
+  - Preview price calculation before saving
+  - API endpoints: `PATCH /api/admin/products/:id/pricing` and `PATCH /api/admin/products/bulk-pricing`
+  - Storage methods: `updateProductPricing` and `bulkUpdateProductPricing`
+- Updated landing page pricing section with new 5-tier plan display:
+  - Free ($0), Starter ($29), Growth ($49), Professional ($99), Millionaire ($499)
+  - Millionaire plan has "FUTURE MILLIONAIRE CHOICE" gold badge
 - Implemented comprehensive 6-tier subscription system:
   - Free: 25 products, 50 orders, no AI ads
   - Starter ($29/mo): 100 products, 500 orders, 1 AI ad/day
   - Growth ($49/mo): 500 products, 2500 orders, 2 AI ads/day
   - Professional ($99/mo): 2500 products, unlimited orders, 3 AI ads/day + video ads
-  - Millionaire ($249/mo): Unlimited products/orders, 5 AI ads/day + white-label + VIP support
+  - Millionaire ($499/mo): Unlimited products/orders, 5 AI ads/day + white-label + VIP support
   - FREE FOR LIFE: Automatically unlocked at $50k lifetime sales - all features forever
 - Added `ad_creatives` table for AI-generated marketing content
 - Updated `subscriptions` table with lifetimeSales tracking and progressToFreeForLife
@@ -219,6 +229,8 @@ The application follows a "New York" style from shadcn with professional B2B aes
 - `GET /api/admin/dashboard` - Admin dashboard stats
 - `GET/POST /api/admin/suppliers` - Supplier management
 - `GET/POST /api/admin/products` - Global product catalog
+- `PATCH /api/admin/products/:id/pricing` - Update single product markup
+- `PATCH /api/admin/products/bulk-pricing` - Bulk update product markup
 - `GET /api/admin/merchants` - Merchant listing
 - `GET /api/admin/orders` - All orders across merchants
 
