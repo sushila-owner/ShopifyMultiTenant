@@ -541,6 +541,48 @@ export async function registerRoutes(
     }
   });
 
+  // AI-Powered Product Search
+  app.get("/api/search/products", authMiddleware, async (req: AuthRequest, res: Response) => {
+    try {
+      const { q, limit = "50", global = "true" } = req.query;
+      
+      if (!q || typeof q !== "string") {
+        return res.status(400).json({ success: false, error: "Search query required" });
+      }
+
+      const { aiProductSearch } = await import("./services/ai-search");
+      
+      const results = await aiProductSearch(q, {
+        limit: parseInt(limit as string),
+        merchantId: req.user?.merchantId || undefined,
+        isGlobal: global === "true",
+      });
+
+      res.json({ success: true, data: results });
+    } catch (error: any) {
+      console.error("Search error:", error);
+      res.status(500).json({ success: false, error: error.message });
+    }
+  });
+
+  // Search Suggestions (autocomplete)
+  app.get("/api/search/suggestions", authMiddleware, async (req: AuthRequest, res: Response) => {
+    try {
+      const { q } = req.query;
+      
+      if (!q || typeof q !== "string" || q.length < 2) {
+        return res.json({ success: true, data: [] });
+      }
+
+      const { getSearchSuggestions } = await import("./services/ai-search");
+      const suggestions = await getSearchSuggestions(q);
+
+      res.json({ success: true, data: suggestions });
+    } catch (error: any) {
+      res.status(500).json({ success: false, error: error.message });
+    }
+  });
+
   // My Products (merchant's imported products)
   app.get("/api/merchant/products", authMiddleware, merchantOnly, async (req: AuthRequest, res: Response) => {
     try {
