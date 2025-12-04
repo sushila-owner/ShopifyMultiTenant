@@ -55,6 +55,10 @@ localPort = 42523
 externalPort = 8008
 
 [[ports]]
+localPort = 43557
+externalPort = 8080
+
+[[ports]]
 localPort = 43933
 externalPort = 3001
 
@@ -88,3 +92,11 @@ waitForPort = 5000
 
 [agent]
 integrations = ["javascript_database:1.0.0", "javascript_anthropic:1.0.0"]
+
+[userenv]
+
+[userenv.shared]
+PLANETSCALE_HOST = "us-east-3.pg.psdb.cloud"
+PLANETSCALE_PORT = "6432"
+PLANETSCALE_DATABASE = "postgres"
+PLANETSCALE_USERNAME = "pscale_api_5ieuakm95ijn.j6rkjm2a5g0g"
