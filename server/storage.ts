@@ -18,7 +18,29 @@ import {
   type AdminDashboardStats, type MerchantDashboardStats,
 } from "@shared/schema";
 import { db } from "./db";
-import { eq, and, desc, sql, gte, lte, like, or, isNull, count } from "drizzle-orm";
+import { eq, and, desc, asc, sql, gte, lte, ilike, or, isNull, count, inArray } from "drizzle-orm";
+
+// Pagination types for large product catalogs (60k+ products)
+export interface PaginationParams {
+  page: number;
+  pageSize: number;
+  search?: string;
+  supplierId?: number;
+  category?: string;
+  priceMin?: number;
+  priceMax?: number;
+  inStock?: boolean;
+  sortBy?: "createdAt" | "price" | "title" | "stock";
+  sortDirection?: "asc" | "desc";
+}
+
+export interface PaginatedResponse<T> {
+  items: T[];
+  total: number;
+  page: number;
+  pageSize: number;
+  totalPages: number;
+}
 
 export interface IStorage {
   // Users
@@ -51,6 +73,7 @@ export interface IStorage {
   bulkUpdateProductPricing(ids: number[], pricingRule: { type: "percentage" | "fixed"; value: number }): Promise<{ updated: number; products: Product[] }>;
   deleteProduct(id: number): Promise<boolean>;
   getGlobalProducts(): Promise<Product[]>;
+  getGlobalProductsPaginated(params: PaginationParams): Promise<PaginatedResponse<Product>>;
   getProductsByMerchant(merchantId: number): Promise<Product[]>;
   getProductsBySupplier(supplierId: number): Promise<Product[]>;
 
@@ -296,6 +319,84 @@ export class DatabaseStorage implements IStorage {
     return db.select().from(products)
       .where(and(eq(products.isGlobal, true), isNull(products.merchantId)))
       .orderBy(desc(products.createdAt));
+  }
+
+  async getGlobalProductsPaginated(params: PaginationParams): Promise<PaginatedResponse<Product>> {
+    const { page, pageSize, search, supplierId, category, priceMin, priceMax, inStock, sortBy = "createdAt", sortDirection = "desc" } = params;
+    const offset = (page - 1) * pageSize;
+
+    // Build filter conditions
+    const conditions = [
+      eq(products.isGlobal, true),
+      isNull(products.merchantId)
+    ];
+
+    if (supplierId) {
+      conditions.push(eq(products.supplierId, supplierId));
+    }
+
+    if (category) {
+      conditions.push(eq(products.category, category));
+    }
+
+    if (priceMin !== undefined) {
+      conditions.push(gte(products.supplierPrice, priceMin));
+    }
+
+    if (priceMax !== undefined) {
+      conditions.push(lte(products.supplierPrice, priceMax));
+    }
+
+    if (inStock === true) {
+      conditions.push(gte(products.inventoryQuantity, 1));
+    } else if (inStock === false) {
+      conditions.push(eq(products.inventoryQuantity, 0));
+    }
+
+    if (search) {
+      conditions.push(
+        or(
+          ilike(products.title, `%${search}%`),
+          ilike(products.description, `%${search}%`),
+          ilike(products.supplierSku, `%${search}%`)
+        )!
+      );
+    }
+
+    const whereClause = and(...conditions);
+
+    // Get total count for pagination
+    const [countResult] = await db
+      .select({ count: count() })
+      .from(products)
+      .where(whereClause);
+    
+    const total = countResult?.count || 0;
+
+    // Determine sort column and direction
+    const sortColumn = sortBy === "price" ? products.supplierPrice
+      : sortBy === "title" ? products.title
+      : sortBy === "stock" ? products.inventoryQuantity
+      : products.createdAt;
+    
+    const orderFn = sortDirection === "asc" ? asc : desc;
+
+    // Get paginated items
+    const items = await db
+      .select()
+      .from(products)
+      .where(whereClause)
+      .orderBy(orderFn(sortColumn))
+      .limit(pageSize)
+      .offset(offset);
+
+    return {
+      items,
+      total,
+      page,
+      pageSize,
+      totalPages: Math.ceil(total / pageSize)
+    };
   }
 
   async getProductsByMerchant(merchantId: number): Promise<Product[]> {

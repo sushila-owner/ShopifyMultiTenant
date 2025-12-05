@@ -1,5 +1,5 @@
-import { useState, useMemo } from "react";
-import { useQuery, useMutation } from "@tanstack/react-query";
+import { useState, useMemo, useEffect } from "react";
+import { useQuery, useMutation, keepPreviousData } from "@tanstack/react-query";
 import { Card, CardContent } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
@@ -59,7 +59,7 @@ import {
 } from "lucide-react";
 import type { Product, Supplier } from "@shared/schema";
 
-type SortField = "default" | "price" | "stock" | "date";
+type SortField = "default" | "price" | "stock" | "createdAt";
 type SortDirection = "asc" | "desc";
 type TabType = "all" | "new" | "deals" | "trending";
 
@@ -71,18 +71,32 @@ interface FilterState {
   inStock: boolean;
 }
 
+interface PaginationInfo {
+  total: number;
+  page: number;
+  pageSize: number;
+  totalPages: number;
+}
+
+interface CatalogResponse {
+  products: Product[];
+  suppliers: Supplier[];
+  pagination: PaginationInfo;
+}
+
 const PRODUCTS_PER_PAGE = 50;
 
 export default function CatalogPage() {
   const { toast } = useToast();
-  const [search, setSearch] = useState("");
+  const [searchInput, setSearchInput] = useState("");
+  const [debouncedSearch, setDebouncedSearch] = useState("");
   const [activeTab, setActiveTab] = useState<TabType>("all");
   const [viewMode, setViewMode] = useState<"grid" | "list">("grid");
   const [selectedProducts, setSelectedProducts] = useState<number[]>([]);
   const [isImportDialogOpen, setIsImportDialogOpen] = useState(false);
   const [showFilters, setShowFilters] = useState(true);
   const [sortField, setSortField] = useState<SortField>("default");
-  const [sortDirection, setSortDirection] = useState<SortDirection>("asc");
+  const [sortDirection, setSortDirection] = useState<SortDirection>("desc");
   const [currentPage, setCurrentPage] = useState(1);
   
   const [filters, setFilters] = useState<FilterState>({
@@ -105,12 +119,77 @@ export default function CatalogPage() {
     pricingValue: 20,
   });
 
-  const { data: catalogData, isLoading } = useQuery<{ products: Product[]; suppliers: Supplier[] }>({
-    queryKey: ["/api/merchant/catalog"],
+  // Debounce search input to avoid too many API calls
+  useEffect(() => {
+    const timer = setTimeout(() => {
+      setDebouncedSearch(searchInput);
+      setCurrentPage(1); // Reset to page 1 on new search
+    }, 300);
+    return () => clearTimeout(timer);
+  }, [searchInput]);
+
+  // Build query params for server-side pagination
+  const buildQueryParams = () => {
+    const params = new URLSearchParams();
+    params.set("page", currentPage.toString());
+    params.set("pageSize", PRODUCTS_PER_PAGE.toString());
+    
+    if (debouncedSearch) {
+      params.set("search", debouncedSearch);
+    }
+    
+    // Only use first selected supplier for now (server supports single supplier filter)
+    if (filters.suppliers.length === 1) {
+      params.set("supplierId", filters.suppliers[0].toString());
+    }
+    
+    // Only use first selected category for now
+    if (filters.categories.length === 1) {
+      params.set("category", filters.categories[0]);
+    }
+    
+    if (filters.priceRange[0] > 0) {
+      params.set("priceMin", filters.priceRange[0].toString());
+    }
+    
+    if (filters.priceRange[1] < 10000) {
+      params.set("priceMax", filters.priceRange[1].toString());
+    }
+    
+    if (filters.inStock) {
+      params.set("inStock", "true");
+    }
+    
+    if (sortField !== "default") {
+      params.set("sortBy", sortField);
+      params.set("sortDirection", sortDirection);
+    }
+    
+    return params.toString();
+  };
+
+  const queryParams = buildQueryParams();
+  
+  // Fetch paginated catalog data from server
+  const { data: catalogData, isLoading, isFetching } = useQuery<CatalogResponse>({
+    queryKey: ["/api/merchant/catalog", queryParams],
+    queryFn: async () => {
+      const res = await fetch(`/api/merchant/catalog?${queryParams}`, {
+        credentials: "include",
+      });
+      if (!res.ok) throw new Error("Failed to fetch catalog");
+      const data = await res.json();
+      return data.data;
+    },
+    placeholderData: keepPreviousData,
+    staleTime: 30000,
   });
 
-  const products = catalogData?.products;
-  const suppliers = catalogData?.suppliers;
+  const products = catalogData?.products || [];
+  const suppliers = catalogData?.suppliers || [];
+  const pagination = catalogData?.pagination;
+  const totalProducts = pagination?.total || 0;
+  const totalPages = pagination?.totalPages || 1;
 
   const importMutation = useMutation({
     mutationFn: async (data: { productId: number; pricingRule: { type: string; value: number } }) =>
@@ -127,8 +206,8 @@ export default function CatalogPage() {
     },
   });
 
+  // Get categories from suppliers' products - cached from initial load
   const categories = useMemo(() => {
-    if (!products) return [];
     const cats = products.map((p) => p.category).filter((c): c is string => !!c);
     return Array.from(new Set(cats));
   }, [products]);
@@ -149,76 +228,34 @@ export default function CatalogPage() {
     return 0;
   };
 
-  const filteredProducts = useMemo(() => {
-    if (!products) return [];
+  // Client-side filtering only for tabs (new arrivals, deals, trending)
+  // Main filtering is done server-side
+  const displayProducts = useMemo(() => {
+    if (activeTab === "all") {
+      return products;
+    }
     
-    let result = products.filter((p) => {
-      if (!p.isGlobal) return false;
-      
-      const matchesSearch = search === "" ||
-        p.title.toLowerCase().includes(search.toLowerCase()) ||
-        p.category?.toLowerCase().includes(search.toLowerCase()) ||
-        p.supplierSku?.toLowerCase().includes(search.toLowerCase());
-      
-      const matchesPrice = p.supplierPrice >= filters.priceRange[0] && 
-        p.supplierPrice <= filters.priceRange[1];
-      
-      const stock = p.inventoryQuantity || 0;
-      const matchesStock = stock >= filters.stockMin;
-      const matchesInStock = !filters.inStock || stock > 0;
-      
-      const matchesSuppliers = filters.suppliers.length === 0 || 
-        filters.suppliers.includes(p.supplierId);
-      
-      const matchesCategories = filters.categories.length === 0 || 
-        (p.category && filters.categories.includes(p.category));
-      
-      return matchesSearch && matchesPrice && matchesStock && matchesInStock && 
-        matchesSuppliers && matchesCategories;
-    });
-
     if (activeTab === "new") {
-      result = result.filter(p => {
+      return products.filter(p => {
         if (!p.createdAt) return false;
         const daysSinceCreation = (Date.now() - new Date(p.createdAt).getTime()) / (1000 * 60 * 60 * 24);
         return daysSinceCreation <= 30;
       });
-    } else if (activeTab === "deals") {
-      result = result.filter(p => {
+    }
+    
+    if (activeTab === "deals") {
+      return products.filter(p => {
         const compareAt = getCompareAtPrice(p);
         return compareAt > p.supplierPrice;
       });
-    } else if (activeTab === "trending") {
-      result = result.sort((a, b) => (b.inventoryQuantity || 0) - (a.inventoryQuantity || 0)).slice(0, 50);
     }
-
-    if (sortField !== "default") {
-      result = [...result].sort((a, b) => {
-        let comparison = 0;
-        switch (sortField) {
-          case "price":
-            comparison = a.supplierPrice - b.supplierPrice;
-            break;
-          case "stock":
-            comparison = (a.inventoryQuantity || 0) - (b.inventoryQuantity || 0);
-            break;
-          case "date":
-            comparison = new Date(a.createdAt || 0).getTime() - new Date(b.createdAt || 0).getTime();
-            break;
-        }
-        return sortDirection === "asc" ? comparison : -comparison;
-      });
+    
+    if (activeTab === "trending") {
+      return [...products].sort((a, b) => (b.inventoryQuantity || 0) - (a.inventoryQuantity || 0)).slice(0, 50);
     }
-
-    return result;
-  }, [products, search, filters, activeTab, sortField, sortDirection]);
-
-  // Pagination logic
-  const totalPages = Math.ceil(filteredProducts.length / PRODUCTS_PER_PAGE);
-  const paginatedProducts = useMemo(() => {
-    const startIndex = (currentPage - 1) * PRODUCTS_PER_PAGE;
-    return filteredProducts.slice(startIndex, startIndex + PRODUCTS_PER_PAGE);
-  }, [filteredProducts, currentPage]);
+    
+    return products;
+  }, [products, activeTab]);
 
   // Reset to page 1 when filters change
   const resetPage = () => setCurrentPage(1);
@@ -236,11 +273,11 @@ export default function CatalogPage() {
   };
 
   const selectAllProducts = () => {
-    if (filteredProducts) {
-      if (selectedProducts.length === filteredProducts.length) {
+    if (displayProducts) {
+      if (selectedProducts.length === displayProducts.length) {
         setSelectedProducts([]);
       } else {
-        setSelectedProducts(filteredProducts.map((p) => p.id));
+        setSelectedProducts(displayProducts.map((p) => p.id));
       }
     }
   };
@@ -379,8 +416,8 @@ export default function CatalogPage() {
               type="search"
               placeholder="Search products, SKU, category..."
               className="pl-9"
-              value={search}
-              onChange={(e) => setSearch(e.target.value)}
+              value={searchInput}
+              onChange={(e) => setSearchInput(e.target.value)}
               data-testid="input-search-catalog"
             />
           </div>
@@ -433,17 +470,17 @@ export default function CatalogPage() {
                 )}
               </Button>
               <Button
-                variant={sortField === "date" ? "secondary" : "ghost"}
+                variant={sortField === "createdAt" ? "secondary" : "ghost"}
                 size="sm"
                 className="gap-1"
-                onClick={() => toggleSort("date")}
+                onClick={() => toggleSort("createdAt")}
                 data-testid="button-sort-date"
-                aria-pressed={sortField === "date"}
-                data-sort-direction={sortField === "date" ? sortDirection : undefined}
+                aria-pressed={sortField === "createdAt"}
+                data-sort-direction={sortField === "createdAt" ? sortDirection : undefined}
               >
                 <Clock className="h-3 w-3" />
                 Date
-                {sortField === "date" && (
+                {sortField === "createdAt" && (
                   sortDirection === "asc" ? <ArrowUp className="h-3 w-3" /> : <ArrowDown className="h-3 w-3" />
                 )}
               </Button>
@@ -691,7 +728,8 @@ export default function CatalogPage() {
           <div className="flex-shrink-0 px-4 md:px-6 py-3 border-b bg-muted/20 flex items-center justify-between gap-2">
             <div className="flex items-center gap-2">
               <span className="text-sm text-muted-foreground" data-testid="text-product-count">
-                {filteredProducts.length} products
+                {totalProducts.toLocaleString()} products
+                {isFetching && !isLoading && <Loader2 className="inline h-3 w-3 ml-2 animate-spin" />}
               </span>
               {hasActiveFilters && (
                 <Badge variant="outline" className="gap-1">
@@ -700,9 +738,9 @@ export default function CatalogPage() {
                 </Badge>
               )}
             </div>
-            {filteredProducts.length > 0 && (
+            {displayProducts.length > 0 && (
               <Button variant="ghost" size="sm" onClick={selectAllProducts} data-testid="button-select-all">
-                {selectedProducts.length === filteredProducts.length ? (
+                {selectedProducts.length === displayProducts.length ? (
                   <>
                     <X className="h-4 w-4 mr-1" />
                     Deselect All
@@ -733,11 +771,11 @@ export default function CatalogPage() {
                     </div>
                   ))}
                 </div>
-              ) : filteredProducts.length > 0 ? (
+              ) : displayProducts.length > 0 ? (
                 <>
                 {viewMode === "grid" ? (
                   <div className="grid gap-4 grid-cols-2 md:grid-cols-3 lg:grid-cols-4 xl:grid-cols-5">
-                    {paginatedProducts.map((product) => {
+                    {displayProducts.map((product) => {
                       const stock = product.inventoryQuantity || 0;
                       const compareAt = getCompareAtPrice(product);
                       const hasDiscount = compareAt > product.supplierPrice;
@@ -862,7 +900,7 @@ export default function CatalogPage() {
                   </div>
                 ) : (
                   <div className="space-y-2">
-                    {paginatedProducts.map((product) => {
+                    {displayProducts.map((product) => {
                       const stock = product.inventoryQuantity || 0;
                       const compareAt = getCompareAtPrice(product);
                       const hasDiscount = compareAt > product.supplierPrice;

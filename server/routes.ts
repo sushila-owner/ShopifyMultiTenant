@@ -802,12 +802,49 @@ export async function registerRoutes(
     }
   });
 
-  // Product Catalog (global products for import)
+  // Product Catalog (global products for import) - Server-side pagination for 60k+ products
   app.get("/api/merchant/catalog", authMiddleware, merchantOnly, async (req: AuthRequest, res: Response) => {
     try {
-      const products = await storage.getGlobalProducts();
+      const { 
+        page = "1", 
+        pageSize = "50", 
+        search,
+        supplierId,
+        category,
+        priceMin,
+        priceMax,
+        inStock,
+        sortBy = "createdAt",
+        sortDirection = "desc"
+      } = req.query;
+
+      const paginatedProducts = await storage.getGlobalProductsPaginated({
+        page: parseInt(page as string, 10) || 1,
+        pageSize: Math.min(parseInt(pageSize as string, 10) || 50, 100), // Max 100 per page
+        search: search as string | undefined,
+        supplierId: supplierId ? parseInt(supplierId as string, 10) : undefined,
+        category: category as string | undefined,
+        priceMin: priceMin ? parseFloat(priceMin as string) : undefined,
+        priceMax: priceMax ? parseFloat(priceMax as string) : undefined,
+        inStock: inStock === "true" ? true : inStock === "false" ? false : undefined,
+        sortBy: (sortBy as "createdAt" | "price" | "title" | "stock") || "createdAt",
+        sortDirection: (sortDirection as "asc" | "desc") || "desc"
+      });
+
       const suppliers = await storage.getActiveSuppliers();
-      res.json({ success: true, data: { products, suppliers } });
+      res.json({ 
+        success: true, 
+        data: { 
+          products: paginatedProducts.items,
+          suppliers,
+          pagination: {
+            total: paginatedProducts.total,
+            page: paginatedProducts.page,
+            pageSize: paginatedProducts.pageSize,
+            totalPages: paginatedProducts.totalPages
+          }
+        } 
+      });
     } catch (error: any) {
       res.status(500).json({ success: false, error: error.message });
     }
