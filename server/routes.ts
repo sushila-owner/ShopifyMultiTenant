@@ -1221,5 +1221,95 @@ export async function registerRoutes(
     }
   });
 
+  // ==================== S3 IMAGE UPLOAD ROUTES ====================
+  
+  // Get signed URL for direct browser upload (tenant-scoped)
+  app.post("/api/upload/signed-url", authMiddleware, async (req: AuthRequest, res: Response) => {
+    try {
+      const { filename, contentType, folder = "products" } = req.body;
+      
+      if (!filename || !contentType) {
+        return res.status(400).json({ success: false, error: "Filename and contentType required" });
+      }
+
+      // Validate folder
+      const allowedFolders = ["products", "suppliers", "avatars", "ads"];
+      if (!allowedFolders.includes(folder)) {
+        return res.status(400).json({ success: false, error: "Invalid folder" });
+      }
+
+      const { getSignedUploadUrl } = await import("./services/s3-storage");
+      
+      // Build secure context with user/merchant scoping
+      const context = {
+        userId: req.user!.id,
+        merchantId: req.user?.merchantId || undefined,
+        folder: folder as "products" | "suppliers" | "avatars" | "ads",
+      };
+
+      const result = await getSignedUploadUrl(filename, contentType, context);
+
+      res.json({ success: true, data: result });
+    } catch (error: any) {
+      console.error("S3 signed URL error:", error);
+      res.status(400).json({ success: false, error: error.message });
+    }
+  });
+
+  // Delete an image from S3 (tenant-scoped with ownership check)
+  app.delete("/api/upload/:key(*)", authMiddleware, async (req: AuthRequest, res: Response) => {
+    try {
+      const { key } = req.params;
+      
+      if (!key) {
+        return res.status(400).json({ success: false, error: "Image key required" });
+      }
+
+      const { deleteImage } = await import("./services/s3-storage");
+      
+      const context = {
+        userId: req.user!.id,
+        merchantId: req.user?.merchantId || undefined,
+      };
+
+      await deleteImage(key, context);
+
+      res.json({ success: true, message: "Image deleted successfully" });
+    } catch (error: any) {
+      console.error("S3 delete error:", error);
+      if (error.message.includes("Access denied")) {
+        return res.status(403).json({ success: false, error: error.message });
+      }
+      res.status(500).json({ success: false, error: error.message });
+    }
+  });
+
+  // Get signed download URL for an image (tenant-scoped)
+  app.get("/api/upload/download/:key(*)", authMiddleware, async (req: AuthRequest, res: Response) => {
+    try {
+      const { key } = req.params;
+      
+      if (!key) {
+        return res.status(400).json({ success: false, error: "Image key required" });
+      }
+
+      const { getSignedDownloadUrl } = await import("./services/s3-storage");
+      
+      const context = {
+        userId: req.user!.id,
+        merchantId: req.user?.merchantId || undefined,
+      };
+
+      const url = await getSignedDownloadUrl(key, context);
+
+      res.json({ success: true, data: { url } });
+    } catch (error: any) {
+      if (error.message.includes("Access denied")) {
+        return res.status(403).json({ success: false, error: error.message });
+      }
+      res.status(500).json({ success: false, error: error.message });
+    }
+  });
+
   return httpServer;
 }

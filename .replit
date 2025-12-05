@@ -39,6 +39,10 @@ localPort = 39169
 externalPort = 3003
 
 [[ports]]
+localPort = 39463
+externalPort = 8080
+
+[[ports]]
 localPort = 39601
 externalPort = 8081
 
@@ -96,3 +100,5 @@ PLANETSCALE_HOST = "us-east-3.pg.psdb.cloud"
 PLANETSCALE_PORT = "6432"
 PLANETSCALE_DATABASE = "postgres"
 PLANETSCALE_USERNAME = "pscale_api_5ieuakm95ijn.j6rkjm2a5g0g"
+AWS_S3_BUCKET = "apex-mart-wholesale-bucket"
+AWS_S3_REGION = "us-east-1"
