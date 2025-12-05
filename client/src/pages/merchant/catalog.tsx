@@ -174,8 +174,15 @@ export default function CatalogPage() {
   const { data: catalogData, isLoading, isFetching } = useQuery<CatalogResponse>({
     queryKey: ["/api/merchant/catalog", queryParams],
     queryFn: async () => {
+      const token = localStorage.getItem("apex_token");
+      const headers: HeadersInit = {};
+      if (token) {
+        headers["Authorization"] = `Bearer ${token}`;
+      }
+      
       const res = await fetch(`/api/merchant/catalog?${queryParams}`, {
         credentials: "include",
+        headers,
       });
       if (!res.ok) throw new Error("Failed to fetch catalog");
       const data = await res.json();
@@ -329,7 +336,7 @@ export default function CatalogPage() {
       categories: [],
       inStock: false,
     });
-    setSearch("");
+    setSearchInput("");
     resetPage();
   };
 
@@ -339,7 +346,7 @@ export default function CatalogPage() {
     filters.stockMin > 0 ||
     filters.priceRange[0] > priceStats.min ||
     filters.priceRange[1] < priceStats.max ||
-    search !== "";
+    debouncedSearch !== "";
 
   const toggleSort = (field: SortField) => {
     if (sortField === field) {
