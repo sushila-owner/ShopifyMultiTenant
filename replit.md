@@ -85,7 +85,7 @@ The application follows a "New York" style from shadcn with professional B2B aes
 
 **Database Setup:**
 - **Drizzle ORM** configured for PostgreSQL
-- **Neon Serverless** driver for database connections
+- **PlanetScale PostgreSQL** (us-east-3.pg.psdb.cloud) as primary database
 - Schema defined in `shared/schema.ts` with Zod validation
 - Migration files in `/migrations` directory
 - Database provisioning via `DATABASE_URL` environment variable
@@ -151,7 +151,9 @@ The application follows a "New York" style from shadcn with professional B2B aes
 - Shopify API for product import/export and order fulfillment
 - Payment processing through Stripe
 - Email notifications for order updates and alerts
-- Potential AI features (dependencies: @google/generative-ai, openai)
+- **Claude AI (Anthropic)** for semantic product search - understands natural language queries
+- **AWS S3** for secure image storage with tenant-scoped access
+- Simple in-memory cache for performance optimization
 
 ### File Structure Patterns
 
@@ -175,6 +177,23 @@ The application follows a "New York" style from shadcn with professional B2B aes
 - `/lib` - Utilities, hooks, and context providers
 
 ## Recent Changes
+
+**December 5, 2025 (Infrastructure Upgrades):**
+- Migrated database to **PlanetScale PostgreSQL** (us-east-3.pg.psdb.cloud)
+- Integrated **Claude AI (Anthropic)** for semantic product search:
+  - Uses claude-3-5-sonnet-20241022 for query analysis
+  - Extracts keywords, categories, price ranges, and product attributes
+  - Fallback to basic keyword search if AI unavailable
+  - API endpoint: `GET /api/search/products?q=<query>`
+  - Autocomplete: `GET /api/search/suggestions?q=<query>`
+- Integrated **AWS S3** for image storage with tenant-scoped security:
+  - Signed URL uploads for direct browser uploads
+  - Tenant isolation - merchants can only access their own files
+  - File type validation (JPEG, PNG, GIF, WebP) and 10MB size limit
+  - Server-side encryption (AES256)
+  - API endpoints: `POST /api/upload/signed-url`, `DELETE /api/upload/:key`
+- Added simple in-memory cache service (replaces Redis requirement)
+- New service files: `server/services/ai-search.ts`, `server/services/s3-storage.ts`, `server/services/cache.ts`
 
 **December 3, 2025 (Catalog Redesign):**
 - Completely redesigned merchant catalog page with GigaB2B-style B2B marketplace layout:

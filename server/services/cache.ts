@@ -14,7 +14,8 @@ class SimpleCache {
   private startCleanup() {
     this.cleanupInterval = setInterval(() => {
       const now = Date.now();
-      for (const [key, entry] of this.cache.entries()) {
+      const entries = Array.from(this.cache.entries());
+      for (const [key, entry] of entries) {
         if (entry.expiry < now) {
           this.cache.delete(key);
         }
@@ -48,8 +49,9 @@ class SimpleCache {
   deletePattern(pattern: string): number {
     let deleted = 0;
     const regex = new RegExp(pattern.replace(/\*/g, ".*"));
+    const keys = Array.from(this.cache.keys());
     
-    for (const key of this.cache.keys()) {
+    for (const key of keys) {
       if (regex.test(key)) {
         this.cache.delete(key);
         deleted++;
