@@ -325,10 +325,11 @@ export class DatabaseStorage implements IStorage {
     const { page, pageSize, search, supplierId, category, priceMin, priceMax, inStock, sortBy = "createdAt", sortDirection = "desc" } = params;
     const offset = (page - 1) * pageSize;
 
-    // Build filter conditions
+    // Build filter conditions - only active global products
     const conditions = [
       eq(products.isGlobal, true),
-      isNull(products.merchantId)
+      isNull(products.merchantId),
+      eq(products.status, "active")
     ];
 
     if (supplierId) {

@@ -214,6 +214,11 @@ export const products = pgTable("products", {
   supplierIdx: index("products_supplier_idx").on(table.supplierId),
   statusIdx: index("products_status_idx").on(table.status),
   globalIdx: index("products_global_idx").on(table.isGlobal),
+  globalActiveIdx: index("products_global_active_idx").on(table.isGlobal, table.status),
+  priceIdx: index("products_price_idx").on(table.supplierPrice),
+  createdIdx: index("products_created_idx").on(table.createdAt),
+  categoryIdx: index("products_category_idx").on(table.category),
+  inventoryIdx: index("products_inventory_idx").on(table.inventoryQuantity),
 }));
 
 // ==================== CUSTOMERS TABLE ====================
