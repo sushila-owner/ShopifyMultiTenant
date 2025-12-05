@@ -1,6 +1,6 @@
 import {
   users, merchants, suppliers, products, customers, orders,
-  plans, subscriptions, staffInvitations, notifications, activityLogs, syncLogs, adCreatives,
+  plans, subscriptions, staffInvitations, notifications, activityLogs, syncLogs, adCreatives, otpVerifications,
   type User, type InsertUser,
   type Merchant, type InsertMerchant,
   type Supplier, type InsertSupplier,
@@ -14,6 +14,7 @@ import {
   type ActivityLog, type InsertActivityLog,
   type SyncLog, type InsertSyncLog,
   type AdCreative, type InsertAdCreative,
+  type OtpVerification, type InsertOtp,
   type AdminDashboardStats, type MerchantDashboardStats,
 } from "@shared/schema";
 import { db } from "./db";
@@ -120,6 +121,18 @@ export interface IStorage {
   // Dashboard Stats
   getAdminDashboardStats(): Promise<AdminDashboardStats>;
   getMerchantDashboardStats(merchantId: number): Promise<MerchantDashboardStats>;
+
+  // OTP Verifications
+  createOtp(otp: InsertOtp): Promise<OtpVerification>;
+  getOtp(identifier: string, type: string): Promise<OtpVerification | undefined>;
+  incrementOtpAttempts(id: number): Promise<void>;
+  markOtpVerified(id: number): Promise<void>;
+  deleteOtp(id: number): Promise<void>;
+  cleanupExpiredOtps(): Promise<void>;
+
+  // User Auth Methods
+  getUserByPhone(phone: string): Promise<User | undefined>;
+  getUserByGoogleId(googleId: string): Promise<User | undefined>;
 
   // Seed data
   seedDefaultPlans(): Promise<void>;
@@ -897,6 +910,63 @@ export class DatabaseStorage implements IStorage {
       isEmailVerified: true,
       permissions: ["all"],
     });
+  }
+
+  // OTP Verifications
+  async createOtp(otp: InsertOtp): Promise<OtpVerification> {
+    await db.delete(otpVerifications).where(
+      and(
+        eq(otpVerifications.identifier, otp.identifier),
+        eq(otpVerifications.type, otp.type)
+      )
+    );
+    const [created] = await db.insert(otpVerifications).values(otp).returning();
+    return created;
+  }
+
+  async getOtp(identifier: string, type: string): Promise<OtpVerification | undefined> {
+    const [otp] = await db.select().from(otpVerifications).where(
+      and(
+        eq(otpVerifications.identifier, identifier),
+        eq(otpVerifications.type, type),
+        gte(otpVerifications.expiresAt, new Date()),
+        isNull(otpVerifications.verifiedAt)
+      )
+    ).limit(1);
+    return otp;
+  }
+
+  async incrementOtpAttempts(id: number): Promise<void> {
+    await db.update(otpVerifications)
+      .set({ attempts: sql`${otpVerifications.attempts} + 1` })
+      .where(eq(otpVerifications.id, id));
+  }
+
+  async markOtpVerified(id: number): Promise<void> {
+    await db.update(otpVerifications)
+      .set({ verifiedAt: new Date() })
+      .where(eq(otpVerifications.id, id));
+  }
+
+  async deleteOtp(id: number): Promise<void> {
+    await db.delete(otpVerifications).where(eq(otpVerifications.id, id));
+  }
+
+  async cleanupExpiredOtps(): Promise<void> {
+    await db.delete(otpVerifications).where(
+      lte(otpVerifications.expiresAt, new Date())
+    );
+  }
+
+  // User Auth Methods
+  async getUserByPhone(phone: string): Promise<User | undefined> {
+    const [user] = await db.select().from(users).where(eq(users.phone, phone)).limit(1);
+    return user;
+  }
+
+  async getUserByGoogleId(googleId: string): Promise<User | undefined> {
+    const [user] = await db.select().from(users).where(eq(users.googleId, googleId)).limit(1);
+    return user;
   }
 }
 

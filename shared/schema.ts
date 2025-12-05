@@ -5,6 +5,7 @@ import { z } from "zod";
 
 // ==================== ENUMS ====================
 export const userRoleEnum = pgEnum("user_role", ["admin", "merchant", "staff"]);
+export const authProviderEnum = pgEnum("auth_provider", ["email", "phone", "google"]);
 export const subscriptionStatusEnum = pgEnum("subscription_status", ["trial", "active", "cancelled", "expired", "past_due", "free_for_life"]);
 export const adPlatformEnum = pgEnum("ad_platform", ["instagram", "facebook", "tiktok", "pinterest", "general"]);
 export const supplierTypeEnum = pgEnum("supplier_type", ["gigab2b", "shopify", "amazon", "woocommerce", "custom"]);
@@ -50,22 +51,43 @@ export const plans = pgTable("plans", {
 // ==================== USERS TABLE ====================
 export const users = pgTable("users", {
   id: serial("id").primaryKey(),
-  email: text("email").notNull().unique(),
-  password: text("password").notNull(),
+  email: text("email").unique(),
+  password: text("password"),
   name: text("name").notNull(),
   role: userRoleEnum("role").notNull().default("merchant"),
   merchantId: integer("merchant_id"),
   avatar: text("avatar"),
-  phone: text("phone"),
+  phone: text("phone").unique(),
+  authProvider: authProviderEnum("auth_provider").default("email"),
+  googleId: text("google_id").unique(),
   isActive: boolean("is_active").default(true),
   isEmailVerified: boolean("is_email_verified").default(false),
+  isPhoneVerified: boolean("is_phone_verified").default(false),
+  emailVerifiedAt: timestamp("email_verified_at"),
+  phoneVerifiedAt: timestamp("phone_verified_at"),
   permissions: jsonb("permissions").$type<string[]>().default([]),
   lastLoginAt: timestamp("last_login_at"),
   createdAt: timestamp("created_at").defaultNow().notNull(),
   updatedAt: timestamp("updated_at").defaultNow().notNull(),
 }, (table) => ({
   emailIdx: index("users_email_idx").on(table.email),
+  phoneIdx: index("users_phone_idx").on(table.phone),
   merchantIdx: index("users_merchant_idx").on(table.merchantId),
+  googleIdx: index("users_google_idx").on(table.googleId),
+}));
+
+// ==================== OTP VERIFICATION TABLE ====================
+export const otpVerifications = pgTable("otp_verifications", {
+  id: serial("id").primaryKey(),
+  identifier: text("identifier").notNull(),
+  type: text("type").notNull(),
+  code: text("code").notNull(),
+  attempts: integer("attempts").default(0),
+  expiresAt: timestamp("expires_at").notNull(),
+  verifiedAt: timestamp("verified_at"),
+  createdAt: timestamp("created_at").defaultNow().notNull(),
+}, (table) => ({
+  identifierIdx: index("otp_identifier_idx").on(table.identifier),
 }));
 
 // ==================== MERCHANTS TABLE ====================
@@ -629,12 +651,40 @@ export const insertAdCreativeSchema = createInsertSchema(adCreatives).omit({
 export type InsertAdCreative = z.infer<typeof insertAdCreativeSchema>;
 export type AdCreative = typeof adCreatives.$inferSelect;
 
+// ==================== OTP SCHEMAS ====================
+export const insertOtpSchema = createInsertSchema(otpVerifications).omit({
+  id: true,
+  createdAt: true,
+});
+export type InsertOtp = z.infer<typeof insertOtpSchema>;
+export type OtpVerification = typeof otpVerifications.$inferSelect;
+
 // ==================== AUTH SCHEMAS ====================
 export const loginSchema = z.object({
   email: z.string().email("Invalid email address"),
   password: z.string().min(6, "Password must be at least 6 characters"),
 });
 export type LoginInput = z.infer<typeof loginSchema>;
+
+export const phoneLoginRequestSchema = z.object({
+  phone: z.string().min(10, "Phone number must be at least 10 digits"),
+});
+export type PhoneLoginRequest = z.infer<typeof phoneLoginRequestSchema>;
+
+export const phoneVerifySchema = z.object({
+  phone: z.string().min(10, "Phone number must be at least 10 digits"),
+  code: z.string().length(6, "Code must be 6 digits"),
+  name: z.string().optional(),
+  businessName: z.string().optional(),
+});
+export type PhoneVerifyInput = z.infer<typeof phoneVerifySchema>;
+
+export const googleAuthSchema = z.object({
+  credential: z.string(),
+  name: z.string().optional(),
+  businessName: z.string().optional(),
+});
+export type GoogleAuthInput = z.infer<typeof googleAuthSchema>;
 
 export const registerSchema = z.object({
   email: z.string().email("Invalid email address"),
