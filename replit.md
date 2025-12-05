@@ -47,6 +47,26 @@ Preferred communication style: Simple, everyday language.
 - **Path Aliases**: `@/*`, `@shared/*`, `@assets/*`.
 - **Component Organization**: `/components/ui`, role-specific sidebars, `/pages` by role, `/lib` (utilities, hooks).
 
+## Deployment
+
+### Heroku Deployment
+- **Procfile**: Configured for Heroku with `web: npm run start`
+- **Build Process**: `npm run build` creates optimized production bundle
+- **Environment**: Node.js 20.x recommended
+- **Guide**: See `HEROKU_DEPLOYMENT.md` for full deployment instructions
+
+### Required Environment Variables
+- `DATABASE_URL`, `PGHOST`, `PGDATABASE`, `PGUSER`, `PGPASSWORD`, `PGPORT`
+- `SESSION_SECRET` - For JWT authentication
+- `SHOPIFY_STORE_URL`, `SHOPIFY_ACCESS_TOKEN` - Shopify integration
+- `AWS_ACCESS_KEY_ID`, `AWS_SECRET_ACCESS_KEY`, `AWS_S3_BUCKET`, `AWS_S3_REGION` - Image storage
+- `ANTHROPIC_API_KEY` - Claude AI semantic search
+
+### Performance Optimizations
+- **Batch Sync**: Imports 250 products per batch (10-50x faster than one-by-one)
+- **Background Processing**: Product sync runs asynchronously with progress tracking
+- **Database Indexes**: Optimized for 64,000+ product queries
+
 ## External Dependencies
 
 - **UI Frameworks**: Radix UI, shadcn/ui, Lucide React, React Icons.

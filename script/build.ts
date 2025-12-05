@@ -5,9 +5,14 @@ import { rm, readFile } from "fs/promises";
 // server deps to bundle to reduce openat(2) syscalls
 // which helps cold start times
 const allowlist = [
+  "@anthropic-ai/sdk",
+  "@aws-sdk/client-s3",
+  "@aws-sdk/s3-request-presigner",
   "@google/generative-ai",
   "@neondatabase/serverless",
+  "@planetscale/database",
   "axios",
+  "bcryptjs",
   "connect-pg-simple",
   "cors",
   "date-fns",
@@ -24,6 +29,7 @@ const allowlist = [
   "openai",
   "passport",
   "passport-local",
+  "pg",
   "stripe",
   "uuid",
   "ws",
