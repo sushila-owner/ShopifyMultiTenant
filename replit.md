@@ -37,6 +37,7 @@ Preferred communication style: Simple, everyday language.
 - **Subscription System**: 6-tier plans (Free, Starter, Growth, Professional, Millionaire, FREE FOR LIFE) with varying product/order limits and features (AI ads, white-label, VIP support).
 - **Admin Product Pricing**: Single and bulk markup editing (percentage/fixed amount).
 - **Merchant Catalog Redesign**: GigaB2B-style layout with tabs (All, New Arrivals, Hot Deals, Trending), collapsible filters (Price, Availability, Suppliers, Categories), sorting, grid/list views, multi-select product import with custom pricing.
+- **Server-Side Pagination**: Catalog supports 60,000+ products with server-side pagination (50 per page), filters (supplier, category, price range, stock), debounced search (300ms), and sorting (price, stock, date). Database indexes on `is_global+status`, `supplier_price`, `created_at`, `category`, `inventory_quantity` for query performance.
 - **Semantic Search**: Integrated Claude AI for natural language product query analysis.
 - **Image Storage**: AWS S3 for secure, tenant-scoped image storage with signed URLs, validation, and encryption.
 - **Caching**: Simple in-memory cache for performance.
