@@ -23,10 +23,9 @@ Preferred communication style: Simple, everyday language.
 
 ### Authentication & Authorization
 - **Multi-Role System**: Admin (platform-wide), Merchant (isolated tenant access), Staff (planned role-based permissions).
-- **Authentication Methods**: Email/Password (bcrypt), Phone OTP (bcrypt-hashed OTPs, auto-creates users), Google OAuth (server-side ID token verification).
-- **Database Tables**: `users` (extended with auth provider, verification status), `otp_verifications`.
+- **Authentication Method**: Email/Password with bcrypt password hashing.
 - **Implementation**: Custom auth context, JWT (localStorage, 7-day expiry), `ProtectedRoute` component, role-based UI rendering.
-- **Security**: `SESSION_SECRET` env var, bcrypt for OTPs, server-side Google token verification, protected routes, role enforcement.
+- **Security**: `SESSION_SECRET` env var required, bcrypt password hashing, protected routes, role enforcement.
 
 ### Data Storage
 - **Database**: Drizzle ORM configured for PostgreSQL, PlanetScale PostgreSQL (`us-east-3.pg.psdb.cloud`).
