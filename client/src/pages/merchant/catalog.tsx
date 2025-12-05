@@ -674,7 +674,7 @@ export default function CatalogPage() {
           {/* Results Count & Selection */}
           <div className="flex-shrink-0 px-4 md:px-6 py-3 border-b bg-muted/20 flex items-center justify-between gap-2">
             <div className="flex items-center gap-2">
-              <span className="text-sm text-muted-foreground">
+              <span className="text-sm text-muted-foreground" data-testid="text-product-count">
                 {filteredProducts.length} products
               </span>
               {hasActiveFilters && (
