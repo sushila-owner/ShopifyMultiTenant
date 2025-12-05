@@ -71,6 +71,8 @@ interface FilterState {
   inStock: boolean;
 }
 
+const PRODUCTS_PER_PAGE = 50;
+
 export default function CatalogPage() {
   const { toast } = useToast();
   const [search, setSearch] = useState("");
@@ -81,6 +83,7 @@ export default function CatalogPage() {
   const [showFilters, setShowFilters] = useState(true);
   const [sortField, setSortField] = useState<SortField>("default");
   const [sortDirection, setSortDirection] = useState<SortDirection>("asc");
+  const [currentPage, setCurrentPage] = useState(1);
   
   const [filters, setFilters] = useState<FilterState>({
     priceRange: [0, 10000],
@@ -210,6 +213,16 @@ export default function CatalogPage() {
     return result;
   }, [products, search, filters, activeTab, sortField, sortDirection]);
 
+  // Pagination logic
+  const totalPages = Math.ceil(filteredProducts.length / PRODUCTS_PER_PAGE);
+  const paginatedProducts = useMemo(() => {
+    const startIndex = (currentPage - 1) * PRODUCTS_PER_PAGE;
+    return filteredProducts.slice(startIndex, startIndex + PRODUCTS_PER_PAGE);
+  }, [filteredProducts, currentPage]);
+
+  // Reset to page 1 when filters change
+  const resetPage = () => setCurrentPage(1);
+
   const getSupplierName = (supplierId: number) => {
     return suppliers?.find((s) => s.id === supplierId)?.name || "Unknown";
   };
@@ -258,6 +271,7 @@ export default function CatalogPage() {
         ? prev.suppliers.filter(id => id !== supplierId)
         : [...prev.suppliers, supplierId]
     }));
+    resetPage();
   };
 
   const toggleCategoryFilter = (category: string) => {
@@ -267,6 +281,7 @@ export default function CatalogPage() {
         ? prev.categories.filter(c => c !== category)
         : [...prev.categories, category]
     }));
+    resetPage();
   };
 
   const clearAllFilters = () => {
@@ -278,6 +293,7 @@ export default function CatalogPage() {
       inStock: false,
     });
     setSearch("");
+    resetPage();
   };
 
   const hasActiveFilters = filters.suppliers.length > 0 || 
@@ -718,9 +734,10 @@ export default function CatalogPage() {
                   ))}
                 </div>
               ) : filteredProducts.length > 0 ? (
-                viewMode === "grid" ? (
+                <>
+                {viewMode === "grid" ? (
                   <div className="grid gap-4 grid-cols-2 md:grid-cols-3 lg:grid-cols-4 xl:grid-cols-5">
-                    {filteredProducts.map((product) => {
+                    {paginatedProducts.map((product) => {
                       const stock = product.inventoryQuantity || 0;
                       const compareAt = getCompareAtPrice(product);
                       const hasDiscount = compareAt > product.supplierPrice;
@@ -845,7 +862,7 @@ export default function CatalogPage() {
                   </div>
                 ) : (
                   <div className="space-y-2">
-                    {filteredProducts.map((product) => {
+                    {paginatedProducts.map((product) => {
                       const stock = product.inventoryQuantity || 0;
                       const compareAt = getCompareAtPrice(product);
                       const hasDiscount = compareAt > product.supplierPrice;
@@ -939,7 +956,53 @@ export default function CatalogPage() {
                       );
                     })}
                   </div>
-                )
+                )}
+                
+                {/* Pagination Controls */}
+                {totalPages > 1 && (
+                  <div className="flex items-center justify-center gap-2 mt-6 pb-4">
+                    <Button
+                      variant="outline"
+                      size="sm"
+                      onClick={() => setCurrentPage(1)}
+                      disabled={currentPage === 1}
+                      data-testid="button-first-page"
+                    >
+                      First
+                    </Button>
+                    <Button
+                      variant="outline"
+                      size="sm"
+                      onClick={() => setCurrentPage(p => Math.max(1, p - 1))}
+                      disabled={currentPage === 1}
+                      data-testid="button-prev-page"
+                    >
+                      Previous
+                    </Button>
+                    <span className="text-sm text-muted-foreground px-4" data-testid="text-page-info">
+                      Page {currentPage} of {totalPages}
+                    </span>
+                    <Button
+                      variant="outline"
+                      size="sm"
+                      onClick={() => setCurrentPage(p => Math.min(totalPages, p + 1))}
+                      disabled={currentPage === totalPages}
+                      data-testid="button-next-page"
+                    >
+                      Next
+                    </Button>
+                    <Button
+                      variant="outline"
+                      size="sm"
+                      onClick={() => setCurrentPage(totalPages)}
+                      disabled={currentPage === totalPages}
+                      data-testid="button-last-page"
+                    >
+                      Last
+                    </Button>
+                  </div>
+                )}
+                </>
               ) : (
                 <div className="text-center py-16 text-muted-foreground">
                   <Package className="h-20 w-20 mx-auto mb-4 opacity-30" />
