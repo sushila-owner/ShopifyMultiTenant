@@ -39,10 +39,35 @@ interface ShopifyProductsResponse {
   products: ShopifyProduct[];
 }
 
+export interface SyncProgress {
+  status: "idle" | "running" | "completed" | "error";
+  totalProducts: number;
+  fetchedProducts: number;
+  savedProducts: number;
+  createdProducts: number;
+  updatedProducts: number;
+  errors: number;
+  currentPage: number;
+  startedAt?: Date;
+  completedAt?: Date;
+  errorMessage?: string;
+}
+
 export class ShopifyService {
   private storeUrl: string;
   private accessToken: string;
   private apiVersion: string = "2024-01";
+  
+  private syncProgress: SyncProgress = {
+    status: "idle",
+    totalProducts: 0,
+    fetchedProducts: 0,
+    savedProducts: 0,
+    createdProducts: 0,
+    updatedProducts: 0,
+    errors: 0,
+    currentPage: 0,
+  };
 
   constructor(storeUrl: string, accessToken: string) {
     this.storeUrl = storeUrl.replace(/^https?:\/\//, "").replace(/\/$/, "");
@@ -73,8 +98,6 @@ export class ShopifyService {
   private parseNextPageInfo(linkHeader: string | null): string | null {
     if (!linkHeader) return null;
     
-    // Parse Link header to find next page
-    // Format: <url>; rel="next", <url>; rel="previous"
     const links = linkHeader.split(",");
     for (const link of links) {
       if (link.includes('rel="next"')) {
@@ -96,51 +119,112 @@ export class ShopifyService {
     }
   }
 
-  async getProducts(limit: number = 250, onProgress?: (count: number, total?: number) => void): Promise<ShopifyProduct[]> {
-    const allProducts: ShopifyProduct[] = [];
-    let pageInfo: string | null = null;
-    let pageCount = 0;
-    
-    // Get total count first for progress reporting
-    let totalCount: number | undefined;
-    try {
-      totalCount = await this.getProductCount();
-      console.log(`[Shopify] Starting sync of ${totalCount} products...`);
-    } catch (e) {
-      console.log(`[Shopify] Could not get product count, syncing without progress...`);
-    }
-    
-    do {
-      const endpoint = pageInfo 
-        ? `/products.json?limit=${limit}&page_info=${pageInfo}`
-        : `/products.json?limit=${limit}`;
-      
-      const { data, linkHeader } = await this.fetch<ShopifyProductsResponse>(endpoint);
-      allProducts.push(...data.products);
-      pageCount++;
-      
-      // Report progress
-      if (onProgress) {
-        onProgress(allProducts.length, totalCount);
-      }
-      console.log(`[Shopify] Fetched page ${pageCount}: ${allProducts.length}${totalCount ? ` / ${totalCount}` : ''} products`);
-      
-      // Get next page info from Link header
-      pageInfo = this.parseNextPageInfo(linkHeader);
-      
-      // Rate limiting: Shopify allows 2 requests per second for REST API
-      if (pageInfo) {
-        await new Promise(resolve => setTimeout(resolve, 500));
-      }
-    } while (pageInfo);
-
-    console.log(`[Shopify] Sync complete: ${allProducts.length} products fetched`);
-    return allProducts;
-  }
-
   async getProductCount(): Promise<number> {
     const { data } = await this.fetch<{ count: number }>("/products/count.json");
     return data.count;
+  }
+
+  getSyncProgress(): SyncProgress {
+    return { ...this.syncProgress };
+  }
+
+  async syncProductsStreaming(
+    supplierId: number,
+    existingProductIds: Set<string>,
+    onSaveProduct: (product: InsertProduct, isUpdate: boolean) => Promise<void>,
+    onProgress?: (progress: SyncProgress) => void
+  ): Promise<SyncProgress> {
+    this.syncProgress = {
+      status: "running",
+      totalProducts: 0,
+      fetchedProducts: 0,
+      savedProducts: 0,
+      createdProducts: 0,
+      updatedProducts: 0,
+      errors: 0,
+      currentPage: 0,
+      startedAt: new Date(),
+    };
+
+    try {
+      // Get total count first
+      try {
+        this.syncProgress.totalProducts = await this.getProductCount();
+        console.log(`[Shopify] Starting streaming sync of ${this.syncProgress.totalProducts} products...`);
+      } catch (e) {
+        console.log(`[Shopify] Could not get product count, syncing without total...`);
+      }
+
+      let pageInfo: string | null = null;
+      const limit = 250;
+
+      do {
+        const endpoint = pageInfo 
+          ? `/products.json?limit=${limit}&page_info=${pageInfo}`
+          : `/products.json?limit=${limit}`;
+        
+        const { data, linkHeader } = await this.fetch<ShopifyProductsResponse>(endpoint);
+        this.syncProgress.currentPage++;
+        this.syncProgress.fetchedProducts += data.products.length;
+        
+        console.log(`[Shopify] Page ${this.syncProgress.currentPage}: Fetched ${data.products.length} products (${this.syncProgress.fetchedProducts}/${this.syncProgress.totalProducts || '?'})`);
+
+        // Process and save each product immediately
+        for (const shopifyProduct of data.products) {
+          try {
+            const productData = this.transformToProduct(shopifyProduct, supplierId);
+            const shopifyId = shopifyProduct.id.toString();
+            const isUpdate = existingProductIds.has(shopifyId);
+            
+            await onSaveProduct(productData, isUpdate);
+            
+            this.syncProgress.savedProducts++;
+            if (isUpdate) {
+              this.syncProgress.updatedProducts++;
+            } else {
+              this.syncProgress.createdProducts++;
+              existingProductIds.add(shopifyId);
+            }
+          } catch (err: any) {
+            console.error(`[Shopify] Error saving product ${shopifyProduct.id}:`, err.message);
+            this.syncProgress.errors++;
+          }
+        }
+
+        // Report progress after each page
+        if (onProgress) {
+          onProgress({ ...this.syncProgress });
+        }
+
+        console.log(`[Shopify] Page ${this.syncProgress.currentPage}: Saved ${this.syncProgress.savedProducts} products, ${this.syncProgress.errors} errors`);
+
+        // Get next page
+        pageInfo = this.parseNextPageInfo(linkHeader);
+        
+        // Rate limiting: Shopify allows 2 requests per second
+        if (pageInfo) {
+          await new Promise(resolve => setTimeout(resolve, 500));
+        }
+      } while (pageInfo);
+
+      this.syncProgress.status = "completed";
+      this.syncProgress.completedAt = new Date();
+      
+      const duration = this.syncProgress.completedAt.getTime() - this.syncProgress.startedAt!.getTime();
+      console.log(`[Shopify] Sync complete in ${Math.round(duration / 1000)}s: ${this.syncProgress.savedProducts} saved, ${this.syncProgress.createdProducts} created, ${this.syncProgress.updatedProducts} updated, ${this.syncProgress.errors} errors`);
+
+    } catch (error: any) {
+      this.syncProgress.status = "error";
+      this.syncProgress.errorMessage = error.message;
+      this.syncProgress.completedAt = new Date();
+      console.error(`[Shopify] Sync failed:`, error.message);
+    }
+
+    if (onProgress) {
+      onProgress({ ...this.syncProgress });
+    }
+
+    return this.syncProgress;
   }
 
   transformToProduct(shopifyProduct: ShopifyProduct, supplierId: number): InsertProduct {
@@ -157,7 +241,7 @@ export class ShopifyService {
       id: v.id.toString(),
       title: v.title,
       price: parseFloat(v.price),
-      cost: 0, // Cost will be set by supplier or calculated
+      cost: 0,
       sku: v.sku || "",
       inventoryQuantity: v.inventory_quantity,
       compareAtPrice: v.compare_at_price ? parseFloat(v.compare_at_price) : null,
@@ -190,6 +274,10 @@ export class ShopifyService {
   }
 }
 
+// Global sync state for background processing
+let activeSyncProgress: SyncProgress | null = null;
+let shopifyServiceInstance: ShopifyService | null = null;
+
 export function getShopifyService(): ShopifyService | null {
   const storeUrl = process.env.SHOPIFY_STORE_URL;
   const accessToken = process.env.SHOPIFY_ACCESS_TOKEN;
@@ -198,5 +286,19 @@ export function getShopifyService(): ShopifyService | null {
     return null;
   }
 
-  return new ShopifyService(storeUrl, accessToken);
+  if (!shopifyServiceInstance) {
+    shopifyServiceInstance = new ShopifyService(storeUrl, accessToken);
+  }
+  return shopifyServiceInstance;
+}
+
+export function getActiveSyncProgress(): SyncProgress | null {
+  if (shopifyServiceInstance) {
+    return shopifyServiceInstance.getSyncProgress();
+  }
+  return activeSyncProgress;
+}
+
+export function setActiveSyncProgress(progress: SyncProgress): void {
+  activeSyncProgress = progress;
 }

@@ -1,4 +1,4 @@
-import { useState } from "react";
+import { useState, useEffect, useCallback } from "react";
 import { useQuery, useMutation } from "@tanstack/react-query";
 import { useForm } from "react-hook-form";
 import { zodResolver } from "@hookform/resolvers/zod";
@@ -9,6 +9,7 @@ import { Input } from "@/components/ui/input";
 import { Badge } from "@/components/ui/badge";
 import { Skeleton } from "@/components/ui/skeleton";
 import { Switch } from "@/components/ui/switch";
+import { Progress } from "@/components/ui/progress";
 import {
   Dialog,
   DialogContent,
@@ -96,15 +97,77 @@ const supplierTypes: { value: SupplierType; label: string }[] = [
   { value: "custom", label: "Custom API" },
 ];
 
+interface SyncProgress {
+  status: "idle" | "running" | "completed" | "error";
+  totalProducts: number;
+  fetchedProducts: number;
+  savedProducts: number;
+  createdProducts: number;
+  updatedProducts: number;
+  errors: number;
+  currentPage: number;
+  startedAt?: string;
+  completedAt?: string;
+  errorMessage?: string;
+}
+
 export default function AdminSuppliersPage() {
   const { toast } = useToast();
   const [isDialogOpen, setIsDialogOpen] = useState(false);
   const [editingSupplier, setEditingSupplier] = useState<Supplier | null>(null);
   const [shopifyTestResult, setShopifyTestResult] = useState<{ success: boolean; shopName?: string; error?: string } | null>(null);
+  const [syncProgress, setSyncProgress] = useState<SyncProgress | null>(null);
+  const [isSyncing, setIsSyncing] = useState(false);
 
   const { data: suppliers, isLoading } = useQuery<Supplier[]>({
     queryKey: ["/api/admin/suppliers"],
   });
+
+  const fetchSyncProgress = useCallback(async () => {
+    try {
+      const token = localStorage.getItem("apex_token");
+      const headers: HeadersInit = {};
+      if (token) headers["Authorization"] = `Bearer ${token}`;
+      
+      const response = await fetch("/api/admin/shopify/sync/progress", { headers });
+      const result = await response.json();
+      if (result.success && result.data) {
+        setSyncProgress(result.data);
+        return result.data;
+      }
+    } catch (err) {
+      console.error("Error fetching sync progress:", err);
+    }
+    return null;
+  }, []);
+
+  useEffect(() => {
+    if (!isSyncing) return;
+    
+    const interval = setInterval(async () => {
+      const progress = await fetchSyncProgress();
+      if (progress && (progress.status === "completed" || progress.status === "error")) {
+        setIsSyncing(false);
+        queryClient.invalidateQueries({ queryKey: ["/api/admin/suppliers"] });
+        queryClient.invalidateQueries({ queryKey: ["/api/admin/products"] });
+        
+        if (progress.status === "completed") {
+          toast({
+            title: "Shopify sync complete!",
+            description: `Synced ${progress.savedProducts.toLocaleString()} products (${progress.createdProducts.toLocaleString()} new, ${progress.updatedProducts.toLocaleString()} updated, ${progress.errors} errors)`,
+          });
+        } else {
+          toast({
+            title: "Sync failed",
+            description: progress.errorMessage || "Unknown error",
+            variant: "destructive",
+          });
+        }
+      }
+    }, 2000);
+
+    return () => clearInterval(interval);
+  }, [isSyncing, fetchSyncProgress, toast]);
 
   const form = useForm<SupplierFormData>({
     resolver: zodResolver(supplierFormSchema),
@@ -205,11 +268,20 @@ export default function AdminSuppliersPage() {
     },
     onSuccess: (result) => {
       if (result.success) {
-        queryClient.invalidateQueries({ queryKey: ["/api/admin/suppliers"] });
-        queryClient.invalidateQueries({ queryKey: ["/api/admin/products"] });
+        setIsSyncing(true);
+        setSyncProgress({
+          status: "running",
+          totalProducts: 0,
+          fetchedProducts: 0,
+          savedProducts: 0,
+          createdProducts: 0,
+          updatedProducts: 0,
+          errors: 0,
+          currentPage: 0,
+        });
         toast({ 
-          title: "Shopify sync complete", 
-          description: `Synced ${result.data?.totalProducts || 0} products (${result.data?.created || 0} new, ${result.data?.updated || 0} updated)` 
+          title: "Sync started", 
+          description: "Importing products from Shopify. This may take a few minutes for large catalogs." 
         });
       } else {
         toast({ title: "Sync failed", description: result.error, variant: "destructive" });
@@ -487,7 +559,7 @@ export default function AdminSuppliersPage() {
               <Button
                 variant="outline"
                 onClick={() => shopifyTestMutation.mutate()}
-                disabled={shopifyTestMutation.isPending}
+                disabled={shopifyTestMutation.isPending || isSyncing}
                 data-testid="button-test-shopify"
               >
                 {shopifyTestMutation.isPending ? (
@@ -499,22 +571,62 @@ export default function AdminSuppliersPage() {
               </Button>
               <Button
                 onClick={() => shopifySyncMutation.mutate()}
-                disabled={shopifySyncMutation.isPending}
+                disabled={shopifySyncMutation.isPending || isSyncing}
                 className="bg-[#95BF47] hover:bg-[#7ea03b] text-white"
                 data-testid="button-sync-shopify"
               >
-                {shopifySyncMutation.isPending ? (
+                {(shopifySyncMutation.isPending || isSyncing) ? (
                   <Loader2 className="mr-2 h-4 w-4 animate-spin" />
                 ) : (
                   <RefreshCw className="mr-2 h-4 w-4" />
                 )}
-                Sync Products
+                {isSyncing ? "Syncing..." : "Sync Products"}
               </Button>
             </div>
           </div>
         </CardHeader>
-        {shopifyTestResult && (
-          <CardContent>
+        <CardContent className="space-y-4">
+          {isSyncing && syncProgress && (
+            <div className="rounded-lg border bg-muted/30 p-4 space-y-3">
+              <div className="flex items-center justify-between">
+                <div className="flex items-center gap-2">
+                  <Loader2 className="h-4 w-4 animate-spin text-[#95BF47]" />
+                  <span className="font-medium">Syncing products from Shopify...</span>
+                </div>
+                <Badge variant="outline">Page {syncProgress.currentPage}</Badge>
+              </div>
+              
+              <Progress 
+                value={syncProgress.totalProducts > 0 
+                  ? (syncProgress.savedProducts / syncProgress.totalProducts) * 100 
+                  : 0} 
+                className="h-2"
+              />
+              
+              <div className="grid grid-cols-2 md:grid-cols-4 gap-4 text-sm">
+                <div>
+                  <p className="text-muted-foreground">Total</p>
+                  <p className="font-medium">{syncProgress.totalProducts.toLocaleString()}</p>
+                </div>
+                <div>
+                  <p className="text-muted-foreground">Saved</p>
+                  <p className="font-medium text-[#95BF47]">{syncProgress.savedProducts.toLocaleString()}</p>
+                </div>
+                <div>
+                  <p className="text-muted-foreground">New</p>
+                  <p className="font-medium text-blue-500">{syncProgress.createdProducts.toLocaleString()}</p>
+                </div>
+                <div>
+                  <p className="text-muted-foreground">Errors</p>
+                  <p className={`font-medium ${syncProgress.errors > 0 ? 'text-destructive' : ''}`}>
+                    {syncProgress.errors}
+                  </p>
+                </div>
+              </div>
+            </div>
+          )}
+          
+          {shopifyTestResult && (
             <div className={`rounded-lg p-4 ${shopifyTestResult.success ? 'bg-chart-2/10 border border-chart-2/20' : 'bg-destructive/10 border border-destructive/20'}`}>
               {shopifyTestResult.success ? (
                 <div className="flex items-center gap-2">
@@ -528,8 +640,8 @@ export default function AdminSuppliersPage() {
                 </div>
               )}
             </div>
-          </CardContent>
-        )}
+          )}
+        </CardContent>
       </Card>
 
       <Card>

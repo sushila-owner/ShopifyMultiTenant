@@ -556,14 +556,36 @@ export async function registerRoutes(
     }
   });
 
+  // Get sync progress
+  app.get("/api/admin/shopify/sync/progress", authMiddleware, adminOnly, async (req: AuthRequest, res: Response) => {
+    try {
+      const { getActiveSyncProgress } = await import("./shopify");
+      const progress = getActiveSyncProgress();
+      res.json({ success: true, data: progress });
+    } catch (error: any) {
+      res.status(500).json({ success: false, error: error.message });
+    }
+  });
+
+  // Start background sync - returns immediately and syncs in background
   app.post("/api/admin/shopify/sync", authMiddleware, adminOnly, async (req: AuthRequest, res: Response) => {
     try {
-      const { getShopifyService } = await import("./shopify");
+      const { getShopifyService, getActiveSyncProgress } = await import("./shopify");
       const shopify = getShopifyService();
       if (!shopify) {
         return res.status(400).json({ 
           success: false, 
           error: "Shopify credentials not configured." 
+        });
+      }
+
+      // Check if sync is already running
+      const currentProgress = getActiveSyncProgress();
+      if (currentProgress && currentProgress.status === "running") {
+        return res.status(400).json({
+          success: false,
+          error: "A sync is already in progress. Please wait for it to complete.",
+          data: currentProgress
         });
       }
 
@@ -588,52 +610,47 @@ export async function registerRoutes(
         });
       }
 
-      // Get products from Shopify
-      const shopifyProducts = await shopify.getProducts();
-      
-      // Get existing products for this supplier
+      // Get existing products for this supplier (for update detection)
       const existingProducts = await storage.getProductsBySupplier(supplier.id);
       const existingProductIds = new Set(existingProducts.map(p => p.supplierProductId));
+      const existingProductMap = new Map(existingProducts.map(p => [p.supplierProductId, p.id]));
 
-      let created = 0;
-      let updated = 0;
-      let errors = 0;
-
-      for (const shopifyProduct of shopifyProducts) {
-        try {
-          const productData = shopify.transformToProduct(shopifyProduct, supplier.id);
-          
-          if (existingProductIds.has(shopifyProduct.id.toString())) {
-            // Update existing product
-            const existing = existingProducts.find(p => p.supplierProductId === shopifyProduct.id.toString());
-            if (existing) {
-              await storage.updateProduct(existing.id, {
-                ...productData,
-                id: undefined, // Don't update ID
-              } as any);
-              updated++;
-            }
-          } else {
-            // Create new product
-            await storage.createProduct(productData);
-            created++;
-          }
-        } catch (err: any) {
-          console.error(`Error syncing product ${shopifyProduct.id}:`, err.message);
-          errors++;
-        }
-      }
-
+      // Return immediately - sync runs in background
       res.json({ 
         success: true, 
-        data: { 
+        message: "Sync started in background. Poll /api/admin/shopify/sync/progress for updates.",
+        data: {
           supplier: supplier.name,
-          totalProducts: shopifyProducts.length,
-          created, 
-          updated, 
-          errors 
-        } 
+          existingProducts: existingProducts.length
+        }
       });
+
+      // Run sync in background (don't await)
+      const supplierId = supplier.id;
+      shopify.syncProductsStreaming(
+        supplierId,
+        existingProductIds,
+        async (productData, isUpdate) => {
+          if (isUpdate) {
+            const existingId = existingProductMap.get(productData.supplierProductId!);
+            if (existingId) {
+              await storage.updateProduct(existingId, {
+                ...productData,
+                id: undefined,
+              } as any);
+            }
+          } else {
+            const created = await storage.createProduct(productData);
+            existingProductMap.set(productData.supplierProductId!, created.id);
+          }
+        },
+        (progress) => {
+          console.log(`[Sync Progress] ${progress.savedProducts}/${progress.totalProducts} products (${progress.createdProducts} new, ${progress.updatedProducts} updated, ${progress.errors} errors)`);
+        }
+      ).catch(err => {
+        console.error("[Shopify Sync] Background sync failed:", err);
+      });
+
     } catch (error: any) {
       res.status(500).json({ success: false, error: error.message });
     }
