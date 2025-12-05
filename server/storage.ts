@@ -315,6 +315,67 @@ export class DatabaseStorage implements IStorage {
     return true;
   }
 
+  async batchUpsertProducts(
+    productsData: InsertProduct[], 
+    existingProductMap: Map<string, number>
+  ): Promise<{ created: number; updated: number; errors: number }> {
+    let created = 0;
+    let updated = 0;
+    let errors = 0;
+
+    const toCreate: InsertProduct[] = [];
+    const toUpdate: { id: number; data: InsertProduct }[] = [];
+
+    for (const productData of productsData) {
+      const existingId = existingProductMap.get(productData.supplierProductId!);
+      if (existingId) {
+        toUpdate.push({ id: existingId, data: productData });
+      } else {
+        toCreate.push(productData);
+      }
+    }
+
+    // Batch insert new products
+    if (toCreate.length > 0) {
+      try {
+        const inserted = await db.insert(products).values(toCreate).returning();
+        for (const p of inserted) {
+          if (p.supplierProductId) {
+            existingProductMap.set(p.supplierProductId, p.id);
+          }
+        }
+        created = inserted.length;
+      } catch (err: any) {
+        console.error(`[BatchUpsert] Batch insert failed, falling back to individual inserts:`, err.message);
+        for (const productData of toCreate) {
+          try {
+            const [p] = await db.insert(products).values(productData).returning();
+            if (p.supplierProductId) {
+              existingProductMap.set(p.supplierProductId, p.id);
+            }
+            created++;
+          } catch (e: any) {
+            console.error(`[BatchUpsert] Failed to insert ${productData.title}:`, e.message);
+            errors++;
+          }
+        }
+      }
+    }
+
+    // Update existing products (one at a time since batch update is complex)
+    for (const { id, data } of toUpdate) {
+      try {
+        await db.update(products).set({ ...data, id: undefined, updatedAt: new Date() } as any).where(eq(products.id, id));
+        updated++;
+      } catch (e: any) {
+        console.error(`[BatchUpsert] Failed to update product ${id}:`, e.message);
+        errors++;
+      }
+    }
+
+    return { created, updated, errors };
+  }
+
   async getGlobalProducts(): Promise<Product[]> {
     return db.select().from(products)
       .where(and(eq(products.isGlobal, true), isNull(products.merchantId)))

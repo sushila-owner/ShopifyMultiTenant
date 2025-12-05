@@ -227,6 +227,102 @@ export class ShopifyService {
     return this.syncProgress;
   }
 
+  async syncProductsBatch(
+    supplierId: number,
+    existingProductMap: Map<string, number>,
+    onSaveBatch: (products: InsertProduct[]) => Promise<{ created: number; updated: number; errors: number }>,
+    onProgress?: (progress: SyncProgress) => void
+  ): Promise<SyncProgress> {
+    this.syncProgress = {
+      status: "running",
+      totalProducts: 0,
+      fetchedProducts: 0,
+      savedProducts: 0,
+      createdProducts: 0,
+      updatedProducts: 0,
+      errors: 0,
+      currentPage: 0,
+      startedAt: new Date(),
+    };
+
+    try {
+      // Get total count first
+      try {
+        this.syncProgress.totalProducts = await this.getProductCount();
+        console.log(`[Shopify] Starting BATCH sync of ${this.syncProgress.totalProducts} products...`);
+      } catch (e) {
+        console.log(`[Shopify] Could not get product count, syncing without total...`);
+      }
+
+      let pageInfo: string | null = null;
+      const limit = 250;
+
+      do {
+        const endpoint = pageInfo 
+          ? `/products.json?limit=${limit}&page_info=${pageInfo}`
+          : `/products.json?limit=${limit}`;
+        
+        const { data, linkHeader } = await this.fetch<ShopifyProductsResponse>(endpoint);
+        this.syncProgress.currentPage++;
+        this.syncProgress.fetchedProducts += data.products.length;
+        
+        console.log(`[Shopify] Page ${this.syncProgress.currentPage}: Fetched ${data.products.length} products (${this.syncProgress.fetchedProducts}/${this.syncProgress.totalProducts || '?'})`);
+
+        // Transform all products in this page
+        const productsToSave: InsertProduct[] = [];
+        for (const shopifyProduct of data.products) {
+          const productData = this.transformToProduct(shopifyProduct, supplierId);
+          productsToSave.push(productData);
+        }
+
+        // Batch save entire page at once
+        try {
+          const result = await onSaveBatch(productsToSave);
+          this.syncProgress.savedProducts += result.created + result.updated;
+          this.syncProgress.createdProducts += result.created;
+          this.syncProgress.updatedProducts += result.updated;
+          this.syncProgress.errors += result.errors;
+        } catch (err: any) {
+          console.error(`[Shopify] Batch save failed for page ${this.syncProgress.currentPage}:`, err.message);
+          this.syncProgress.errors += data.products.length;
+        }
+
+        // Report progress after each page
+        if (onProgress) {
+          onProgress({ ...this.syncProgress });
+        }
+
+        console.log(`[Shopify] Page ${this.syncProgress.currentPage}: Saved ${this.syncProgress.savedProducts} products total (${this.syncProgress.createdProducts} new, ${this.syncProgress.updatedProducts} updated, ${this.syncProgress.errors} errors)`);
+
+        // Get next page
+        pageInfo = this.parseNextPageInfo(linkHeader);
+        
+        // Rate limiting: Shopify allows 2 requests per second
+        if (pageInfo) {
+          await new Promise(resolve => setTimeout(resolve, 500));
+        }
+      } while (pageInfo);
+
+      this.syncProgress.status = "completed";
+      this.syncProgress.completedAt = new Date();
+      
+      const duration = this.syncProgress.completedAt.getTime() - this.syncProgress.startedAt!.getTime();
+      console.log(`[Shopify] BATCH Sync complete in ${Math.round(duration / 1000)}s: ${this.syncProgress.savedProducts} saved, ${this.syncProgress.createdProducts} created, ${this.syncProgress.updatedProducts} updated, ${this.syncProgress.errors} errors`);
+
+    } catch (error: any) {
+      this.syncProgress.status = "error";
+      this.syncProgress.errorMessage = error.message;
+      this.syncProgress.completedAt = new Date();
+      console.error(`[Shopify] Sync failed:`, error.message);
+    }
+
+    if (onProgress) {
+      onProgress({ ...this.syncProgress });
+    }
+
+    return this.syncProgress;
+  }
+
   transformToProduct(shopifyProduct: ShopifyProduct, supplierId: number): InsertProduct {
     const primaryVariant = shopifyProduct.variants[0];
     const supplierPrice = parseFloat(primaryVariant?.price || "0");

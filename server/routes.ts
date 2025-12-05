@@ -612,37 +612,30 @@ export async function registerRoutes(
 
       // Get existing products for this supplier (for update detection)
       const existingProducts = await storage.getProductsBySupplier(supplier.id);
-      const existingProductIds = new Set(existingProducts.map(p => p.supplierProductId));
-      const existingProductMap = new Map(existingProducts.map(p => [p.supplierProductId, p.id]));
+      const existingProductMap = new Map<string, number>();
+      for (const p of existingProducts) {
+        if (p.supplierProductId) {
+          existingProductMap.set(p.supplierProductId, p.id);
+        }
+      }
 
       // Return immediately - sync runs in background
       res.json({ 
         success: true, 
-        message: "Sync started in background. Poll /api/admin/shopify/sync/progress for updates.",
+        message: "Sync started in background (BATCH mode). Poll /api/admin/shopify/sync/progress for updates.",
         data: {
           supplier: supplier.name,
           existingProducts: existingProducts.length
         }
       });
 
-      // Run sync in background (don't await)
+      // Run BATCH sync in background (much faster - inserts 250 products per batch)
       const supplierId = supplier.id;
-      shopify.syncProductsStreaming(
+      shopify.syncProductsBatch(
         supplierId,
-        existingProductIds,
-        async (productData, isUpdate) => {
-          if (isUpdate) {
-            const existingId = existingProductMap.get(productData.supplierProductId!);
-            if (existingId) {
-              await storage.updateProduct(existingId, {
-                ...productData,
-                id: undefined,
-              } as any);
-            }
-          } else {
-            const created = await storage.createProduct(productData);
-            existingProductMap.set(productData.supplierProductId!, created.id);
-          }
+        existingProductMap,
+        async (productsData) => {
+          return await storage.batchUpsertProducts(productsData, existingProductMap);
         },
         (progress) => {
           console.log(`[Sync Progress] ${progress.savedProducts}/${progress.totalProducts} products (${progress.createdProducts} new, ${progress.updatedProducts} updated, ${progress.errors} errors)`);
