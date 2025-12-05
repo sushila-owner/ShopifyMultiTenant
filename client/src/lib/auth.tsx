@@ -8,6 +8,9 @@ interface AuthContextType {
   isLoading: boolean;
   login: (email: string, password: string) => Promise<{ success: boolean; error?: string }>;
   register: (data: { email: string; password: string; name: string; businessName: string }) => Promise<{ success: boolean; error?: string }>;
+  requestPhoneOtp: (phone: string) => Promise<{ success: boolean; error?: string }>;
+  verifyPhoneOtp: (phone: string, code: string, name?: string, businessName?: string) => Promise<{ success: boolean; error?: string; isNewUser?: boolean }>;
+  loginWithGoogle: (credential: string, name?: string, businessName?: string) => Promise<{ success: boolean; error?: string; isNewUser?: boolean }>;
   logout: () => void;
   isAdmin: boolean;
   isMerchant: boolean;
@@ -76,6 +79,65 @@ export function AuthProvider({ children }: { children: ReactNode }) {
     }
   };
 
+  const requestPhoneOtp = async (phone: string) => {
+    try {
+      const res = await fetch("/api/auth/phone/request-otp", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ phone }),
+      });
+      const data = await res.json();
+      if (data.success) {
+        return { success: true };
+      }
+      return { success: false, error: data.error || "Failed to send OTP" };
+    } catch {
+      return { success: false, error: "Network error" };
+    }
+  };
+
+  const verifyPhoneOtp = async (phone: string, code: string, name?: string, businessName?: string) => {
+    try {
+      const res = await fetch("/api/auth/phone/verify", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ phone, code, name, businessName }),
+      });
+      const data = await res.json();
+      if (data.success && data.data) {
+        const userData = { ...data.data.user, merchant: data.data.merchant };
+        localStorage.setItem("apex_token", data.data.token);
+        localStorage.setItem("apex_user", JSON.stringify(userData));
+        setUser(userData);
+        return { success: true, isNewUser: data.data.isNewUser };
+      }
+      return { success: false, error: data.error || "Verification failed" };
+    } catch {
+      return { success: false, error: "Network error" };
+    }
+  };
+
+  const loginWithGoogle = async (credential: string, name?: string, businessName?: string) => {
+    try {
+      const res = await fetch("/api/auth/google", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ credential, name, businessName }),
+      });
+      const data = await res.json();
+      if (data.success && data.data) {
+        const userData = { ...data.data.user, merchant: data.data.merchant };
+        localStorage.setItem("apex_token", data.data.token);
+        localStorage.setItem("apex_user", JSON.stringify(userData));
+        setUser(userData);
+        return { success: true, isNewUser: data.data.isNewUser };
+      }
+      return { success: false, error: data.error || "Google login failed" };
+    } catch {
+      return { success: false, error: "Network error" };
+    }
+  };
+
   const logout = () => {
     localStorage.removeItem("apex_token");
     localStorage.removeItem("apex_user");
@@ -89,6 +151,9 @@ export function AuthProvider({ children }: { children: ReactNode }) {
         isLoading,
         login,
         register,
+        requestPhoneOtp,
+        verifyPhoneOtp,
+        loginWithGoogle,
         logout,
         isAdmin: user?.role === "admin",
         isMerchant: user?.role === "merchant",

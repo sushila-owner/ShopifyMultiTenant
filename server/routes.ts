@@ -6,6 +6,9 @@ import jwt from "jsonwebtoken";
 import {
   loginSchema,
   registerSchema,
+  phoneLoginRequestSchema,
+  phoneVerifySchema,
+  googleAuthSchema,
   insertSupplierSchema,
   insertProductSchema,
   insertCustomerSchema,
@@ -15,7 +18,10 @@ import {
 } from "@shared/schema";
 import { randomUUID } from "crypto";
 
-const JWT_SECRET = process.env.SESSION_SECRET || "apex-mart-secret-key";
+const JWT_SECRET = process.env.SESSION_SECRET;
+if (!JWT_SECRET) {
+  console.error("FATAL: SESSION_SECRET environment variable is required");
+}
 const JWT_EXPIRES_IN = "7d";
 
 interface AuthRequest extends Request {
@@ -212,6 +218,272 @@ export async function registerRoutes(
       });
     } catch (error: any) {
       res.status(400).json({ success: false, error: error.message });
+    }
+  });
+
+  // ==================== PHONE OTP AUTH ====================
+  app.post("/api/auth/phone/request-otp", async (req: Request, res: Response) => {
+    try {
+      const { phone } = phoneLoginRequestSchema.parse(req.body);
+      
+      const code = Math.floor(100000 + Math.random() * 900000).toString();
+      const hashedCode = await bcrypt.hash(code, 10);
+      const expiresAt = new Date(Date.now() + 10 * 60 * 1000);
+      
+      await storage.createOtp({
+        identifier: phone,
+        type: "phone_login",
+        code: hashedCode,
+        expiresAt,
+      });
+
+      console.log(`[OTP] Code for ${phone}: ${code}`);
+
+      res.json({
+        success: true,
+        message: "OTP sent successfully",
+        data: { phone, expiresIn: 600 },
+      });
+    } catch (error: any) {
+      console.error("OTP request error:", error);
+      res.status(400).json({ success: false, error: error.message || "Failed to send OTP" });
+    }
+  });
+
+  app.post("/api/auth/phone/verify", async (req: Request, res: Response) => {
+    try {
+      const { phone, code, name, businessName } = phoneVerifySchema.parse(req.body);
+      
+      const otpRecord = await storage.getOtp(phone, "phone_login");
+      if (!otpRecord) {
+        return res.status(400).json({ success: false, error: "Invalid or expired OTP" });
+      }
+
+      if ((otpRecord.attempts ?? 0) >= 5) {
+        await storage.deleteOtp(otpRecord.id);
+        return res.status(400).json({ success: false, error: "Too many attempts. Please request a new code." });
+      }
+
+      const isValidCode = await bcrypt.compare(code, otpRecord.code);
+      if (!isValidCode) {
+        await storage.incrementOtpAttempts(otpRecord.id);
+        return res.status(400).json({ success: false, error: "Invalid code" });
+      }
+
+      await storage.markOtpVerified(otpRecord.id);
+
+      let user = await storage.getUserByPhone(phone);
+      let merchant = null;
+      let isNewUser = false;
+
+      if (!user) {
+        isNewUser = true;
+        const userName = name || `User ${phone.slice(-4)}`;
+        const userBusinessName = businessName || `${userName}'s Store`;
+
+        user = await storage.createUser({
+          phone,
+          name: userName,
+          role: "merchant",
+          authProvider: "phone",
+          isActive: true,
+          isPhoneVerified: true,
+          phoneVerifiedAt: new Date(),
+          permissions: [],
+        });
+
+        const freePlan = await storage.getPlanByName("free");
+        const trialEnd = new Date();
+        trialEnd.setDate(trialEnd.getDate() + 14);
+
+        merchant = await storage.createMerchant({
+          businessName: userBusinessName,
+          ownerEmail: `${phone}@phone.apex`,
+          ownerId: user.id,
+          subscriptionPlanId: freePlan?.id,
+          subscriptionStatus: "trial",
+          productLimit: freePlan?.productLimit || 25,
+          trialEndsAt: trialEnd,
+          settings: {
+            branding: { companyName: userBusinessName },
+            notifications: { emailOnOrder: true, emailOnLowStock: true },
+            defaultPricingRule: { type: "percentage", value: 20 },
+            autoFulfillment: false,
+            autoSyncInventory: true,
+          },
+          isActive: true,
+        });
+
+        await storage.updateUser(user.id, { merchantId: merchant.id });
+        user = { ...user, merchantId: merchant.id };
+
+        if (freePlan) {
+          const now = new Date();
+          const periodEnd = new Date(now);
+          periodEnd.setMonth(periodEnd.getMonth() + 1);
+          await storage.createSubscription({
+            merchantId: merchant.id,
+            planId: freePlan.id,
+            status: "trial",
+            billingInterval: "monthly",
+            currentPeriodStart: now,
+            currentPeriodEnd: periodEnd,
+            trialStart: now,
+            trialEnd: trialEnd,
+          });
+        }
+      } else {
+        if (user.merchantId) {
+          merchant = await storage.getMerchant(user.merchantId);
+        }
+        await storage.updateUser(user.id, { 
+          lastLoginAt: new Date(),
+          isPhoneVerified: true,
+          phoneVerifiedAt: new Date(),
+        });
+      }
+
+      const { password: _, ...userWithoutPassword } = user;
+      const token = generateToken(userWithoutPassword);
+
+      res.json({
+        success: true,
+        data: {
+          user: userWithoutPassword,
+          merchant,
+          token,
+          isNewUser,
+        },
+      });
+    } catch (error: any) {
+      console.error("Phone verify error:", error);
+      res.status(400).json({ success: false, error: error.message || "Verification failed" });
+    }
+  });
+
+  // ==================== GOOGLE OAUTH ====================
+  app.post("/api/auth/google", async (req: Request, res: Response) => {
+    try {
+      const { credential, name: providedName, businessName: providedBusinessName } = googleAuthSchema.parse(req.body);
+      
+      const googleClientId = process.env.GOOGLE_CLIENT_ID;
+      if (!googleClientId) {
+        return res.status(500).json({ success: false, error: "Google OAuth not configured" });
+      }
+
+      const verifyResponse = await fetch(`https://oauth2.googleapis.com/tokeninfo?id_token=${credential}`);
+      if (!verifyResponse.ok) {
+        return res.status(400).json({ success: false, error: "Invalid Google token" });
+      }
+      
+      const payload = await verifyResponse.json();
+      
+      if (payload.aud !== googleClientId) {
+        return res.status(400).json({ success: false, error: "Token not issued for this application" });
+      }
+      
+      const { sub: googleId, email, name: googleName, picture } = payload;
+      
+      if (!googleId || !email) {
+        return res.status(400).json({ success: false, error: "Invalid Google token" });
+      }
+
+      let user = await storage.getUserByGoogleId(googleId);
+      let merchant = null;
+      let isNewUser = false;
+
+      if (!user) {
+        user = await storage.getUserByEmail(email);
+        
+        if (user) {
+          await storage.updateUser(user.id, { 
+            googleId,
+            avatar: picture || user.avatar,
+            isEmailVerified: true,
+            emailVerifiedAt: new Date(),
+          });
+        } else {
+          isNewUser = true;
+          const userName = providedName || googleName || email.split('@')[0];
+          const userBusinessName = providedBusinessName || `${userName}'s Store`;
+
+          user = await storage.createUser({
+            email,
+            name: userName,
+            role: "merchant",
+            authProvider: "google",
+            googleId,
+            avatar: picture,
+            isActive: true,
+            isEmailVerified: true,
+            emailVerifiedAt: new Date(),
+            permissions: [],
+          });
+
+          const freePlan = await storage.getPlanByName("free");
+          const trialEnd = new Date();
+          trialEnd.setDate(trialEnd.getDate() + 14);
+
+          merchant = await storage.createMerchant({
+            businessName: userBusinessName,
+            ownerEmail: email,
+            ownerId: user.id,
+            subscriptionPlanId: freePlan?.id,
+            subscriptionStatus: "trial",
+            productLimit: freePlan?.productLimit || 25,
+            trialEndsAt: trialEnd,
+            settings: {
+              branding: { companyName: userBusinessName },
+              notifications: { emailOnOrder: true, emailOnLowStock: true },
+              defaultPricingRule: { type: "percentage", value: 20 },
+              autoFulfillment: false,
+              autoSyncInventory: true,
+            },
+            isActive: true,
+          });
+
+          await storage.updateUser(user.id, { merchantId: merchant.id });
+          user = { ...user, merchantId: merchant.id };
+
+          if (freePlan) {
+            const now = new Date();
+            const periodEnd = new Date(now);
+            periodEnd.setMonth(periodEnd.getMonth() + 1);
+            await storage.createSubscription({
+              merchantId: merchant.id,
+              planId: freePlan.id,
+              status: "trial",
+              billingInterval: "monthly",
+              currentPeriodStart: now,
+              currentPeriodEnd: periodEnd,
+              trialStart: now,
+              trialEnd: trialEnd,
+            });
+          }
+        }
+      }
+
+      if (!merchant && user.merchantId) {
+        merchant = await storage.getMerchant(user.merchantId);
+      }
+
+      await storage.updateUser(user.id, { lastLoginAt: new Date() });
+
+      const { password: _, ...userWithoutPassword } = user;
+      const token = generateToken(userWithoutPassword);
+
+      res.json({
+        success: true,
+        data: {
+          user: userWithoutPassword,
+          merchant,
+          token,
+          isNewUser,
+        },
+      });
+    } catch (error: any) {
+      console.error("Google auth error:", error);
+      res.status(400).json({ success: false, error: error.message || "Google authentication failed" });
     }
   });
 
