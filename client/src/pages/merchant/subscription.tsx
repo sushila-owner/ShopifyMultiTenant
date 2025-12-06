@@ -6,6 +6,8 @@ import { Skeleton } from "@/components/ui/skeleton";
 import { useQuery, useMutation } from "@tanstack/react-query";
 import { useToast } from "@/hooks/use-toast";
 import { queryClient, apiRequest } from "@/lib/queryClient";
+import { useLocation } from "wouter";
+import { useEffect } from "react";
 import {
   Check,
   CreditCard,
@@ -22,6 +24,8 @@ import {
   Crown,
   Star,
   TrendingUp,
+  ExternalLink,
+  Loader2,
 } from "lucide-react";
 import type { Plan, Subscription } from "@shared/schema";
 
@@ -33,11 +37,64 @@ interface SubscriptionData {
   freeForLifeThreshold: number;
 }
 
+interface StripePlan {
+  id: string;
+  name: string;
+  description: string;
+  slug: string;
+  productLimit: number;
+  features: Record<string, string>;
+  monthlyPriceId?: string;
+  monthlyAmount: number;
+  yearlyPriceId?: string;
+  yearlyAmount: number;
+}
+
 export default function SubscriptionPage() {
   const { toast } = useToast();
+  const [location] = useLocation();
   
+  // Check for success/canceled URL params
+  useEffect(() => {
+    const params = new URLSearchParams(window.location.search);
+    if (params.get('success') === 'true') {
+      toast({
+        title: "Subscription Updated",
+        description: "Your subscription has been updated successfully!",
+      });
+      // Clean up URL
+      window.history.replaceState({}, '', '/merchant/subscription');
+      // Refresh subscription data
+      queryClient.invalidateQueries({ queryKey: ["/api/stripe/subscription"] });
+      queryClient.invalidateQueries({ queryKey: ["/api/merchant/subscription"] });
+    } else if (params.get('canceled') === 'true') {
+      toast({
+        title: "Checkout Canceled",
+        description: "You can upgrade anytime when you're ready.",
+        variant: "destructive",
+      });
+      window.history.replaceState({}, '', '/merchant/subscription');
+    }
+  }, [location, toast]);
+
   const { data, isLoading } = useQuery<{ success: boolean; data: SubscriptionData }>({
     queryKey: ["/api/merchant/subscription"],
+  });
+
+  const { data: stripePlansData, isLoading: stripePlansLoading } = useQuery<{ success: boolean; data: StripePlan[] }>({
+    queryKey: ["/api/stripe/plans"],
+  });
+
+  const { data: stripeSubData, isLoading: stripeSubLoading } = useQuery<{ 
+    success: boolean; 
+    data: { 
+      merchant: any; 
+      subscription: any; 
+      plan: any; 
+      stripeSubscription: any;
+    } 
+  }>({
+    queryKey: ["/api/stripe/subscription"],
   });
 
   const { data: statsData, isLoading: statsLoading } = useQuery<{
@@ -51,26 +108,39 @@ export default function SubscriptionPage() {
     queryKey: ["/api/merchant/stats"],
   });
 
-  const upgradeMutation = useMutation({
-    mutationFn: async ({ planSlug, billingInterval }: { planSlug: string; billingInterval: string }) => {
-      const response = await apiRequest("POST", "/api/merchant/subscription/upgrade", {
-        planSlug,
-        billingInterval,
-      });
+  const checkoutMutation = useMutation({
+    mutationFn: async ({ priceId }: { priceId: string }) => {
+      const response = await apiRequest("POST", "/api/stripe/checkout", { priceId });
       return response.json();
     },
-    onSuccess: () => {
-      queryClient.invalidateQueries({ queryKey: ["/api/merchant/subscription"] });
-      queryClient.invalidateQueries({ queryKey: ["/api/merchant/stats"] });
-      toast({
-        title: "Plan Upgraded",
-        description: "Your subscription has been updated successfully.",
-      });
+    onSuccess: (data) => {
+      if (data.data?.url) {
+        window.location.href = data.data.url;
+      }
     },
     onError: (error: any) => {
       toast({
-        title: "Upgrade Failed",
-        description: error.message || "Failed to upgrade plan",
+        title: "Checkout Failed",
+        description: error.message || "Failed to start checkout",
+        variant: "destructive",
+      });
+    },
+  });
+
+  const portalMutation = useMutation({
+    mutationFn: async () => {
+      const response = await apiRequest("POST", "/api/stripe/portal", {});
+      return response.json();
+    },
+    onSuccess: (data) => {
+      if (data.data?.url) {
+        window.location.href = data.data.url;
+      }
+    },
+    onError: (error: any) => {
+      toast({
+        title: "Portal Error",
+        description: error.message || "Failed to open billing portal",
         variant: "destructive",
       });
     },
@@ -78,9 +148,11 @@ export default function SubscriptionPage() {
 
   const subscription = data?.data?.subscription;
   const currentPlan = data?.data?.currentPlan;
-  const availablePlans = data?.data?.availablePlans || [];
+  const stripePlans = stripePlansData?.data || [];
   const freeForLifeThreshold = data?.data?.freeForLifeThreshold || 5000000;
   const stats = statsData?.data;
+  const stripeSubscription = stripeSubData?.data?.stripeSubscription;
+  const merchantStripeData = stripeSubData?.data?.merchant;
 
   const lifetimeSales = subscription?.lifetimeSales || 0;
   const progressToFreeForLife = Math.min((lifetimeSales / freeForLifeThreshold) * 100, 100);
@@ -91,26 +163,22 @@ export default function SubscriptionPage() {
   };
 
   const getPlanIcon = (planName: string) => {
-    switch (planName) {
-      case "free":
-        return <Package className="h-7 w-7" />;
-      case "starter":
-        return <Zap className="h-7 w-7" />;
-      case "growth":
-        return <TrendingUp className="h-7 w-7" />;
-      case "professional":
-        return <Star className="h-7 w-7" />;
-      case "millionaire":
-        return <Crown className="h-7 w-7" />;
-      case "free_for_life":
-        return <Trophy className="h-7 w-7" />;
-      default:
-        return <Package className="h-7 w-7" />;
-    }
+    const name = planName.toLowerCase();
+    if (name.includes("free") && !name.includes("life")) return <Package className="h-7 w-7" />;
+    if (name.includes("starter")) return <Zap className="h-7 w-7" />;
+    if (name.includes("growth")) return <TrendingUp className="h-7 w-7" />;
+    if (name.includes("professional")) return <Star className="h-7 w-7" />;
+    if (name.includes("millionaire")) return <Crown className="h-7 w-7" />;
+    if (name.includes("life")) return <Trophy className="h-7 w-7" />;
+    return <Package className="h-7 w-7" />;
   };
 
-  const handleUpgrade = (planSlug: string) => {
-    upgradeMutation.mutate({ planSlug, billingInterval: "monthly" });
+  const handleCheckout = (priceId: string) => {
+    checkoutMutation.mutate({ priceId });
+  };
+
+  const handleManageSubscription = () => {
+    portalMutation.mutate();
   };
 
   if (isLoading) {
@@ -195,10 +263,10 @@ export default function SubscriptionPage() {
               <CardDescription>Your subscription details</CardDescription>
             </div>
             <Badge 
-              variant={subscription?.status === "active" || subscription?.status === "free_for_life" ? "default" : "outline"}
+              variant={stripeSubscription?.status === "active" || subscription?.status === "active" || subscription?.status === "free_for_life" ? "default" : "outline"}
               className={subscription?.status === "free_for_life" ? "bg-amber-500 text-amber-950" : ""}
             >
-              {subscription?.status || "trial"}
+              {stripeSubscription?.status || subscription?.status || "trial"}
             </Badge>
           </div>
         </CardHeader>
@@ -208,7 +276,7 @@ export default function SubscriptionPage() {
               {getPlanIcon(currentPlan?.name || "free")}
             </div>
             <div>
-              <h3 className="text-2xl font-bold">{currentPlan?.displayName || "Free"}</h3>
+              <h3 className="text-2xl font-bold">{currentPlan?.displayName || "Free Trial"}</h3>
               <p className="text-muted-foreground">{currentPlan?.description}</p>
             </div>
             <div className="ml-auto text-right">
@@ -306,109 +374,113 @@ export default function SubscriptionPage() {
         </CardContent>
       </Card>
 
-      {/* Available Plans */}
+      {/* Stripe Plans */}
       <div>
         <h2 className="text-xl font-semibold mb-4">Available Plans</h2>
-        <div className="grid gap-6 md:grid-cols-2 lg:grid-cols-3 xl:grid-cols-5">
-          {availablePlans.map((plan) => {
-            const isCurrentPlan = plan.id === currentPlan?.id;
-            return (
-              <Card
-                key={plan.id}
-                className={`relative ${plan.isPopular ? "border-primary shadow-lg" : ""} ${
-                  isCurrentPlan ? "bg-primary/5 border-primary/50" : ""
-                }`}
-                data-testid={`card-plan-${plan.slug}`}
-              >
-                {plan.badge && (
-                  <div className="absolute -top-3 left-1/2 -translate-x-1/2">
-                    <Badge 
-                      className={
-                        plan.badge === "POPULAR" 
-                          ? "bg-primary text-primary-foreground" 
-                          : plan.badge === "BEST VALUE"
-                            ? "bg-amber-500 text-amber-950"
-                            : "bg-chart-2 text-white"
-                      }
-                    >
-                      {plan.badge}
-                    </Badge>
-                  </div>
-                )}
-                {plan.isPopular && !plan.badge && (
-                  <div className="absolute -top-3 left-1/2 -translate-x-1/2">
-                    <Badge className="bg-primary text-primary-foreground">Most Popular</Badge>
-                  </div>
-                )}
-                <CardHeader className="text-center pt-6">
-                  <div className="flex justify-center mb-2 text-primary">
-                    {getPlanIcon(plan.name)}
-                  </div>
-                  <CardTitle>{plan.displayName}</CardTitle>
-                  <CardDescription className="min-h-[40px]">{plan.description}</CardDescription>
-                  <div className="pt-4">
-                    <span className="text-4xl font-bold">{formatCurrency(plan.monthlyPrice)}</span>
-                    <span className="text-muted-foreground">/month</span>
-                  </div>
-                  {plan.yearlyPrice > 0 && (
-                    <p className="text-xs text-muted-foreground mt-1">
-                      or {formatCurrency(plan.yearlyPrice)}/year (save 17%)
-                    </p>
+        {stripePlansLoading ? (
+          <div className="grid gap-6 md:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4">
+            {[1, 2, 3, 4].map((i) => (
+              <Skeleton key={i} className="h-80" />
+            ))}
+          </div>
+        ) : (
+          <div className="grid gap-6 md:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4">
+            {stripePlans.filter(p => p.monthlyAmount > 0).map((plan) => {
+              const isPopular = plan.slug === 'growth' || plan.slug === 'professional';
+              const currentSlug = currentPlan?.slug || currentPlan?.name?.toLowerCase();
+              const isCurrentPlan = plan.slug === currentSlug;
+              
+              return (
+                <Card
+                  key={plan.id}
+                  className={`relative ${isPopular ? "border-primary shadow-lg" : ""} ${
+                    isCurrentPlan ? "bg-primary/5 border-primary/50" : ""
+                  }`}
+                  data-testid={`card-plan-${plan.slug}`}
+                >
+                  {isPopular && (
+                    <div className="absolute -top-3 left-1/2 -translate-x-1/2">
+                      <Badge className="bg-primary text-primary-foreground">Popular</Badge>
+                    </div>
                   )}
-                </CardHeader>
-                <CardContent>
-                  <ul className="space-y-2 mb-6 text-sm">
-                    {(plan.features as string[] || []).slice(0, 6).map((feature, i) => (
-                      <li key={i} className="flex items-start gap-2">
+                  <CardHeader className="text-center pt-6">
+                    <div className="flex justify-center mb-2 text-primary">
+                      {getPlanIcon(plan.name)}
+                    </div>
+                    <CardTitle>{plan.name}</CardTitle>
+                    <CardDescription className="min-h-[40px]">{plan.description}</CardDescription>
+                    <div className="pt-4">
+                      <span className="text-4xl font-bold">{formatCurrency(plan.monthlyAmount)}</span>
+                      <span className="text-muted-foreground">/month</span>
+                    </div>
+                    {plan.yearlyAmount > 0 && (
+                      <p className="text-xs text-muted-foreground mt-1">
+                        or {formatCurrency(plan.yearlyAmount)}/year (save 17%)
+                      </p>
+                    )}
+                  </CardHeader>
+                  <CardContent>
+                    <ul className="space-y-2 mb-6 text-sm">
+                      <li className="flex items-start gap-2">
                         <Check className="h-4 w-4 text-chart-2 flex-shrink-0 mt-0.5" />
-                        <span>{feature}</span>
+                        <span>
+                          {plan.productLimit === -1 ? "Unlimited products" : `Up to ${plan.productLimit.toLocaleString()} products`}
+                        </span>
                       </li>
-                    ))}
-                  </ul>
-                  
-                  {/* Special Feature Icons */}
-                  <div className="flex items-center justify-center gap-3 py-3 mb-4 border-t border-b">
-                    {plan.hasAiAds && (
-                      <div className="flex items-center gap-1" title="AI Ads">
-                        <Sparkles className="h-4 w-4 text-primary" />
-                        <span className="text-xs">{plan.dailyAdsLimit === -1 ? "∞" : plan.dailyAdsLimit}</span>
-                      </div>
+                      {plan.features.hasAiAds === 'true' && (
+                        <li className="flex items-start gap-2">
+                          <Check className="h-4 w-4 text-chart-2 flex-shrink-0 mt-0.5" />
+                          <span>AI-generated ads</span>
+                        </li>
+                      )}
+                      {plan.features.hasVideoAds === 'true' && (
+                        <li className="flex items-start gap-2">
+                          <Check className="h-4 w-4 text-chart-2 flex-shrink-0 mt-0.5" />
+                          <span>Video ad generation</span>
+                        </li>
+                      )}
+                      {plan.features.isWhiteLabel === 'true' && (
+                        <li className="flex items-start gap-2">
+                          <Check className="h-4 w-4 text-chart-2 flex-shrink-0 mt-0.5" />
+                          <span>White-label branding</span>
+                        </li>
+                      )}
+                      {plan.features.hasVipSupport === 'true' && (
+                        <li className="flex items-start gap-2">
+                          <Check className="h-4 w-4 text-chart-2 flex-shrink-0 mt-0.5" />
+                          <span>VIP Support</span>
+                        </li>
+                      )}
+                    </ul>
+                    
+                    {isCurrentPlan ? (
+                      <Button variant="outline" className="w-full" disabled>
+                        Current Plan
+                      </Button>
+                    ) : (
+                      <Button
+                        variant={isPopular ? "default" : "outline"}
+                        className="w-full gap-2"
+                        onClick={() => plan.monthlyPriceId && handleCheckout(plan.monthlyPriceId)}
+                        disabled={checkoutMutation.isPending || !plan.monthlyPriceId}
+                        data-testid={`button-select-${plan.slug}`}
+                      >
+                        {checkoutMutation.isPending ? (
+                          <Loader2 className="h-4 w-4 animate-spin" />
+                        ) : (
+                          <>
+                            Subscribe
+                            <ArrowRight className="h-4 w-4" />
+                          </>
+                        )}
+                      </Button>
                     )}
-                    {plan.hasVideoAds && (
-                      <Video className="h-4 w-4 text-primary" title="Video Ads" />
-                    )}
-                    {plan.isWhiteLabel && (
-                      <Palette className="h-4 w-4 text-primary" title="White-Label" />
-                    )}
-                    {plan.hasVipSupport && (
-                      <HeadphonesIcon className="h-4 w-4 text-primary" title="VIP Support" />
-                    )}
-                    {!plan.hasAiAds && !plan.hasVideoAds && !plan.isWhiteLabel && !plan.hasVipSupport && (
-                      <span className="text-xs text-muted-foreground">Basic features</span>
-                    )}
-                  </div>
-
-                  {isCurrentPlan ? (
-                    <Button variant="outline" className="w-full" disabled>
-                      Current Plan
-                    </Button>
-                  ) : (
-                    <Button
-                      variant={plan.isPopular ? "default" : "outline"}
-                      className="w-full gap-2"
-                      onClick={() => handleUpgrade(plan.slug)}
-                      disabled={upgradeMutation.isPending}
-                      data-testid={`button-select-${plan.slug}`}
-                    >
-                      {plan.monthlyPrice > (currentPlan?.monthlyPrice || 0) ? "Upgrade" : "Select"}
-                      <ArrowRight className="h-4 w-4" />
-                    </Button>
-                  )}
-                </CardContent>
-              </Card>
-            );
-          })}
-        </div>
+                  </CardContent>
+                </Card>
+              );
+            })}
+          </div>
+        )}
       </div>
 
       {/* Billing Information */}
@@ -424,19 +496,49 @@ export default function SubscriptionPage() {
                 <CreditCard className="h-6 w-6 text-muted-foreground" />
               </div>
               <div>
-                <p className="font-medium">No payment method</p>
-                <p className="text-sm text-muted-foreground">Add a payment method to upgrade to paid plans</p>
+                {merchantStripeData?.stripeCustomerId ? (
+                  <>
+                    <p className="font-medium">Payment method on file</p>
+                    <p className="text-sm text-muted-foreground">Manage your subscription in the billing portal</p>
+                  </>
+                ) : (
+                  <>
+                    <p className="font-medium">No payment method</p>
+                    <p className="text-sm text-muted-foreground">Subscribe to a plan to add a payment method</p>
+                  </>
+                )}
               </div>
             </div>
-            <Button variant="outline" data-testid="button-add-payment">
-              Add Payment Method
-            </Button>
+            {merchantStripeData?.stripeCustomerId && (
+              <Button 
+                variant="outline" 
+                onClick={handleManageSubscription}
+                disabled={portalMutation.isPending}
+                data-testid="button-manage-billing"
+              >
+                {portalMutation.isPending ? (
+                  <Loader2 className="h-4 w-4 animate-spin mr-2" />
+                ) : (
+                  <ExternalLink className="h-4 w-4 mr-2" />
+                )}
+                Manage Billing
+              </Button>
+            )}
           </div>
-          {subscription?.status === "trial" && (
+          {stripeSubscription && (
+            <div className="mt-4 p-3 rounded-lg bg-green-500/10 border border-green-500/20">
+              <p className="text-sm text-green-800 dark:text-green-200">
+                <Check className="inline h-4 w-4 mr-1" />
+                Active subscription - Next billing date: {new Date(stripeSubscription.currentPeriodEnd * 1000).toLocaleDateString()}
+                {stripeSubscription.cancelAtPeriodEnd && " (Cancels at end of period)"}
+              </p>
+            </div>
+          )}
+          {subscription?.status === "trial" && !stripeSubscription && (
             <div className="mt-4 p-3 rounded-lg bg-blue-500/10 border border-blue-500/20">
               <p className="text-sm text-blue-800 dark:text-blue-200">
                 <Zap className="inline h-4 w-4 mr-1" />
-                You're currently on a free trial. Upgrade to a paid plan to access more features and higher limits.
+                You're currently on a free trial. Subscribe to a paid plan to access more features and higher limits.
               </p>
             </div>
           )}

@@ -1951,8 +1951,8 @@ export async function registerRoutes(
           stripeSubscription: stripeSubscription ? {
             id: stripeSubscription.id,
             status: stripeSubscription.status,
-            currentPeriodEnd: stripeSubscription.current_period_end,
-            cancelAtPeriodEnd: stripeSubscription.cancel_at_period_end,
+            currentPeriodEnd: (stripeSubscription as any).current_period_end,
+            cancelAtPeriodEnd: (stripeSubscription as any).cancel_at_period_end,
           } : null,
         },
       });
