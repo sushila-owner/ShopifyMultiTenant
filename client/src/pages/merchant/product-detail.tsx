@@ -27,21 +27,14 @@ const statusColors: Record<string, "default" | "secondary" | "destructive" | "ou
   archived: "outline",
 };
 
-interface ApiResponse<T> {
-  success: boolean;
-  data: T;
-}
-
 export default function MerchantProductDetailPage() {
   const [, params] = useRoute("/dashboard/products/:id");
   const productId = params?.id;
 
-  const { data: productData, isLoading } = useQuery<ApiResponse<Product>>({
-    queryKey: ["/api/merchant/products", productId],
+  const { data: product, isLoading } = useQuery<Product>({
+    queryKey: [`/api/merchant/products/${productId}`],
     enabled: !!productId,
   });
-
-  const product = productData?.data;
 
   if (isLoading) {
     return (
