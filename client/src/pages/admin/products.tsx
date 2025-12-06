@@ -1,4 +1,4 @@
-import { useState } from "react";
+import React, { useState } from "react";
 import { useQuery, useMutation } from "@tanstack/react-query";
 import { Link } from "wouter";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
@@ -62,9 +62,22 @@ const formatPrice = (price: number): string => {
   return price.toFixed(2);
 };
 
+type CatalogResponse = {
+  products: Product[];
+  suppliers: Supplier[];
+  pagination: {
+    total: number;
+    page: number;
+    pageSize: number;
+    totalPages: number;
+  };
+};
+
 export default function AdminProductsPage() {
   const { toast } = useToast();
   const [search, setSearch] = useState("");
+  const [debouncedSearch, setDebouncedSearch] = useState("");
+  const [currentPage, setCurrentPage] = useState(1);
   const [supplierFilter, setSupplierFilter] = useState<string>("all");
   const [statusFilter, setStatusFilter] = useState<string>("all");
   const [selectedProducts, setSelectedProducts] = useState<Set<number>>(new Set());
@@ -73,13 +86,43 @@ export default function AdminProductsPage() {
   const [pricingType, setPricingType] = useState<"percentage" | "fixed">("percentage");
   const [pricingValue, setPricingValue] = useState("");
 
-  const { data: products, isLoading } = useQuery<Product[]>({
-    queryKey: ["/api/admin/products"],
+  // Debounce search input
+  const searchTimeout = React.useRef<NodeJS.Timeout | null>(null);
+  const handleSearchChange = (value: string) => {
+    setSearch(value);
+    if (searchTimeout.current) {
+      clearTimeout(searchTimeout.current);
+    }
+    searchTimeout.current = setTimeout(() => {
+      setDebouncedSearch(value);
+      setCurrentPage(1); // Reset to first page on search
+    }, 300);
+  };
+
+  const { data: catalogData, isLoading } = useQuery<CatalogResponse>({
+    queryKey: ["/api/admin/products", { page: currentPage, search: debouncedSearch, supplierId: supplierFilter }],
+    queryFn: async () => {
+      const params = new URLSearchParams({
+        page: currentPage.toString(),
+        pageSize: "50",
+      });
+      if (debouncedSearch) params.append("search", debouncedSearch);
+      if (supplierFilter && supplierFilter !== "all") params.append("supplierId", supplierFilter);
+      
+      const response = await fetch(`/api/admin/products?${params}`, {
+        headers: {
+          Authorization: `Bearer ${localStorage.getItem("apex_token")}`,
+        },
+      });
+      if (!response.ok) throw new Error("Failed to fetch products");
+      const result = await response.json();
+      return result.data;
+    },
   });
 
-  const { data: suppliers } = useQuery<Supplier[]>({
-    queryKey: ["/api/admin/suppliers"],
-  });
+  const products = catalogData?.products || [];
+  const suppliers = catalogData?.suppliers || [];
+  const pagination = catalogData?.pagination;
 
   const updatePricingMutation = useMutation({
     mutationFn: async ({ id, pricingRule }: { id: number; pricingRule: PricingRule }) => {
@@ -114,16 +157,8 @@ export default function AdminProductsPage() {
     },
   });
 
-  const filteredProducts = products?.filter((p) => {
-    const matchesSearch =
-      p.title.toLowerCase().includes(search.toLowerCase()) ||
-      p.category?.toLowerCase().includes(search.toLowerCase());
-    const matchesSupplier = supplierFilter === "all" || p.supplierId === supplierFilter;
-    const matchesStatus = statusFilter === "all" || p.status === statusFilter;
-    return matchesSearch && matchesSupplier && matchesStatus;
-  });
-
-  const globalProducts = filteredProducts?.filter((p) => p.isGlobal) || [];
+  // Server handles filtering/pagination now
+  const globalProducts = products;
 
   const toggleSelectAll = (productsList: Product[]) => {
     if (productsList.every((p) => selectedProducts.has(p.id))) {
@@ -250,17 +285,17 @@ export default function AdminProductsPage() {
             <TableCell>
               <span
                 className={
-                  (product.inventory?.quantity || 0) < 10
+                  (product.inventoryQuantity || 0) < 10
                     ? "text-destructive font-medium"
                     : ""
                 }
               >
-                {product.inventory?.quantity || 0}
+                {product.inventoryQuantity || 0}
               </span>
             </TableCell>
             <TableCell>
-              <Badge variant={statusColors[product.status]}>
-                {product.status}
+              <Badge variant={statusColors[product.status || "draft"]}>
+                {product.status || "draft"}
               </Badge>
             </TableCell>
             <TableCell className="text-right">
@@ -348,11 +383,11 @@ export default function AdminProductsPage() {
                 placeholder="Search products..."
                 className="pl-8"
                 value={search}
-                onChange={(e) => setSearch(e.target.value)}
+                onChange={(e) => handleSearchChange(e.target.value)}
                 data-testid="input-search-products"
               />
             </div>
-            <Select value={supplierFilter} onValueChange={setSupplierFilter}>
+            <Select value={supplierFilter} onValueChange={(value) => { setSupplierFilter(value); setCurrentPage(1); }}>
               <SelectTrigger className="w-[180px]" data-testid="select-supplier-filter">
                 <Filter className="h-4 w-4 mr-2" />
                 <SelectValue placeholder="Supplier" />
@@ -360,7 +395,7 @@ export default function AdminProductsPage() {
               <SelectContent>
                 <SelectItem value="all">All Suppliers</SelectItem>
                 {suppliers?.map((s) => (
-                  <SelectItem key={s.id} value={s.id}>
+                  <SelectItem key={s.id} value={s.id.toString()}>
                     {s.name}
                   </SelectItem>
                 ))}
@@ -389,7 +424,7 @@ export default function AdminProductsPage() {
                 <Package className="h-5 w-5 text-primary" />
               </div>
               <div>
-                <p className="text-2xl font-bold">{products?.length || 0}</p>
+                <p className="text-2xl font-bold">{pagination?.total || 0}</p>
                 <p className="text-xs text-muted-foreground">Total Products</p>
               </div>
             </div>
@@ -403,9 +438,9 @@ export default function AdminProductsPage() {
               </div>
               <div>
                 <p className="text-2xl font-bold">
-                  {products?.filter((p) => p.status === "active").length || 0}
+                  {products.filter((p) => p.status === "active").length}
                 </p>
-                <p className="text-xs text-muted-foreground">Active</p>
+                <p className="text-xs text-muted-foreground">Active (this page)</p>
               </div>
             </div>
           </CardContent>
@@ -418,9 +453,9 @@ export default function AdminProductsPage() {
               </div>
               <div>
                 <p className="text-2xl font-bold">
-                  {products?.filter((p) => (p.inventory?.quantity || 0) < 10).length || 0}
+                  {products.filter((p) => (p.inventoryQuantity || 0) < 10).length}
                 </p>
-                <p className="text-xs text-muted-foreground">Low Stock</p>
+                <p className="text-xs text-muted-foreground">Low Stock (this page)</p>
               </div>
             </div>
           </CardContent>
@@ -441,9 +476,16 @@ export default function AdminProductsPage() {
       </div>
 
       <Card>
-        <CardHeader>
-          <CardTitle>Product Catalog</CardTitle>
-          <CardDescription>All products synced from suppliers</CardDescription>
+        <CardHeader className="flex flex-row items-center justify-between">
+          <div>
+            <CardTitle>Product Catalog</CardTitle>
+            <CardDescription>All products synced from suppliers</CardDescription>
+          </div>
+          {pagination && (
+            <div className="text-sm text-muted-foreground">
+              Page {pagination.page} of {pagination.totalPages} ({pagination.total.toLocaleString()} products)
+            </div>
+          )}
         </CardHeader>
         <CardContent>
           {isLoading ? (
@@ -458,19 +500,54 @@ export default function AdminProductsPage() {
                 </div>
               ))}
             </div>
-          ) : filteredProducts && filteredProducts.length > 0 ? (
-            <Tabs defaultValue="all">
-              <TabsList>
-                <TabsTrigger value="all">All ({filteredProducts.length})</TabsTrigger>
-                <TabsTrigger value="global">Global ({globalProducts.length})</TabsTrigger>
-              </TabsList>
-              <TabsContent value="all" className="mt-4">
-                {renderProductTable(filteredProducts, "all")}
-              </TabsContent>
-              <TabsContent value="global" className="mt-4">
-                {renderProductTable(globalProducts, "global")}
-              </TabsContent>
-            </Tabs>
+          ) : products.length > 0 ? (
+            <>
+              {renderProductTable(globalProducts, "global")}
+              {/* Pagination Controls */}
+              {pagination && pagination.totalPages > 1 && (
+                <div className="flex items-center justify-center gap-2 mt-6">
+                  <Button
+                    variant="outline"
+                    size="sm"
+                    onClick={() => setCurrentPage(1)}
+                    disabled={currentPage === 1}
+                    data-testid="button-first-page"
+                  >
+                    First
+                  </Button>
+                  <Button
+                    variant="outline"
+                    size="sm"
+                    onClick={() => setCurrentPage(currentPage - 1)}
+                    disabled={currentPage === 1}
+                    data-testid="button-prev-page"
+                  >
+                    Previous
+                  </Button>
+                  <span className="px-4 text-sm">
+                    Page {currentPage} of {pagination.totalPages}
+                  </span>
+                  <Button
+                    variant="outline"
+                    size="sm"
+                    onClick={() => setCurrentPage(currentPage + 1)}
+                    disabled={currentPage >= pagination.totalPages}
+                    data-testid="button-next-page"
+                  >
+                    Next
+                  </Button>
+                  <Button
+                    variant="outline"
+                    size="sm"
+                    onClick={() => setCurrentPage(pagination.totalPages)}
+                    disabled={currentPage >= pagination.totalPages}
+                    data-testid="button-last-page"
+                  >
+                    Last
+                  </Button>
+                </div>
+              )}
+            </>
           ) : (
             <div className="text-center py-12 text-muted-foreground">
               <Package className="h-16 w-16 mx-auto mb-4 opacity-50" />

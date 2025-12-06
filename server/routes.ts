@@ -967,11 +967,44 @@ export async function registerRoutes(
     }
   });
 
-  // Global Products
+  // Global Products (Paginated for 60k+ products)
   app.get("/api/admin/products", authMiddleware, adminOnly, async (req: AuthRequest, res: Response) => {
     try {
-      const products = await storage.getGlobalProducts();
-      res.json({ success: true, data: products });
+      const { 
+        page = "1", 
+        pageSize = "50", 
+        search,
+        supplierId,
+        category,
+        status,
+        sortBy = "createdAt",
+        sortDirection = "desc"
+      } = req.query;
+
+      const paginatedProducts = await storage.getGlobalProductsPaginated({
+        page: parseInt(page as string, 10) || 1,
+        pageSize: Math.min(parseInt(pageSize as string, 10) || 50, 100),
+        search: search as string | undefined,
+        supplierId: supplierId && supplierId !== "all" ? parseInt(supplierId as string, 10) : undefined,
+        category: category as string | undefined,
+        sortBy: (sortBy as "createdAt" | "price" | "title" | "stock") || "createdAt",
+        sortDirection: (sortDirection as "asc" | "desc") || "desc"
+      });
+
+      const suppliers = await storage.getActiveSuppliers();
+      res.json({ 
+        success: true, 
+        data: { 
+          products: paginatedProducts.items,
+          suppliers,
+          pagination: {
+            total: paginatedProducts.total,
+            page: paginatedProducts.page,
+            pageSize: paginatedProducts.pageSize,
+            totalPages: paginatedProducts.totalPages
+          }
+        } 
+      });
     } catch (error: any) {
       res.status(500).json({ success: false, error: error.message });
     }
