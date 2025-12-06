@@ -47,7 +47,7 @@ export interface GigaB2BSyncProgress {
 export class GigaB2BService {
   private clientId: string;
   private clientSecret: string;
-  private baseUrl: string = "https://www.gigab2b.com/api/v2";
+  private baseUrl: string = "https://openapi.gigab2b.com";
   
   private syncProgress: GigaB2BSyncProgress = {
     status: "idle",
