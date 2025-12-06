@@ -88,6 +88,7 @@ const PRODUCTS_PER_PAGE = 50;
 
 export default function CatalogPage() {
   const { toast } = useToast();
+  const [selectedSupplier, setSelectedSupplier] = useState<Supplier | null>(null);
   const [searchInput, setSearchInput] = useState("");
   const [debouncedSearch, setDebouncedSearch] = useState("");
   const [activeTab, setActiveTab] = useState<TabType>("all");
@@ -128,6 +129,26 @@ export default function CatalogPage() {
     return () => clearTimeout(timer);
   }, [searchInput]);
 
+  // Fetch all suppliers for the supplier list view
+  const { data: allSuppliers, isLoading: suppliersLoading } = useQuery<Supplier[]>({
+    queryKey: ["/api/suppliers"],
+    queryFn: async () => {
+      const token = localStorage.getItem("apex_token");
+      const headers: HeadersInit = {};
+      if (token) {
+        headers["Authorization"] = `Bearer ${token}`;
+      }
+      const res = await fetch("/api/suppliers", {
+        credentials: "include",
+        headers,
+      });
+      if (!res.ok) throw new Error("Failed to fetch suppliers");
+      const data = await res.json();
+      return data.data || [];
+    },
+    staleTime: 60000,
+  });
+
   // Build query params for server-side pagination
   const buildQueryParams = () => {
     const params = new URLSearchParams();
@@ -138,8 +159,10 @@ export default function CatalogPage() {
       params.set("search", debouncedSearch);
     }
     
-    // Only use first selected supplier for now (server supports single supplier filter)
-    if (filters.suppliers.length === 1) {
+    // Filter by selected supplier
+    if (selectedSupplier) {
+      params.set("supplierId", selectedSupplier.id.toString());
+    } else if (filters.suppliers.length === 1) {
       params.set("supplierId", filters.suppliers[0].toString());
     }
     
@@ -369,6 +392,88 @@ export default function CatalogPage() {
     { id: "trending" as TabType, label: "Trending", icon: TrendingUp },
   ];
 
+  // Handle back to supplier list
+  const handleBackToSuppliers = () => {
+    setSelectedSupplier(null);
+    setSelectedProducts([]);
+    setSearchInput("");
+    setCurrentPage(1);
+  };
+
+  // Handle supplier selection
+  const handleSelectSupplier = (supplier: Supplier) => {
+    setSelectedSupplier(supplier);
+    setCurrentPage(1);
+    setSearchInput("");
+  };
+
+  // Supplier List View - shown when no supplier is selected
+  if (!selectedSupplier) {
+    return (
+      <div className="flex-1 flex flex-col h-full overflow-hidden">
+        <div className="flex-shrink-0 border-b bg-background/95 backdrop-blur supports-[backdrop-filter]:bg-background/60">
+          <div className="p-4 md:p-6">
+            <h1 className="text-2xl md:text-3xl font-bold" data-testid="text-catalog-title">
+              Product Catalog
+            </h1>
+            <p className="text-muted-foreground text-sm mt-1">
+              Select a supplier to browse their products
+            </p>
+          </div>
+        </div>
+        
+        <div className="flex-1 overflow-auto p-4 md:p-6">
+          {suppliersLoading ? (
+            <div className="space-y-3">
+              {[1, 2, 3, 4].map((i) => (
+                <Skeleton key={i} className="h-16 w-full" />
+              ))}
+            </div>
+          ) : !allSuppliers || allSuppliers.length === 0 ? (
+            <div className="flex flex-col items-center justify-center py-12 text-center">
+              <Store className="h-12 w-12 text-muted-foreground mb-4" />
+              <h3 className="text-lg font-medium">No Suppliers Available</h3>
+              <p className="text-muted-foreground text-sm mt-1">
+                No suppliers have been added yet. Contact your administrator.
+              </p>
+            </div>
+          ) : (
+            <div className="space-y-3 max-w-3xl mx-auto">
+              {allSuppliers.map((supplier) => (
+                <div
+                  key={supplier.id}
+                  className="border rounded-lg p-4 hover-elevate cursor-pointer bg-card transition-all"
+                  onClick={() => handleSelectSupplier(supplier)}
+                  data-testid={`supplier-row-${supplier.id}`}
+                >
+                  <div className="flex items-center justify-between gap-4">
+                    <div className="flex items-center gap-3">
+                      <div className="h-10 w-10 rounded-full bg-primary/10 flex items-center justify-center">
+                        <Store className="h-5 w-5 text-primary" />
+                      </div>
+                      <div>
+                        <h3 className="font-medium" data-testid={`text-supplier-name-${supplier.id}`}>
+                          {supplier.name}
+                        </h3>
+                        {supplier.description && (
+                          <p className="text-sm text-muted-foreground line-clamp-1">
+                            {supplier.description}
+                          </p>
+                        )}
+                      </div>
+                    </div>
+                    <ChevronDown className="h-5 w-5 text-muted-foreground rotate-[-90deg]" />
+                  </div>
+                </div>
+              ))}
+            </div>
+          )}
+        </div>
+      </div>
+    );
+  }
+
+  // Product Catalog View - shown when a supplier is selected
   return (
     <div className="flex-1 flex flex-col h-full overflow-hidden">
       {/* Header */}
@@ -376,11 +481,23 @@ export default function CatalogPage() {
         <div className="p-4 md:p-6">
           <div className="flex flex-col lg:flex-row lg:items-center justify-between gap-4">
             <div>
-              <h1 className="text-2xl md:text-3xl font-bold" data-testid="text-catalog-title">
-                Product Catalog
+              <div className="flex items-center gap-2 mb-1">
+                <Button 
+                  variant="ghost" 
+                  size="sm" 
+                  className="gap-1 -ml-2"
+                  onClick={handleBackToSuppliers}
+                  data-testid="button-back-to-suppliers"
+                >
+                  <ChevronUp className="h-4 w-4 rotate-[-90deg]" />
+                  Back
+                </Button>
+              </div>
+              <h1 className="text-2xl md:text-3xl font-bold" data-testid="text-supplier-catalog-title">
+                {selectedSupplier.name}
               </h1>
               <p className="text-muted-foreground text-sm">
-                Curated selections from verified suppliers
+                {selectedSupplier.description || "Browse products from this supplier"}
               </p>
             </div>
             <div className="flex items-center gap-2 flex-wrap">
