@@ -65,28 +65,41 @@ export class GigaB2BService {
     this.clientSecret = clientSecret;
   }
 
-  private sign(params: Record<string, string>): string {
-    const sortedStr = Object.keys(params)
-      .sort()
-      .map(k => `${k}=${params[k]}`)
-      .join("&");
+  private generateNonce(length: number = 10): string {
+    const chars = "0123456789abcdefghijklmnopqrstuvwxyz";
+    let result = "";
+    for (let i = 0; i < length; i++) {
+      result += chars.charAt(Math.floor(Math.random() * chars.length));
+    }
+    return result;
+  }
+
+  private getApiSign(uri: string, timestamp: number, nonce: string): string {
+    const message = `${this.clientId}&${uri}&${timestamp}&${nonce}`;
+    const key = `${this.clientId}&${this.clientSecret}&${nonce}`;
     
-    return crypto
-      .createHmac("sha256", this.clientSecret)
-      .update(sortedStr)
+    const hmacResult = crypto
+      .createHmac("sha256", key)
+      .update(message)
       .digest("hex");
+    
+    return Buffer.from(hmacResult).toString("base64");
   }
 
   private async request<T>(path: string, additionalParams: Record<string, string> = {}): Promise<T> {
-    const baseParams: Record<string, string> = {
+    const timestamp = Date.now();
+    const nonce = this.generateNonce(10);
+    const sign = this.getApiSign(path, timestamp, nonce);
+
+    const params: Record<string, string> = {
       clientId: this.clientId,
-      timestamp: String(Date.now()),
+      timestamp: String(timestamp),
+      nonce: nonce,
+      sign: sign,
       ...additionalParams,
     };
 
-    baseParams.sign = this.sign(baseParams);
-
-    const queryString = new URLSearchParams(baseParams).toString();
+    const queryString = new URLSearchParams(params).toString();
     const url = `${this.baseUrl}${path}?${queryString}`;
 
     console.log(`[GigaB2B] Request: ${path}`);
@@ -98,12 +111,17 @@ export class GigaB2BService {
       },
     });
 
+    const text = await response.text();
+    
     if (!response.ok) {
-      const errorText = await response.text();
-      throw new Error(`GigaB2B API error: ${response.status} - ${errorText}`);
+      throw new Error(`GigaB2B API error: ${response.status} - ${text.substring(0, 200)}`);
     }
 
-    return await response.json() as T;
+    try {
+      return JSON.parse(text) as T;
+    } catch {
+      throw new Error(`GigaB2B returned invalid JSON: ${text.substring(0, 200)}`);
+    }
   }
 
   async testConnection(): Promise<{ success: boolean; message?: string; error?: string }> {
