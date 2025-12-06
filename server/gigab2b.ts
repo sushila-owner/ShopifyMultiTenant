@@ -1,47 +1,49 @@
 import type { InsertProduct } from "@shared/schema";
 
-interface GigaB2BProduct {
-  id: string;
-  name: string;
-  description: string;
+// GigaCloud Open API 2.0 Types
+interface GigaCloudProduct {
+  productId: string;
+  productName: string;
+  productDescription?: string;
   sku: string;
   price: number;
-  compareAtPrice?: number;
-  category: string;
+  msrp?: number;
+  category?: string;
   brand?: string;
-  images: string[];
-  stock: number;
+  images?: { url: string; isPrimary?: boolean }[];
+  inventory?: number;
   weight?: number;
   dimensions?: {
     length: number;
     width: number;
     height: number;
   };
-  variants?: GigaB2BVariant[];
+  variants?: GigaCloudVariant[];
 }
 
-interface GigaB2BVariant {
-  id: string;
+interface GigaCloudVariant {
+  variantId: string;
   sku: string;
   name: string;
   price: number;
-  stock: number;
-  options: Record<string, string>;
+  inventory: number;
+  attributes?: Record<string, string>;
 }
 
-interface GigaB2BAuthResponse {
+interface GigaCloudAuthResponse {
   access_token: string;
   token_type: string;
   expires_in: number;
 }
 
-interface GigaB2BProductsResponse {
-  data: GigaB2BProduct[];
-  pagination: {
-    page: number;
-    limit: number;
+interface GigaCloudProductsResponse {
+  code: number;
+  message: string;
+  data: {
+    list: GigaCloudProduct[];
     total: number;
-    totalPages: number;
+    pageNo: number;
+    pageSize: number;
   };
 }
 
@@ -64,7 +66,7 @@ export class GigaB2BService {
   private clientSecret: string;
   private accessToken: string | null = null;
   private tokenExpiresAt: Date | null = null;
-  private baseUrl: string = "https://api.gigab2b.com/v1";
+  private baseUrl: string = "https://openapi.gigacloudtech.com/v2";
   
   private syncProgress: GigaB2BSyncProgress = {
     status: "idle",
@@ -104,7 +106,7 @@ export class GigaB2BService {
       throw new Error(`GigaB2B authentication failed: ${response.status} - ${errorText}`);
     }
 
-    const data = await response.json() as GigaB2BAuthResponse;
+    const data = await response.json() as GigaCloudAuthResponse;
     this.accessToken = data.access_token;
     this.tokenExpiresAt = new Date(Date.now() + (data.expires_in - 60) * 1000);
   }
@@ -150,8 +152,8 @@ export class GigaB2BService {
     }
   }
 
-  async getProducts(page: number = 1, limit: number = 100): Promise<GigaB2BProductsResponse> {
-    return await this.fetch<GigaB2BProductsResponse>(`/products?page=${page}&limit=${limit}`);
+  async getProducts(page: number = 1, limit: number = 100): Promise<GigaCloudProductsResponse> {
+    return await this.fetch<GigaCloudProductsResponse>(`/product/list?pageNo=${page}&pageSize=${limit}`);
   }
 
   getSyncProgress(): GigaB2BSyncProgress {
@@ -189,7 +191,7 @@ export class GigaB2BService {
 
         try {
           const response = await this.getProducts(page, limit);
-          const products = response.data || [];
+          const products = response.data?.list || [];
           
           if (products.length === 0) break;
 
@@ -230,32 +232,32 @@ export class GigaB2BService {
     return this.syncProgress;
   }
 
-  private transformProduct(product: GigaB2BProduct, supplierId: number): InsertProduct {
-    const images = (product.images || []).map((url, index) => ({
-      url,
-      alt: product.name,
+  private transformProduct(product: GigaCloudProduct, supplierId: number): InsertProduct {
+    const images = (product.images || []).map((img, index) => ({
+      url: img.url,
+      alt: product.productName,
       position: index,
     }));
 
     const variants = product.variants?.map(v => ({
-      id: v.id,
+      id: v.variantId,
       title: v.name,
-      inventoryQuantity: v.stock,
+      inventoryQuantity: v.inventory,
       sku: v.sku,
       price: v.price,
       cost: v.price * 0.7,
-      options: v.options,
+      options: v.attributes,
     })) || null;
 
     return {
       supplierId,
-      supplierProductId: product.id,
-      supplierSku: product.sku || `GB-${product.id}`,
-      title: product.name,
-      description: product.description || "",
+      supplierProductId: product.productId,
+      supplierSku: product.sku || `GC-${product.productId}`,
+      title: product.productName,
+      description: product.productDescription || "",
       supplierPrice: product.price,
       category: product.category || "General",
-      inventoryQuantity: product.stock || 0,
+      inventoryQuantity: product.inventory || 0,
       images,
       variants,
       isGlobal: true,
