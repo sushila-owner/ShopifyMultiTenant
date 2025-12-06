@@ -667,6 +667,81 @@ export async function registerRoutes(
     }
   });
 
+  // Debug endpoint to discover GigaB2B API structure
+  app.get("/api/admin/gigab2b/debug", authMiddleware, adminOnly, async (req: AuthRequest, res: Response) => {
+    const clientId = process.env.GIGAB2B_CLIENT_ID;
+    const clientSecret = process.env.GIGAB2B_CLIENT_SECRET;
+    
+    if (!clientId || !clientSecret) {
+      return res.status(400).json({ error: "Missing GigaB2B credentials" });
+    }
+
+    const results: any[] = [];
+    const baseUrls = [
+      "https://openapi.gigab2b.com",
+      "https://openapi.gigab2b.com/v2",
+      "https://openapi.gigab2b.com/api/v2"
+    ];
+    
+    const authPaths = [
+      "/oauth/token",
+      "/oauth/access_token",
+      "/auth/token",
+      "/token"
+    ];
+
+    for (const baseUrl of baseUrls) {
+      for (const authPath of authPaths) {
+        const url = `${baseUrl}${authPath}`;
+        try {
+          const formRes = await fetch(url, {
+            method: "POST",
+            headers: { "Content-Type": "application/x-www-form-urlencoded" },
+            body: new URLSearchParams({
+              grant_type: "client_credentials",
+              client_id: clientId,
+              client_secret: clientSecret,
+            }),
+          });
+          const text = await formRes.text();
+          results.push({
+            url,
+            method: "POST (form)",
+            status: formRes.status,
+            response: text.substring(0, 200)
+          });
+
+          if (formRes.status === 200) break;
+        } catch (e: any) {
+          results.push({ url, method: "POST (form)", error: e.message });
+        }
+
+        try {
+          const jsonRes = await fetch(url, {
+            method: "POST",
+            headers: { "Content-Type": "application/json" },
+            body: JSON.stringify({ client_id: clientId, client_secret: clientSecret }),
+          });
+          const text = await jsonRes.text();
+          results.push({
+            url,
+            method: "POST (json)",
+            status: jsonRes.status,
+            response: text.substring(0, 200)
+          });
+        } catch (e: any) {
+          results.push({ url, method: "POST (json)", error: e.message });
+        }
+      }
+    }
+
+    res.json({ 
+      clientIdPrefix: clientId.substring(0, 10) + "...",
+      testedEndpoints: results.length,
+      results 
+    });
+  });
+
   // Get GigaB2B sync progress
   app.get("/api/admin/gigab2b/sync/progress", authMiddleware, adminOnly, async (req: AuthRequest, res: Response) => {
     try {

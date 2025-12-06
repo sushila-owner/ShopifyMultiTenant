@@ -66,7 +66,7 @@ export class GigaB2BService {
   private clientSecret: string;
   private accessToken: string | null = null;
   private tokenExpiresAt: Date | null = null;
-  private baseUrl: string = "https://www.gigab2b.com/api/v2";
+  private baseUrl: string = "https://openapi.gigab2b.com/v2";
   
   private syncProgress: GigaB2BSyncProgress = {
     status: "idle",
