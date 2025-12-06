@@ -649,6 +649,108 @@ export async function registerRoutes(
     }
   });
 
+  // GigaB2B supplier integration
+  app.get("/api/admin/gigab2b/test", authMiddleware, adminOnly, async (req: AuthRequest, res: Response) => {
+    try {
+      const { getGigaB2BService } = await import("./gigab2b");
+      const gigab2b = getGigaB2BService();
+      if (!gigab2b) {
+        return res.status(400).json({ 
+          success: false, 
+          error: "GigaB2B credentials not configured. Please set GIGAB2B_CLIENT_ID and GIGAB2B_CLIENT_SECRET." 
+        });
+      }
+      const result = await gigab2b.testConnection();
+      res.json({ success: result.success, data: result });
+    } catch (error: any) {
+      res.status(500).json({ success: false, error: error.message });
+    }
+  });
+
+  // Get GigaB2B sync progress
+  app.get("/api/admin/gigab2b/sync/progress", authMiddleware, adminOnly, async (req: AuthRequest, res: Response) => {
+    try {
+      const { getGigaB2BService } = await import("./gigab2b");
+      const gigab2b = getGigaB2BService();
+      if (!gigab2b) {
+        return res.json({ success: true, data: { status: "idle" } });
+      }
+      const progress = gigab2b.getSyncProgress();
+      res.json({ success: true, data: progress });
+    } catch (error: any) {
+      res.status(500).json({ success: false, error: error.message });
+    }
+  });
+
+  // Start GigaB2B background sync
+  app.post("/api/admin/gigab2b/sync", authMiddleware, adminOnly, async (req: AuthRequest, res: Response) => {
+    try {
+      const { getGigaB2BService } = await import("./gigab2b");
+      const gigab2b = getGigaB2BService();
+      if (!gigab2b) {
+        return res.status(400).json({ 
+          success: false, 
+          error: "GigaB2B credentials not configured." 
+        });
+      }
+
+      // Check if sync is already running
+      const currentProgress = gigab2b.getSyncProgress();
+      if (currentProgress && currentProgress.status === "running") {
+        return res.status(400).json({
+          success: false,
+          error: "A sync is already in progress. Please wait for it to complete.",
+          data: currentProgress
+        });
+      }
+
+      // Test connection first
+      const connectionTest = await gigab2b.testConnection();
+      if (!connectionTest.success) {
+        return res.status(400).json({ 
+          success: false, 
+          error: `GigaB2B connection failed: ${connectionTest.error}` 
+        });
+      }
+
+      // Find or create GigaB2B supplier
+      let supplier = (await storage.getAllSuppliers()).find(s => s.type === "gigab2b");
+      if (!supplier) {
+        supplier = await storage.createSupplier({
+          name: connectionTest.accountName || "GigaB2B",
+          type: "gigab2b",
+          description: "Products from GigaB2B wholesale marketplace",
+          isActive: true,
+          createdBy: req.user!.id,
+        });
+      }
+
+      // Return immediately - sync runs in background
+      res.json({ 
+        success: true, 
+        message: "Sync started in background. Poll /api/admin/gigab2b/sync/progress for updates.",
+        data: {
+          supplier: supplier.name
+        }
+      });
+
+      // Run sync in background
+      const supplierId = supplier.id;
+      gigab2b.syncAllProducts(
+        supplierId,
+        async (productsData) => {
+          const existingProductMap = new Map<string, number>();
+          return await storage.batchUpsertProducts(productsData, existingProductMap);
+        }
+      ).catch(err => {
+        console.error("[GigaB2B Sync] Background sync failed:", err);
+      });
+
+    } catch (error: any) {
+      res.status(500).json({ success: false, error: error.message });
+    }
+  });
+
   // Merchants
   app.get("/api/admin/merchants", authMiddleware, adminOnly, async (req: AuthRequest, res: Response) => {
     try {
