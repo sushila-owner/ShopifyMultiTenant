@@ -85,6 +85,7 @@ export interface IStorage {
   getGlobalProductsPaginated(params: PaginationParams): Promise<PaginatedResponse<Product>>;
   getProductsByMerchant(merchantId: number): Promise<Product[]>;
   getProductsBySupplier(supplierId: number): Promise<Product[]>;
+  getProductsBySupplierProductId(supplierId: number, supplierProductId: string): Promise<Product[]>;
 
   // Customers
   getCustomer(id: number): Promise<Customer | undefined>;
@@ -510,6 +511,15 @@ export class DatabaseStorage implements IStorage {
 
   async getProductsBySupplier(supplierId: number): Promise<Product[]> {
     return db.select().from(products).where(eq(products.supplierId, supplierId));
+  }
+
+  async getProductsBySupplierProductId(supplierId: number, supplierProductId: string): Promise<Product[]> {
+    return db.select().from(products).where(
+      and(
+        eq(products.supplierId, supplierId),
+        eq(products.supplierProductId, supplierProductId)
+      )
+    );
   }
 
   // ==================== CUSTOMERS ====================

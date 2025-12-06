@@ -19,6 +19,8 @@ import {
 import { randomUUID } from "crypto";
 import { stripeService } from "./stripeService";
 import { getStripePublishableKey, getUncachableStripeClient } from "./stripeClient";
+import { supplierSyncService } from "./services/supplierSync";
+import { orderFulfillmentService } from "./services/orderFulfillment";
 
 const JWT_SECRET = process.env.SESSION_SECRET;
 if (!JWT_SECRET) {
@@ -1288,6 +1290,26 @@ export async function registerRoutes(
     }
   });
 
+  // ==================== SUPPLIER SYNC STATUS ====================
+  app.get("/api/admin/sync/status", authMiddleware, adminOnly, async (req: AuthRequest, res: Response) => {
+    try {
+      const status = supplierSyncService.getStatus();
+      res.json({ success: true, data: status });
+    } catch (error: any) {
+      res.status(500).json({ success: false, error: error.message });
+    }
+  });
+
+  app.post("/api/admin/sync/run", authMiddleware, adminOnly, async (req: AuthRequest, res: Response) => {
+    try {
+      // Run sync in background, don't wait for completion
+      supplierSyncService.runSync().catch(err => console.error("[Admin] Manual sync error:", err));
+      res.json({ success: true, message: "Sync started" });
+    } catch (error: any) {
+      res.status(500).json({ success: false, error: error.message });
+    }
+  });
+
   // ==================== SUPPLIER ORDER FULFILLMENT ====================
   // Get pending supplier orders for fulfillment
   app.get("/api/admin/supplier-orders/pending", authMiddleware, adminOnly, async (req: AuthRequest, res: Response) => {
@@ -1693,11 +1715,20 @@ export async function registerRoutes(
         return res.status(404).json({ success: false, error: "Order not found" });
       }
 
+      // Create supplier orders and submit to suppliers for fulfillment
+      const fulfillmentResults = await orderFulfillmentService.createSupplierOrderFromMerchantOrder(order);
+      
+      const allSuccessful = fulfillmentResults.every(r => r.success);
       const updatedOrder = await storage.updateOrder(parseInt(req.params.id), {
-        fulfillmentStatus: "fulfilled",
-        status: "completed",
+        fulfillmentStatus: allSuccessful ? "fulfilled" : "partial",
+        status: allSuccessful ? "processing" : "pending",
       });
-      res.json({ success: true, data: updatedOrder });
+      
+      res.json({ 
+        success: true, 
+        data: updatedOrder,
+        fulfillmentResults,
+      });
     } catch (error: any) {
       res.status(400).json({ success: false, error: error.message });
     }

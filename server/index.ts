@@ -2,6 +2,7 @@ import express, { type Request, Response, NextFunction } from "express";
 import { registerRoutes } from "./routes";
 import { serveStatic } from "./static";
 import { createServer } from "http";
+import { supplierSyncService } from "./services/supplierSync";
 
 const app = express();
 const httpServer = createServer(app);
@@ -93,6 +94,10 @@ app.use((req, res, next) => {
     },
     () => {
       log(`serving on port ${port}`);
+      
+      // Start automated supplier sync service (every 15 minutes)
+      supplierSyncService.start();
+      log("Supplier sync service started (15-minute interval)");
     },
   );
 })();
