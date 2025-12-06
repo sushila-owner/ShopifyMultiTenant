@@ -667,7 +667,7 @@ export async function registerRoutes(
     }
   });
 
-  // Debug endpoint to discover GigaB2B API structure
+  // Debug endpoint to test GigaB2B API with provided signature
   app.get("/api/admin/gigab2b/debug", authMiddleware, adminOnly, async (req: AuthRequest, res: Response) => {
     const clientId = process.env.GIGAB2B_CLIENT_ID;
     const clientSecret = process.env.GIGAB2B_CLIENT_SECRET;
@@ -676,68 +676,54 @@ export async function registerRoutes(
       return res.status(400).json({ error: "Missing GigaB2B credentials" });
     }
 
+    // Test with user-provided signature values
+    const timestamp = req.query.timestamp as string || String(Date.now());
+    const nonce = req.query.nonce as string || "abc1234567";
+    const sign = req.query.sign as string;
+    const apiPath = req.query.path as string || "/product/list";
+
     const results: any[] = [];
     const baseUrls = [
       "https://openapi.gigab2b.com",
-      "https://openapi.gigab2b.com/v2",
-      "https://openapi.gigab2b.com/api/v2"
-    ];
-    
-    const authPaths = [
-      "/oauth/token",
-      "/oauth/access_token",
-      "/auth/token",
-      "/token"
+      "https://www.gigab2b.com/openApi",
+      "https://api.gigab2b.com"
     ];
 
     for (const baseUrl of baseUrls) {
-      for (const authPath of authPaths) {
-        const url = `${baseUrl}${authPath}`;
-        try {
-          const formRes = await fetch(url, {
-            method: "POST",
-            headers: { "Content-Type": "application/x-www-form-urlencoded" },
-            body: new URLSearchParams({
-              grant_type: "client_credentials",
-              client_id: clientId,
-              client_secret: clientSecret,
-            }),
-          });
-          const text = await formRes.text();
-          results.push({
-            url,
-            method: "POST (form)",
-            status: formRes.status,
-            response: text.substring(0, 200)
-          });
-
-          if (formRes.status === 200) break;
-        } catch (e: any) {
-          results.push({ url, method: "POST (form)", error: e.message });
-        }
-
-        try {
-          const jsonRes = await fetch(url, {
-            method: "POST",
-            headers: { "Content-Type": "application/json" },
-            body: JSON.stringify({ client_id: clientId, client_secret: clientSecret }),
-          });
-          const text = await jsonRes.text();
-          results.push({
-            url,
-            method: "POST (json)",
-            status: jsonRes.status,
-            response: text.substring(0, 200)
-          });
-        } catch (e: any) {
-          results.push({ url, method: "POST (json)", error: e.message });
-        }
+      const params = new URLSearchParams({
+        clientId,
+        timestamp,
+        nonce,
+        sign: sign || "test",
+        page: "1",
+        pageSize: "1"
+      });
+      
+      const url = `${baseUrl}${apiPath}?${params.toString()}`;
+      
+      try {
+        const response = await fetch(url, {
+          method: "GET",
+          headers: { "Accept": "application/json" }
+        });
+        const text = await response.text();
+        results.push({
+          baseUrl,
+          path: apiPath,
+          fullUrl: url.substring(0, 100) + "...",
+          status: response.status,
+          response: text.substring(0, 300)
+        });
+      } catch (e: any) {
+        results.push({ baseUrl, path: apiPath, error: e.message });
       }
     }
 
     res.json({ 
       clientIdPrefix: clientId.substring(0, 10) + "...",
-      testedEndpoints: results.length,
+      timestamp,
+      nonce,
+      signProvided: !!sign,
       results 
     });
   });
