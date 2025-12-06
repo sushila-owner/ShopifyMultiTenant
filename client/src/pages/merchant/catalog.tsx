@@ -57,6 +57,7 @@ import {
   Check,
   ShoppingCart,
 } from "lucide-react";
+import { Link } from "wouter";
 import type { Product, Supplier } from "@shared/schema";
 
 type SortField = "default" | "price" | "stock" | "createdAt";
@@ -939,33 +940,37 @@ export default function CatalogPage() {
                             )}
                           </div>
 
-                          {/* Image */}
-                          <div 
-                            className="aspect-square bg-muted cursor-pointer"
-                            onClick={() => toggleProductSelection(product.id)}
-                          >
-                            {product.images && product.images.length > 0 ? (
-                              <img
-                                src={product.images[0].url}
-                                alt={product.title}
-                                className="w-full h-full object-cover group-hover:scale-105 transition-transform duration-300"
-                              />
-                            ) : (
-                              <div className="w-full h-full flex items-center justify-center">
-                                <ImageOff className="h-12 w-12 text-muted-foreground/30" />
-                              </div>
-                            )}
-                          </div>
+                          {/* Image - Click to view product details */}
+                          <Link href={`/dashboard/products/${product.id}`}>
+                            <div 
+                              className="aspect-square bg-muted cursor-pointer"
+                              data-testid={`link-product-image-${product.id}`}
+                            >
+                              {product.images && product.images.length > 0 ? (
+                                <img
+                                  src={product.images[0].url}
+                                  alt={product.title}
+                                  className="w-full h-full object-cover group-hover:scale-105 transition-transform duration-300"
+                                />
+                              ) : (
+                                <div className="w-full h-full flex items-center justify-center">
+                                  <ImageOff className="h-12 w-12 text-muted-foreground/30" />
+                                </div>
+                              )}
+                            </div>
+                          </Link>
 
                           {/* Content */}
                           <div className="p-3 space-y-2">
                             <div className="flex items-start justify-between gap-2">
-                              <h3 
-                                className="font-medium text-sm line-clamp-2 cursor-pointer hover:text-primary transition-colors"
-                                onClick={() => toggleProductSelection(product.id)}
-                              >
-                                {product.title}
-                              </h3>
+                              <Link href={`/dashboard/products/${product.id}`}>
+                                <h3 
+                                  className="font-medium text-sm line-clamp-2 cursor-pointer hover:text-primary transition-colors"
+                                  data-testid={`link-product-title-${product.id}`}
+                                >
+                                  {product.title}
+                                </h3>
+                              </Link>
                             </div>
 
                             <p className="text-xs text-muted-foreground flex items-center gap-1">
@@ -1032,20 +1037,18 @@ export default function CatalogPage() {
                       return (
                         <div
                           key={product.id}
-                          className={`flex items-center gap-4 p-4 rounded-lg border bg-card hover:shadow-md hover:border-primary/50 transition-all cursor-pointer ${
+                          className={`flex items-center gap-4 p-4 rounded-lg border bg-card hover:shadow-md hover:border-primary/50 transition-all ${
                             selectedProducts.includes(product.id) ? "ring-2 ring-primary shadow-md" : ""
                           }`}
-                          onClick={() => toggleProductSelection(product.id)}
                           data-testid={`row-catalog-product-${product.id}`}
                         >
                           <Checkbox
                             checked={selectedProducts.includes(product.id)}
                             onCheckedChange={() => toggleProductSelection(product.id)}
-                            onClick={(e) => e.stopPropagation()}
                             data-testid={`checkbox-product-${product.id}`}
                           />
                           
-                          <div className="relative h-20 w-20 flex-shrink-0">
+                          <Link href={`/dashboard/products/${product.id}`} className="relative h-20 w-20 flex-shrink-0 cursor-pointer">
                             {product.images && product.images.length > 0 ? (
                               <img
                                 src={product.images[0].url}
@@ -1062,10 +1065,12 @@ export default function CatalogPage() {
                                 Sale
                               </Badge>
                             )}
-                          </div>
+                          </Link>
 
                           <div className="flex-1 min-w-0">
-                            <h3 className="font-medium truncate">{product.title}</h3>
+                            <Link href={`/dashboard/products/${product.id}`}>
+                              <h3 className="font-medium truncate cursor-pointer hover:text-primary transition-colors">{product.title}</h3>
+                            </Link>
                             <p className="text-sm text-muted-foreground flex items-center gap-2">
                               <Store className="h-3 w-3" />
                               {getSupplierName(product.supplierId)}

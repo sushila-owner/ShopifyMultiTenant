@@ -1232,7 +1232,7 @@ export async function registerRoutes(
     }
   });
 
-  // Get single merchant product
+  // Get single merchant product (or global catalog product for viewing)
   app.get("/api/merchant/products/:id", authMiddleware, merchantOnly, async (req: AuthRequest, res: Response) => {
     try {
       if (!req.user?.merchantId) {
@@ -1245,8 +1245,8 @@ export async function registerRoutes(
         return res.status(404).json({ success: false, error: "Product not found" });
       }
       
-      // Verify the product belongs to this merchant
-      if (product.merchantId !== req.user.merchantId) {
+      // Allow viewing if: 1) belongs to this merchant, or 2) is a global catalog product (merchantId is null)
+      if (product.merchantId !== null && product.merchantId !== req.user.merchantId) {
         return res.status(403).json({ success: false, error: "Access denied" });
       }
       
