@@ -1,11 +1,10 @@
 import type { InsertProduct } from "@shared/schema";
+import crypto from "crypto";
 
-// GigaCloud Open API 2.0 Types
 interface GigaCloudProduct {
-  productId: string;
+  sku: string;
   productName: string;
   productDescription?: string;
-  sku: string;
   price: number;
   msrp?: number;
   category?: string;
@@ -18,22 +17,6 @@ interface GigaCloudProduct {
     width: number;
     height: number;
   };
-  variants?: GigaCloudVariant[];
-}
-
-interface GigaCloudVariant {
-  variantId: string;
-  sku: string;
-  name: string;
-  price: number;
-  inventory: number;
-  attributes?: Record<string, string>;
-}
-
-interface GigaCloudAuthResponse {
-  access_token: string;
-  token_type: string;
-  expires_in: number;
 }
 
 interface GigaCloudProductsResponse {
@@ -42,7 +25,7 @@ interface GigaCloudProductsResponse {
   data: {
     list: GigaCloudProduct[];
     total: number;
-    pageNo: number;
+    page: number;
     pageSize: number;
   };
 }
@@ -64,9 +47,7 @@ export interface GigaB2BSyncProgress {
 export class GigaB2BService {
   private clientId: string;
   private clientSecret: string;
-  private accessToken: string | null = null;
-  private tokenExpiresAt: Date | null = null;
-  private baseUrl: string = "https://openapi.gigab2b.com/v2";
+  private baseUrl: string = "https://www.gigab2b.com/openApi";
   
   private syncProgress: GigaB2BSyncProgress = {
     status: "idle",
@@ -84,44 +65,36 @@ export class GigaB2BService {
     this.clientSecret = clientSecret;
   }
 
-  private async authenticate(): Promise<void> {
-    if (this.accessToken && this.tokenExpiresAt && new Date() < this.tokenExpiresAt) {
-      return;
-    }
-
-    const response = await fetch(`${this.baseUrl}/oauth/token`, {
-      method: "POST",
-      headers: {
-        "Content-Type": "application/x-www-form-urlencoded",
-      },
-      body: new URLSearchParams({
-        grant_type: "client_credentials",
-        client_id: this.clientId,
-        client_secret: this.clientSecret,
-      }),
-    });
-
-    if (!response.ok) {
-      const errorText = await response.text();
-      throw new Error(`GigaB2B authentication failed: ${response.status} - ${errorText}`);
-    }
-
-    const data = await response.json() as GigaCloudAuthResponse;
-    this.accessToken = data.access_token;
-    this.tokenExpiresAt = new Date(Date.now() + (data.expires_in - 60) * 1000);
+  private sign(params: Record<string, string>): string {
+    const sortedStr = Object.keys(params)
+      .sort()
+      .map(k => `${k}=${params[k]}`)
+      .join("&");
+    
+    return crypto
+      .createHmac("sha256", this.clientSecret)
+      .update(sortedStr)
+      .digest("hex");
   }
 
-  private async fetch<T>(endpoint: string, options: RequestInit = {}): Promise<T> {
-    await this.authenticate();
+  private async request<T>(path: string, additionalParams: Record<string, string> = {}): Promise<T> {
+    const baseParams: Record<string, string> = {
+      clientId: this.clientId,
+      timestamp: String(Date.now()),
+      ...additionalParams,
+    };
 
-    const url = `${this.baseUrl}${endpoint}`;
-    
+    baseParams.sign = this.sign(baseParams);
+
+    const queryString = new URLSearchParams(baseParams).toString();
+    const url = `${this.baseUrl}${path}?${queryString}`;
+
+    console.log(`[GigaB2B] Request: ${path}`);
+
     const response = await fetch(url, {
-      ...options,
+      method: "GET",
       headers: {
-        "Authorization": `Bearer ${this.accessToken}`,
-        "Content-Type": "application/json",
-        ...options.headers,
+        "Accept": "application/json",
       },
     });
 
@@ -133,11 +106,21 @@ export class GigaB2BService {
     return await response.json() as T;
   }
 
-  async testConnection(): Promise<{ success: boolean; accountName?: string; error?: string }> {
+  async testConnection(): Promise<{ success: boolean; message?: string; error?: string }> {
     try {
-      await this.authenticate();
-      const data = await this.fetch<{ account: { name: string } }>("/account");
-      return { success: true, accountName: data.account?.name || "GigaB2B Account" };
+      const data = await this.request<{ code: number; message: string; data?: any }>("/product/list", {
+        page: "1",
+        pageSize: "1"
+      });
+      
+      if (data.code === 0 || data.code === 200) {
+        return { 
+          success: true, 
+          message: `Connected successfully. ${data.data?.total || 0} products available.`
+        };
+      } else {
+        return { success: false, error: `API returned code ${data.code}: ${data.message}` };
+      }
     } catch (error: any) {
       return { success: false, error: error.message };
     }
@@ -145,15 +128,29 @@ export class GigaB2BService {
 
   async getProductCount(): Promise<number> {
     try {
-      const data = await this.fetch<{ count: number }>("/products/count");
-      return data.count;
+      const data = await this.request<GigaCloudProductsResponse>("/product/list", {
+        page: "1",
+        pageSize: "1"
+      });
+      return data.data?.total || 0;
     } catch {
       return 0;
     }
   }
 
-  async getProducts(page: number = 1, limit: number = 100): Promise<GigaCloudProductsResponse> {
-    return await this.fetch<GigaCloudProductsResponse>(`/product/list?pageNo=${page}&pageSize=${limit}`);
+  async getProducts(page: number = 1, pageSize: number = 50): Promise<GigaCloudProductsResponse> {
+    return await this.request<GigaCloudProductsResponse>("/product/list", {
+      page: String(page),
+      pageSize: String(pageSize)
+    });
+  }
+
+  async getProductDetail(sku: string): Promise<any> {
+    return await this.request("/product/detail", { sku });
+  }
+
+  async getInventory(sku: string): Promise<any> {
+    return await this.request("/product/inventory", { sku });
   }
 
   getSyncProgress(): GigaB2BSyncProgress {
@@ -181,8 +178,8 @@ export class GigaB2BService {
       this.syncProgress.totalProducts = productCount;
       console.log(`[GigaB2B] Starting sync of ${productCount} products...`);
 
-      const limit = 100;
-      const totalPages = Math.ceil(productCount / limit);
+      const pageSize = 50;
+      const totalPages = Math.ceil(productCount / pageSize);
       let page = 1;
 
       while (page <= totalPages && this.syncProgress.status === "running") {
@@ -190,7 +187,7 @@ export class GigaB2BService {
         console.log(`[GigaB2B] Fetching page ${page}/${totalPages}...`);
 
         try {
-          const response = await this.getProducts(page, limit);
+          const response = await this.getProducts(page, pageSize);
           const products = response.data?.list || [];
           
           if (products.length === 0) break;
@@ -210,7 +207,7 @@ export class GigaB2BService {
           
           page++;
           
-          await new Promise(resolve => setTimeout(resolve, 200));
+          await new Promise(resolve => setTimeout(resolve, 300));
         } catch (pageError: any) {
           console.error(`[GigaB2B] Error on page ${page}:`, pageError.message);
           this.syncProgress.errors++;
@@ -239,27 +236,17 @@ export class GigaB2BService {
       position: index,
     }));
 
-    const variants = product.variants?.map(v => ({
-      id: v.variantId,
-      title: v.name,
-      inventoryQuantity: v.inventory,
-      sku: v.sku,
-      price: v.price,
-      cost: v.price * 0.7,
-      options: v.attributes,
-    })) || null;
-
     return {
       supplierId,
-      supplierProductId: product.productId,
-      supplierSku: product.sku || `GC-${product.productId}`,
+      supplierProductId: product.sku,
+      supplierSku: product.sku,
       title: product.productName,
       description: product.productDescription || "",
       supplierPrice: product.price,
       category: product.category || "General",
       inventoryQuantity: product.inventory || 0,
       images,
-      variants,
+      variants: null,
       isGlobal: true,
       status: "active",
     };
