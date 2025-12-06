@@ -1199,6 +1199,30 @@ export async function registerRoutes(
     }
   });
 
+  // Get single merchant product
+  app.get("/api/merchant/products/:id", authMiddleware, merchantOnly, async (req: AuthRequest, res: Response) => {
+    try {
+      if (!req.user?.merchantId) {
+        return res.status(400).json({ success: false, error: "No merchant associated" });
+      }
+      const productId = parseInt(req.params.id);
+      const product = await storage.getProduct(productId);
+      
+      if (!product) {
+        return res.status(404).json({ success: false, error: "Product not found" });
+      }
+      
+      // Verify the product belongs to this merchant
+      if (product.merchantId !== req.user.merchantId) {
+        return res.status(403).json({ success: false, error: "Access denied" });
+      }
+      
+      res.json({ success: true, data: product });
+    } catch (error: any) {
+      res.status(500).json({ success: false, error: error.message });
+    }
+  });
+
   app.post("/api/merchant/products/import", authMiddleware, merchantOnly, async (req: AuthRequest, res: Response) => {
     try {
       if (!req.user?.merchantId) {

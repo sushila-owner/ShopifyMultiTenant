@@ -27,6 +27,7 @@ import AdminOrders from "@/pages/admin/orders";
 import MerchantDashboard from "@/pages/merchant/dashboard";
 import CatalogPage from "@/pages/merchant/catalog";
 import MyProductsPage from "@/pages/merchant/products";
+import MerchantProductDetail from "@/pages/merchant/product-detail";
 import MerchantOrdersPage from "@/pages/merchant/orders";
 import CustomersPage from "@/pages/merchant/customers";
 import AnalyticsPage from "@/pages/merchant/analytics";
@@ -205,6 +206,13 @@ function Router() {
         <ProtectedRoute>
           <MerchantLayout>
             <MyProductsPage />
+          </MerchantLayout>
+        </ProtectedRoute>
+      </Route>
+      <Route path="/dashboard/products/:id">
+        <ProtectedRoute>
+          <MerchantLayout>
+            <MerchantProductDetail />
           </MerchantLayout>
         </ProtectedRoute>
       </Route>

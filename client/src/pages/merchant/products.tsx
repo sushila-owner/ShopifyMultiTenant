@@ -272,12 +272,14 @@ export default function MyProductsPage() {
                         )}
                       </TableCell>
                       <TableCell>
-                        <div>
-                          <p className="font-medium line-clamp-1">{product.title}</p>
-                          <p className="text-xs text-muted-foreground">
-                            SKU: {product.supplierSku || "N/A"}
-                          </p>
-                        </div>
+                        <Link href={`/dashboard/products/${product.id}`}>
+                          <div className="cursor-pointer hover-elevate rounded p-1 -m-1">
+                            <p className="font-medium line-clamp-1 text-primary hover:underline">{product.title}</p>
+                            <p className="text-xs text-muted-foreground">
+                              SKU: {product.supplierSku || "N/A"}
+                            </p>
+                          </div>
+                        </Link>
                       </TableCell>
                       <TableCell>${product.supplierPrice.toFixed(2)}</TableCell>
                       <TableCell className="font-medium">${sellPrice.toFixed(2)}</TableCell>
@@ -305,6 +307,12 @@ export default function MyProductsPage() {
                             </Button>
                           </DropdownMenuTrigger>
                           <DropdownMenuContent align="end">
+                            <Link href={`/dashboard/products/${product.id}`}>
+                              <DropdownMenuItem>
+                                <Package className="mr-2 h-4 w-4" />
+                                View Details
+                              </DropdownMenuItem>
+                            </Link>
                             <DropdownMenuItem onClick={() => handleEdit(product)}>
                               <Edit className="mr-2 h-4 w-4" />
                               Edit Price
