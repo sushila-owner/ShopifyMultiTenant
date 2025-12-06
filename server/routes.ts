@@ -540,6 +540,178 @@ export async function registerRoutes(
     }
   });
 
+  // Get single supplier
+  app.get("/api/admin/suppliers/:id", authMiddleware, adminOnly, async (req: AuthRequest, res: Response) => {
+    try {
+      const supplier = await storage.getSupplier(parseInt(req.params.id));
+      if (!supplier) {
+        return res.status(404).json({ success: false, error: "Supplier not found" });
+      }
+      res.json({ success: true, data: supplier });
+    } catch (error: any) {
+      res.status(500).json({ success: false, error: error.message });
+    }
+  });
+
+  // Test supplier connection
+  app.post("/api/admin/suppliers/:id/test", authMiddleware, adminOnly, async (req: AuthRequest, res: Response) => {
+    try {
+      const { createSupplierAdapter, validateCredentials } = await import("./supplierAdapters");
+      
+      const supplier = await storage.getSupplier(parseInt(req.params.id));
+      if (!supplier) {
+        return res.status(404).json({ success: false, error: "Supplier not found" });
+      }
+
+      const credentials = supplier.apiCredentials as any;
+      const validation = validateCredentials(supplier.type as any, credentials);
+      if (!validation.valid) {
+        return res.status(400).json({ 
+          success: false, 
+          error: `Missing credentials: ${validation.missingFields.join(", ")}` 
+        });
+      }
+
+      const adapter = createSupplierAdapter(supplier.type as any, credentials);
+      const result = await adapter.testConnection();
+
+      await storage.updateSupplier(supplier.id, {
+        connectionStatus: result.success ? "connected" : "failed",
+        lastConnectionTest: new Date(),
+        connectionError: result.success ? null : result.message,
+      });
+
+      res.json({ success: result.success, data: result });
+    } catch (error: any) {
+      res.status(500).json({ success: false, error: error.message });
+    }
+  });
+
+  // Test credentials before saving
+  app.post("/api/admin/suppliers/test-credentials", authMiddleware, adminOnly, async (req: AuthRequest, res: Response) => {
+    try {
+      const { createSupplierAdapter, validateCredentials } = await import("./supplierAdapters");
+      
+      const { type, credentials } = req.body;
+      if (!type || !credentials) {
+        return res.status(400).json({ success: false, error: "Type and credentials are required" });
+      }
+
+      const validation = validateCredentials(type, credentials);
+      if (!validation.valid) {
+        return res.status(400).json({ 
+          success: false, 
+          error: `Missing credentials: ${validation.missingFields.join(", ")}` 
+        });
+      }
+
+      const adapter = createSupplierAdapter(type, credentials);
+      const result = await adapter.testConnection();
+
+      res.json({ success: result.success, data: result });
+    } catch (error: any) {
+      res.status(500).json({ success: false, error: error.message });
+    }
+  });
+
+  // Get credential field labels for UI
+  app.get("/api/admin/suppliers/credential-fields/:type", authMiddleware, adminOnly, async (req: AuthRequest, res: Response) => {
+    try {
+      const { getCredentialFieldLabels, getRequiredCredentialFields } = await import("./supplierAdapters");
+      
+      const type = req.params.type as any;
+      const fields = getCredentialFieldLabels(type);
+      const required = getRequiredCredentialFields(type);
+
+      res.json({ success: true, data: { fields, required } });
+    } catch (error: any) {
+      res.status(500).json({ success: false, error: error.message });
+    }
+  });
+
+  // Sync products from a supplier
+  app.post("/api/admin/suppliers/:id/sync", authMiddleware, adminOnly, async (req: AuthRequest, res: Response) => {
+    try {
+      const { createSupplierAdapter } = await import("./supplierAdapters");
+      
+      const supplier = await storage.getSupplier(parseInt(req.params.id));
+      if (!supplier) {
+        return res.status(404).json({ success: false, error: "Supplier not found" });
+      }
+
+      const adapter = createSupplierAdapter(supplier.type as any, supplier.apiCredentials as any);
+      
+      let page = 1;
+      const pageSize = 50;
+      let totalSynced = 0;
+      let hasMore = true;
+
+      while (hasMore) {
+        const result = await adapter.fetchProducts(page, pageSize);
+        
+        for (const product of result.items) {
+          const existingProducts = await storage.getProductsBySupplier(supplier.id);
+          const existing = existingProducts.find(p => p.supplierProductId === product.supplierProductId);
+          
+          if (existing) {
+            await storage.updateProduct(existing.id, {
+              title: product.title,
+              description: product.description,
+              category: product.category,
+              tags: product.tags,
+              images: product.images,
+              variants: product.variants,
+              supplierPrice: product.supplierPrice,
+              inventoryQuantity: product.variants[0]?.inventoryQuantity || 0,
+              lastSyncedAt: new Date(),
+            });
+          } else {
+            await storage.createProduct({
+              supplierId: supplier.id,
+              title: product.title,
+              description: product.description,
+              category: product.category,
+              tags: product.tags,
+              images: product.images,
+              variants: product.variants,
+              supplierProductId: product.supplierProductId,
+              supplierSku: product.supplierSku,
+              supplierPrice: product.supplierPrice,
+              inventoryQuantity: product.variants[0]?.inventoryQuantity || 0,
+              isGlobal: true,
+              status: "active",
+              lastSyncedAt: new Date(),
+            });
+          }
+          totalSynced++;
+        }
+
+        hasMore = result.hasMore;
+        page++;
+        
+        if (page > 10) break;
+      }
+
+      await storage.updateSupplier(supplier.id, {
+        totalProducts: totalSynced,
+        config: {
+          ...supplier.config as any,
+          lastSyncAt: new Date().toISOString(),
+        },
+      });
+
+      res.json({ 
+        success: true, 
+        data: { 
+          synced: totalSynced,
+          message: `Synced ${totalSynced} products from ${supplier.name}` 
+        } 
+      });
+    } catch (error: any) {
+      res.status(500).json({ success: false, error: error.message });
+    }
+  });
+
   // Shopify supplier integration
   app.get("/api/admin/shopify/test", authMiddleware, adminOnly, async (req: AuthRequest, res: Response) => {
     try {

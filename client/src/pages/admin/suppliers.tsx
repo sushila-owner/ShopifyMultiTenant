@@ -73,11 +73,25 @@ const supplierFormSchema = z.object({
   type: z.enum(["gigab2b", "shopify", "amazon", "woocommerce", "custom"]),
   description: z.string().optional(),
   apiCredentials: z.object({
+    storeDomain: z.string().optional(),
+    accessToken: z.string().optional(),
     apiKey: z.string().optional(),
     apiSecret: z.string().optional(),
-    baseUrl: z.string().url().optional().or(z.literal("")),
-    accessToken: z.string().optional(),
+    baseUrl: z.string().optional(),
+    clientId: z.string().optional(),
+    clientSecret: z.string().optional(),
+    storeUrl: z.string().optional(),
+    consumerKey: z.string().optional(),
+    consumerSecret: z.string().optional(),
+    apiToken: z.string().optional(),
   }),
+  capabilities: z.object({
+    readProducts: z.boolean().default(true),
+    readInventory: z.boolean().default(true),
+    createOrders: z.boolean().default(true),
+    readOrders: z.boolean().default(true),
+    getTracking: z.boolean().default(true),
+  }).optional(),
   config: z.object({
     productSyncEnabled: z.boolean().default(true),
     inventorySyncEnabled: z.boolean().default(true),
@@ -118,6 +132,7 @@ export default function AdminSuppliersPage() {
   const [shopifyTestResult, setShopifyTestResult] = useState<{ success: boolean; shopName?: string; error?: string } | null>(null);
   const [syncProgress, setSyncProgress] = useState<SyncProgress | null>(null);
   const [isSyncing, setIsSyncing] = useState(false);
+  const [testingConnection, setTestingConnection] = useState<number | null>(null);
 
   const { data: suppliers, isLoading } = useQuery<Supplier[]>({
     queryKey: ["/api/admin/suppliers"],
@@ -238,6 +253,27 @@ export default function AdminSuppliersPage() {
     },
     onError: () => {
       toast({ title: "Failed to start sync", variant: "destructive" });
+    },
+  });
+
+  const testConnectionMutation = useMutation({
+    mutationFn: async (id: number) => {
+      setTestingConnection(id);
+      const response = await apiRequest("POST", `/api/admin/suppliers/${id}/test`);
+      return response.json();
+    },
+    onSuccess: (result) => {
+      setTestingConnection(null);
+      queryClient.invalidateQueries({ queryKey: ["/api/admin/suppliers"] });
+      if (result.success) {
+        toast({ title: "Connection successful", description: result.data?.message || "Supplier connected successfully" });
+      } else {
+        toast({ title: "Connection failed", description: result.data?.message || result.error, variant: "destructive" });
+      }
+    },
+    onError: (error: Error) => {
+      setTestingConnection(null);
+      toast({ title: "Connection test failed", description: error.message, variant: "destructive" });
     },
   });
 
@@ -407,47 +443,180 @@ export default function AdminSuppliersPage() {
 
                 <div className="space-y-4">
                   <h4 className="font-medium">API Credentials</h4>
-                  <div className="grid gap-4 md:grid-cols-2">
-                    <FormField
-                      control={form.control}
-                      name="apiCredentials.apiKey"
-                      render={({ field }) => (
-                        <FormItem>
-                          <FormLabel>API Key</FormLabel>
-                          <FormControl>
-                            <Input type="password" placeholder="Enter API key" {...field} />
-                          </FormControl>
-                          <FormMessage />
-                        </FormItem>
-                      )}
-                    />
-                    <FormField
-                      control={form.control}
-                      name="apiCredentials.apiSecret"
-                      render={({ field }) => (
-                        <FormItem>
-                          <FormLabel>API Secret</FormLabel>
-                          <FormControl>
-                            <Input type="password" placeholder="Enter API secret" {...field} />
-                          </FormControl>
-                          <FormMessage />
-                        </FormItem>
-                      )}
-                    />
-                    <FormField
-                      control={form.control}
-                      name="apiCredentials.baseUrl"
-                      render={({ field }) => (
-                        <FormItem className="md:col-span-2">
-                          <FormLabel>Base URL</FormLabel>
-                          <FormControl>
-                            <Input placeholder="https://api.supplier.com" {...field} />
-                          </FormControl>
-                          <FormMessage />
-                        </FormItem>
-                      )}
-                    />
-                  </div>
+                  {form.watch("type") === "shopify" && (
+                    <div className="grid gap-4 md:grid-cols-2">
+                      <FormField
+                        control={form.control}
+                        name="apiCredentials.storeDomain"
+                        render={({ field }) => (
+                          <FormItem>
+                            <FormLabel>Store Domain</FormLabel>
+                            <FormControl>
+                              <Input placeholder="your-store.myshopify.com" {...field} />
+                            </FormControl>
+                            <FormDescription>Your Shopify store domain</FormDescription>
+                            <FormMessage />
+                          </FormItem>
+                        )}
+                      />
+                      <FormField
+                        control={form.control}
+                        name="apiCredentials.accessToken"
+                        render={({ field }) => (
+                          <FormItem>
+                            <FormLabel>Access Token</FormLabel>
+                            <FormControl>
+                              <Input type="password" placeholder="shpat_..." {...field} />
+                            </FormControl>
+                            <FormDescription>Admin API access token</FormDescription>
+                            <FormMessage />
+                          </FormItem>
+                        )}
+                      />
+                    </div>
+                  )}
+                  {form.watch("type") === "gigab2b" && (
+                    <div className="grid gap-4 md:grid-cols-2">
+                      <FormField
+                        control={form.control}
+                        name="apiCredentials.clientId"
+                        render={({ field }) => (
+                          <FormItem>
+                            <FormLabel>Client ID</FormLabel>
+                            <FormControl>
+                              <Input placeholder="Your GigaB2B client ID" {...field} />
+                            </FormControl>
+                            <FormMessage />
+                          </FormItem>
+                        )}
+                      />
+                      <FormField
+                        control={form.control}
+                        name="apiCredentials.clientSecret"
+                        render={({ field }) => (
+                          <FormItem>
+                            <FormLabel>Client Secret</FormLabel>
+                            <FormControl>
+                              <Input type="password" placeholder="Your GigaB2B client secret" {...field} />
+                            </FormControl>
+                            <FormMessage />
+                          </FormItem>
+                        )}
+                      />
+                      <FormField
+                        control={form.control}
+                        name="apiCredentials.baseUrl"
+                        render={({ field }) => (
+                          <FormItem className="md:col-span-2">
+                            <FormLabel>API Base URL</FormLabel>
+                            <FormControl>
+                              <Input placeholder="https://api.gigab2b.com" {...field} />
+                            </FormControl>
+                            <FormMessage />
+                          </FormItem>
+                        )}
+                      />
+                    </div>
+                  )}
+                  {form.watch("type") === "woocommerce" && (
+                    <div className="grid gap-4 md:grid-cols-2">
+                      <FormField
+                        control={form.control}
+                        name="apiCredentials.storeUrl"
+                        render={({ field }) => (
+                          <FormItem className="md:col-span-2">
+                            <FormLabel>Store URL</FormLabel>
+                            <FormControl>
+                              <Input placeholder="https://your-store.com" {...field} />
+                            </FormControl>
+                            <FormMessage />
+                          </FormItem>
+                        )}
+                      />
+                      <FormField
+                        control={form.control}
+                        name="apiCredentials.consumerKey"
+                        render={({ field }) => (
+                          <FormItem>
+                            <FormLabel>Consumer Key</FormLabel>
+                            <FormControl>
+                              <Input placeholder="ck_..." {...field} />
+                            </FormControl>
+                            <FormMessage />
+                          </FormItem>
+                        )}
+                      />
+                      <FormField
+                        control={form.control}
+                        name="apiCredentials.consumerSecret"
+                        render={({ field }) => (
+                          <FormItem>
+                            <FormLabel>Consumer Secret</FormLabel>
+                            <FormControl>
+                              <Input type="password" placeholder="cs_..." {...field} />
+                            </FormControl>
+                            <FormMessage />
+                          </FormItem>
+                        )}
+                      />
+                    </div>
+                  )}
+                  {(form.watch("type") === "custom" || form.watch("type") === "amazon") && (
+                    <div className="grid gap-4 md:grid-cols-2">
+                      <FormField
+                        control={form.control}
+                        name="apiCredentials.baseUrl"
+                        render={({ field }) => (
+                          <FormItem className="md:col-span-2">
+                            <FormLabel>Base URL</FormLabel>
+                            <FormControl>
+                              <Input placeholder="https://api.supplier.com" {...field} />
+                            </FormControl>
+                            <FormMessage />
+                          </FormItem>
+                        )}
+                      />
+                      <FormField
+                        control={form.control}
+                        name="apiCredentials.apiKey"
+                        render={({ field }) => (
+                          <FormItem>
+                            <FormLabel>API Key</FormLabel>
+                            <FormControl>
+                              <Input type="password" placeholder="Enter API key" {...field} />
+                            </FormControl>
+                            <FormMessage />
+                          </FormItem>
+                        )}
+                      />
+                      <FormField
+                        control={form.control}
+                        name="apiCredentials.apiSecret"
+                        render={({ field }) => (
+                          <FormItem>
+                            <FormLabel>API Secret</FormLabel>
+                            <FormControl>
+                              <Input type="password" placeholder="Enter API secret" {...field} />
+                            </FormControl>
+                            <FormMessage />
+                          </FormItem>
+                        )}
+                      />
+                      <FormField
+                        control={form.control}
+                        name="apiCredentials.apiToken"
+                        render={({ field }) => (
+                          <FormItem className="md:col-span-2">
+                            <FormLabel>API Token (Optional)</FormLabel>
+                            <FormControl>
+                              <Input type="password" placeholder="Bearer token if required" {...field} />
+                            </FormControl>
+                            <FormMessage />
+                          </FormItem>
+                        )}
+                      />
+                    </div>
+                  )}
                 </div>
 
                 <div className="space-y-4">
@@ -669,7 +838,7 @@ export default function AdminSuppliersPage() {
                   <TableHead>Supplier</TableHead>
                   <TableHead>Type</TableHead>
                   <TableHead>Products</TableHead>
-                  <TableHead>Success Rate</TableHead>
+                  <TableHead>Connection</TableHead>
                   <TableHead>Status</TableHead>
                   <TableHead className="text-right">Actions</TableHead>
                 </TableRow>
@@ -700,12 +869,27 @@ export default function AdminSuppliersPage() {
                     <TableCell>{(supplier.totalProducts || 0).toLocaleString()}</TableCell>
                     <TableCell>
                       <div className="flex items-center gap-2">
-                        {(supplier.rating || 5) >= 4.5 ? (
-                          <CheckCircle className="h-4 w-4 text-chart-2" />
+                        {supplier.connectionStatus === "connected" ? (
+                          <>
+                            <CheckCircle className="h-4 w-4 text-chart-2" />
+                            <span className="text-sm text-chart-2">Connected</span>
+                          </>
+                        ) : supplier.connectionStatus === "failed" ? (
+                          <>
+                            <XCircle className="h-4 w-4 text-destructive" />
+                            <span className="text-sm text-destructive">Failed</span>
+                          </>
+                        ) : testingConnection === supplier.id ? (
+                          <>
+                            <Loader2 className="h-4 w-4 animate-spin" />
+                            <span className="text-sm text-muted-foreground">Testing...</span>
+                          </>
                         ) : (
-                          <XCircle className="h-4 w-4 text-chart-4" />
+                          <>
+                            <div className="h-4 w-4 rounded-full border-2 border-muted" />
+                            <span className="text-sm text-muted-foreground">Not Tested</span>
+                          </>
                         )}
-                        {((supplier.rating || 5) * 20).toFixed(0)}%
                       </div>
                     </TableCell>
                     <TableCell>
@@ -721,6 +905,17 @@ export default function AdminSuppliersPage() {
                           </Button>
                         </DropdownMenuTrigger>
                         <DropdownMenuContent align="end">
+                          <DropdownMenuItem
+                            onClick={() => testConnectionMutation.mutate(supplier.id)}
+                            disabled={testingConnection === supplier.id}
+                          >
+                            {testingConnection === supplier.id ? (
+                              <Loader2 className="mr-2 h-4 w-4 animate-spin" />
+                            ) : (
+                              <CheckCircle className="mr-2 h-4 w-4" />
+                            )}
+                            Test Connection
+                          </DropdownMenuItem>
                           {supplier.type === 'shopify' ? (
                             <DropdownMenuItem
                               onClick={() => shopifySyncMutation.mutate()}

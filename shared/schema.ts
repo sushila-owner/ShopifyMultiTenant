@@ -139,19 +139,68 @@ export const merchants = pgTable("merchants", {
 }));
 
 // ==================== SUPPLIERS TABLE ====================
+// Credential types for each supplier
+export type ShopifyCredentials = {
+  storeDomain: string;
+  accessToken: string;
+};
+
+export type GigaB2BCredentials = {
+  apiKey: string;
+  apiSecret?: string;
+  baseUrl: string;
+  clientId?: string;
+  clientSecret?: string;
+};
+
+export type WooCommerceCredentials = {
+  storeUrl: string;
+  consumerKey: string;
+  consumerSecret: string;
+};
+
+export type CustomApiCredentials = {
+  baseUrl: string;
+  apiKey?: string;
+  apiToken?: string;
+  headers?: Record<string, string>;
+  endpoints?: {
+    products?: string;
+    inventory?: string;
+    orders?: string;
+    tracking?: string;
+  };
+};
+
+export type SupplierCredentials = 
+  | ShopifyCredentials 
+  | GigaB2BCredentials 
+  | WooCommerceCredentials 
+  | CustomApiCredentials
+  | Record<string, never>;
+
+export type SupplierCapabilities = {
+  readProducts: boolean;
+  readInventory: boolean;
+  createOrders: boolean;
+  readOrders: boolean;
+  getTracking: boolean;
+};
+
 export const suppliers = pgTable("suppliers", {
   id: serial("id").primaryKey(),
   name: text("name").notNull(),
   type: supplierTypeEnum("type").notNull(),
   description: text("description"),
   logo: text("logo"),
-  apiCredentials: jsonb("api_credentials").$type<{
-    apiKey?: string;
-    apiSecret?: string;
-    baseUrl?: string;
-    accessToken?: string;
-    refreshToken?: string;
-  }>().default({}),
+  apiCredentials: jsonb("api_credentials").$type<SupplierCredentials>().default({}),
+  capabilities: jsonb("capabilities").$type<SupplierCapabilities>().default({
+    readProducts: true,
+    readInventory: true,
+    createOrders: true,
+    readOrders: true,
+    getTracking: true,
+  }),
   config: jsonb("config").$type<{
     productSyncEnabled?: boolean;
     inventorySyncEnabled?: boolean;
@@ -160,6 +209,9 @@ export const suppliers = pgTable("suppliers", {
     lastSyncAt?: string;
     nextSyncAt?: string;
   }>().default({}),
+  connectionStatus: text("connection_status").default("pending"),
+  lastConnectionTest: timestamp("last_connection_test"),
+  connectionError: text("connection_error"),
   isActive: boolean("is_active").default(true),
   rating: real("rating").default(5),
   totalProducts: integer("total_products").default(0),
@@ -168,6 +220,62 @@ export const suppliers = pgTable("suppliers", {
   createdAt: timestamp("created_at").defaultNow().notNull(),
   updatedAt: timestamp("updated_at").defaultNow().notNull(),
 });
+
+// ==================== SUPPLIER ORDERS TABLE ====================
+// Orders placed with suppliers for fulfillment
+export const supplierOrderStatusEnum = pgEnum("supplier_order_status", [
+  "pending", "submitted", "confirmed", "processing", "shipped", "delivered", "cancelled", "failed"
+]);
+
+export const supplierOrders = pgTable("supplier_orders", {
+  id: serial("id").primaryKey(),
+  orderId: integer("order_id").notNull(),
+  supplierId: integer("supplier_id").notNull(),
+  merchantId: integer("merchant_id").notNull(),
+  supplierOrderId: text("supplier_order_id"),
+  status: supplierOrderStatusEnum("status").default("pending"),
+  items: jsonb("items").$type<{
+    productId: number;
+    variantId: string;
+    sku: string;
+    quantity: number;
+    price: number;
+    supplierProductId?: string;
+  }[]>().default([]),
+  shippingAddress: jsonb("shipping_address").$type<{
+    firstName: string;
+    lastName: string;
+    address1: string;
+    address2?: string;
+    city: string;
+    province?: string;
+    country: string;
+    zip: string;
+    phone?: string;
+  }>(),
+  tracking: jsonb("tracking").$type<{
+    trackingNumber?: string;
+    carrier?: string;
+    trackingUrl?: string;
+    status?: string;
+    estimatedDelivery?: string;
+    lastUpdate?: string;
+  }>(),
+  totalCost: real("total_cost").default(0),
+  supplierResponse: jsonb("supplier_response"),
+  errorMessage: text("error_message"),
+  submittedAt: timestamp("submitted_at"),
+  confirmedAt: timestamp("confirmed_at"),
+  shippedAt: timestamp("shipped_at"),
+  deliveredAt: timestamp("delivered_at"),
+  createdAt: timestamp("created_at").defaultNow().notNull(),
+  updatedAt: timestamp("updated_at").defaultNow().notNull(),
+}, (table) => ({
+  orderIdx: index("supplier_orders_order_idx").on(table.orderId),
+  supplierIdx: index("supplier_orders_supplier_idx").on(table.supplierId),
+  merchantIdx: index("supplier_orders_merchant_idx").on(table.merchantId),
+  statusIdx: index("supplier_orders_status_idx").on(table.status),
+}));
 
 // ==================== PRODUCTS TABLE ====================
 export const products = pgTable("products", {
@@ -487,9 +595,25 @@ export const merchantsRelations = relations(merchants, ({ one, many }) => ({
 
 export const suppliersRelations = relations(suppliers, ({ many, one }) => ({
   products: many(products),
+  supplierOrders: many(supplierOrders),
   createdByUser: one(users, {
     fields: [suppliers.createdBy],
     references: [users.id],
+  }),
+}));
+
+export const supplierOrdersRelations = relations(supplierOrders, ({ one }) => ({
+  order: one(orders, {
+    fields: [supplierOrders.orderId],
+    references: [orders.id],
+  }),
+  supplier: one(suppliers, {
+    fields: [supplierOrders.supplierId],
+    references: [suppliers.id],
+  }),
+  merchant: one(merchants, {
+    fields: [supplierOrders.merchantId],
+    references: [merchants.id],
   }),
 }));
 
@@ -580,6 +704,14 @@ export const insertSupplierSchema = createInsertSchema(suppliers).omit({
 });
 export type InsertSupplier = z.infer<typeof insertSupplierSchema>;
 export type Supplier = typeof suppliers.$inferSelect;
+
+export const insertSupplierOrderSchema = createInsertSchema(supplierOrders).omit({
+  id: true,
+  createdAt: true,
+  updatedAt: true,
+});
+export type InsertSupplierOrder = z.infer<typeof insertSupplierOrderSchema>;
+export type SupplierOrder = typeof supplierOrders.$inferSelect;
 
 export const insertProductSchema = createInsertSchema(products).omit({
   id: true,
