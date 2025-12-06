@@ -1288,6 +1288,105 @@ export async function registerRoutes(
     }
   });
 
+  // ==================== SUPPLIER ORDER FULFILLMENT ====================
+  // Get pending supplier orders for fulfillment
+  app.get("/api/admin/supplier-orders/pending", authMiddleware, adminOnly, async (req: AuthRequest, res: Response) => {
+    try {
+      const orders = await storage.getPendingSupplierOrders();
+      res.json({ success: true, data: orders });
+    } catch (error: any) {
+      res.status(500).json({ success: false, error: error.message });
+    }
+  });
+
+  // Submit order to supplier for fulfillment
+  app.post("/api/admin/supplier-orders/:id/submit", authMiddleware, adminOnly, async (req: AuthRequest, res: Response) => {
+    try {
+      const { createSupplierAdapter } = await import("./supplierAdapters");
+      
+      const supplierOrder = await storage.getSupplierOrder(parseInt(req.params.id));
+      if (!supplierOrder) {
+        return res.status(404).json({ success: false, error: "Supplier order not found" });
+      }
+
+      const supplier = await storage.getSupplier(supplierOrder.supplierId);
+      if (!supplier) {
+        return res.status(404).json({ success: false, error: "Supplier not found" });
+      }
+
+      const adapter = createSupplierAdapter(supplier.type as any, supplier.apiCredentials as any);
+      
+      const result = await adapter.createOrder({
+        orderId: supplierOrder.orderId.toString(),
+        items: (supplierOrder.items || []).map(item => ({
+          sku: item.sku,
+          quantity: item.quantity,
+          price: item.price,
+        })),
+        shippingAddress: supplierOrder.shippingAddress || {
+          firstName: "",
+          lastName: "",
+          address1: "",
+          city: "",
+          country: "",
+          zip: "",
+        },
+      });
+
+      await storage.updateSupplierOrder(supplierOrder.id, {
+        status: result.success ? "submitted" : "failed",
+        supplierOrderId: result.orderId,
+        submittedAt: new Date(),
+        errorMessage: result.success ? undefined : result.message,
+      });
+
+      res.json({ success: result.success, data: result });
+    } catch (error: any) {
+      res.status(500).json({ success: false, error: error.message });
+    }
+  });
+
+  // Get fulfillment/tracking info from supplier
+  app.get("/api/admin/supplier-orders/:id/tracking", authMiddleware, adminOnly, async (req: AuthRequest, res: Response) => {
+    try {
+      const { createSupplierAdapter } = await import("./supplierAdapters");
+      
+      const supplierOrder = await storage.getSupplierOrder(parseInt(req.params.id));
+      if (!supplierOrder) {
+        return res.status(404).json({ success: false, error: "Supplier order not found" });
+      }
+
+      if (!supplierOrder.supplierOrderId) {
+        return res.status(400).json({ success: false, error: "Order not yet submitted to supplier" });
+      }
+
+      const supplier = await storage.getSupplier(supplierOrder.supplierId);
+      if (!supplier) {
+        return res.status(404).json({ success: false, error: "Supplier not found" });
+      }
+
+      const adapter = createSupplierAdapter(supplier.type as any, supplier.apiCredentials as any);
+      const result = await adapter.getFulfillment(supplierOrder.supplierOrderId);
+
+      if (result.success && result.trackingNumber) {
+        await storage.updateSupplierOrder(supplierOrder.id, {
+          tracking: {
+            trackingNumber: result.trackingNumber,
+            carrier: result.carrier,
+            trackingUrl: result.trackingUrl,
+            status: result.status,
+            lastUpdate: new Date().toISOString(),
+          },
+          status: result.status === "delivered" ? "delivered" : result.status === "shipped" ? "shipped" : supplierOrder.status,
+        });
+      }
+
+      res.json({ success: result.success, data: result });
+    } catch (error: any) {
+      res.status(500).json({ success: false, error: error.message });
+    }
+  });
+
   // ==================== MERCHANT ROUTES ====================
   app.get("/api/merchant/dashboard", authMiddleware, merchantOnly, async (req: AuthRequest, res: Response) => {
     try {

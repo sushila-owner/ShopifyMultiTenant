@@ -1,6 +1,6 @@
 import {
   users, merchants, suppliers, products, customers, orders,
-  plans, subscriptions, staffInvitations, notifications, activityLogs, syncLogs, adCreatives, otpVerifications,
+  plans, subscriptions, staffInvitations, notifications, activityLogs, syncLogs, adCreatives, otpVerifications, supplierOrders,
   type User, type InsertUser,
   type Merchant, type InsertMerchant,
   type Supplier, type InsertSupplier,
@@ -16,6 +16,7 @@ import {
   type AdCreative, type InsertAdCreative,
   type OtpVerification, type InsertOtp,
   type AdminDashboardStats, type MerchantDashboardStats,
+  type SupplierOrder, type InsertSupplierOrder,
 } from "@shared/schema";
 import { db } from "./db";
 import { eq, and, desc, asc, sql, gte, lte, ilike, or, isNull, count, inArray } from "drizzle-orm";
@@ -64,6 +65,14 @@ export interface IStorage {
   deleteSupplier(id: number): Promise<boolean>;
   getAllSuppliers(): Promise<Supplier[]>;
   getActiveSuppliers(): Promise<Supplier[]>;
+
+  // Supplier Orders
+  getSupplierOrder(id: number): Promise<SupplierOrder | undefined>;
+  createSupplierOrder(order: InsertSupplierOrder): Promise<SupplierOrder>;
+  updateSupplierOrder(id: number, data: Partial<InsertSupplierOrder>): Promise<SupplierOrder | undefined>;
+  getSupplierOrdersByOrder(orderId: number): Promise<SupplierOrder[]>;
+  getSupplierOrdersByMerchant(merchantId: number): Promise<SupplierOrder[]>;
+  getPendingSupplierOrders(): Promise<SupplierOrder[]>;
 
   // Products
   getProduct(id: number): Promise<Product | undefined>;
@@ -252,6 +261,38 @@ export class DatabaseStorage implements IStorage {
 
   async getActiveSuppliers(): Promise<Supplier[]> {
     return db.select().from(suppliers).where(eq(suppliers.isActive, true));
+  }
+
+  // ==================== SUPPLIER ORDERS ====================
+  async getSupplierOrder(id: number): Promise<SupplierOrder | undefined> {
+    const [order] = await db.select().from(supplierOrders).where(eq(supplierOrders.id, id));
+    return order || undefined;
+  }
+
+  async createSupplierOrder(insertOrder: InsertSupplierOrder): Promise<SupplierOrder> {
+    const [order] = await db.insert(supplierOrders).values(insertOrder).returning();
+    return order;
+  }
+
+  async updateSupplierOrder(id: number, data: Partial<InsertSupplierOrder>): Promise<SupplierOrder | undefined> {
+    const [order] = await db
+      .update(supplierOrders)
+      .set({ ...data, updatedAt: new Date() })
+      .where(eq(supplierOrders.id, id))
+      .returning();
+    return order || undefined;
+  }
+
+  async getSupplierOrdersByOrder(orderId: number): Promise<SupplierOrder[]> {
+    return db.select().from(supplierOrders).where(eq(supplierOrders.orderId, orderId));
+  }
+
+  async getSupplierOrdersByMerchant(merchantId: number): Promise<SupplierOrder[]> {
+    return db.select().from(supplierOrders).where(eq(supplierOrders.merchantId, merchantId)).orderBy(desc(supplierOrders.createdAt));
+  }
+
+  async getPendingSupplierOrders(): Promise<SupplierOrder[]> {
+    return db.select().from(supplierOrders).where(eq(supplierOrders.status, "pending")).orderBy(asc(supplierOrders.createdAt));
   }
 
   // ==================== PRODUCTS ====================

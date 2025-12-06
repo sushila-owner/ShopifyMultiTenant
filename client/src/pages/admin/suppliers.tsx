@@ -70,7 +70,7 @@ import type { Supplier, SupplierType } from "@shared/schema";
 
 const supplierFormSchema = z.object({
   name: z.string().min(2, "Name must be at least 2 characters"),
-  type: z.enum(["gigab2b", "shopify", "amazon", "woocommerce", "custom"]),
+  type: z.enum(["gigab2b", "shopify", "woocommerce", "custom"]),
   description: z.string().optional(),
   apiCredentials: z.object({
     storeDomain: z.string().optional(),
@@ -104,9 +104,8 @@ const supplierFormSchema = z.object({
 type SupplierFormData = z.infer<typeof supplierFormSchema>;
 
 const supplierTypes: { value: SupplierType; label: string }[] = [
-  { value: "gigab2b", label: "GigaB2B" },
   { value: "shopify", label: "Shopify" },
-  { value: "amazon", label: "Amazon" },
+  { value: "gigab2b", label: "GigaB2B" },
   { value: "woocommerce", label: "WooCommerce" },
   { value: "custom", label: "Custom API" },
 ];
@@ -561,7 +560,7 @@ export default function AdminSuppliersPage() {
                       />
                     </div>
                   )}
-                  {(form.watch("type") === "custom" || form.watch("type") === "amazon") && (
+                  {form.watch("type") === "custom" && (
                     <div className="grid gap-4 md:grid-cols-2">
                       <FormField
                         control={form.control}
