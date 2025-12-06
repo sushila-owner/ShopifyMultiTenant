@@ -17,6 +17,8 @@ import {
   type User,
 } from "@shared/schema";
 import { randomUUID } from "crypto";
+import { stripeService } from "./stripeService";
+import { getStripePublishableKey, getUncachableStripeClient } from "./stripeClient";
 
 const JWT_SECRET = process.env.SESSION_SECRET;
 if (!JWT_SECRET) {
@@ -1789,6 +1791,173 @@ export async function registerRoutes(
       if (error.message.includes("Access denied")) {
         return res.status(403).json({ success: false, error: error.message });
       }
+      res.status(500).json({ success: false, error: error.message });
+    }
+  });
+
+  // ==================== STRIPE SUBSCRIPTION ROUTES ====================
+  
+  // Get Stripe publishable key for frontend
+  app.get("/api/stripe/config", async (req: Request, res: Response) => {
+    try {
+      const publishableKey = getStripePublishableKey();
+      res.json({ success: true, data: { publishableKey } });
+    } catch (error: any) {
+      res.status(500).json({ success: false, error: error.message });
+    }
+  });
+
+  // Get subscription plans with Stripe prices
+  app.get("/api/stripe/plans", async (req: Request, res: Response) => {
+    try {
+      const stripe = await getUncachableStripeClient();
+      
+      // Get all products with metadata
+      const products = await stripe.products.list({ active: true, limit: 10 });
+      
+      // Get all prices
+      const prices = await stripe.prices.list({ active: true, limit: 50 });
+      
+      // Combine products with their prices
+      const plans = products.data
+        .filter(p => p.metadata.planSlug) // Only our subscription products
+        .map(product => {
+          const productPrices = prices.data.filter(price => price.product === product.id);
+          const monthlyPrice = productPrices.find(p => p.recurring?.interval === 'month');
+          const yearlyPrice = productPrices.find(p => p.recurring?.interval === 'year');
+          
+          return {
+            id: product.id,
+            name: product.name,
+            description: product.description,
+            slug: product.metadata.planSlug,
+            productLimit: parseInt(product.metadata.productLimit || '-1'),
+            features: product.metadata,
+            monthlyPriceId: monthlyPrice?.id,
+            monthlyAmount: monthlyPrice?.unit_amount || 0,
+            yearlyPriceId: yearlyPrice?.id,
+            yearlyAmount: yearlyPrice?.unit_amount || 0,
+          };
+        })
+        .sort((a, b) => a.monthlyAmount - b.monthlyAmount);
+      
+      res.json({ success: true, data: plans });
+    } catch (error: any) {
+      console.error("Error fetching Stripe plans:", error);
+      res.status(500).json({ success: false, error: error.message });
+    }
+  });
+
+  // Create checkout session for subscription
+  app.post("/api/stripe/checkout", authMiddleware, merchantOnly, async (req: AuthRequest, res: Response) => {
+    try {
+      const { priceId, billingInterval } = req.body;
+      
+      if (!priceId) {
+        return res.status(400).json({ success: false, error: "Price ID required" });
+      }
+
+      const merchant = await storage.getMerchant(req.user!.merchantId!);
+      if (!merchant) {
+        return res.status(404).json({ success: false, error: "Merchant not found" });
+      }
+
+      // Create or get Stripe customer
+      let customerId = merchant.stripeCustomerId;
+      if (!customerId) {
+        const customer = await stripeService.createCustomer(
+          req.user!.email!,
+          merchant.id,
+          merchant.businessName
+        );
+        customerId = customer.id;
+        await stripeService.updateMerchantStripeInfo(merchant.id, { stripeCustomerId: customerId });
+      }
+
+      // Get base URL
+      const protocol = req.headers['x-forwarded-proto'] || req.protocol;
+      const host = req.headers['x-forwarded-host'] || req.get('host');
+      const baseUrl = `${protocol}://${host}`;
+
+      // Create checkout session
+      const session = await stripeService.createCheckoutSession(
+        customerId,
+        priceId,
+        merchant.id,
+        `${baseUrl}/merchant/subscription?success=true`,
+        `${baseUrl}/merchant/subscription?canceled=true`
+      );
+
+      res.json({ success: true, data: { url: session.url } });
+    } catch (error: any) {
+      console.error("Checkout error:", error);
+      res.status(500).json({ success: false, error: error.message });
+    }
+  });
+
+  // Create customer portal session for managing subscription
+  app.post("/api/stripe/portal", authMiddleware, merchantOnly, async (req: AuthRequest, res: Response) => {
+    try {
+      const merchant = await storage.getMerchant(req.user!.merchantId!);
+      if (!merchant || !merchant.stripeCustomerId) {
+        return res.status(404).json({ success: false, error: "No Stripe customer found" });
+      }
+
+      const protocol = req.headers['x-forwarded-proto'] || req.protocol;
+      const host = req.headers['x-forwarded-host'] || req.get('host');
+      const returnUrl = `${protocol}://${host}/merchant/subscription`;
+
+      const session = await stripeService.createCustomerPortalSession(
+        merchant.stripeCustomerId,
+        returnUrl
+      );
+
+      res.json({ success: true, data: { url: session.url } });
+    } catch (error: any) {
+      console.error("Portal error:", error);
+      res.status(500).json({ success: false, error: error.message });
+    }
+  });
+
+  // Get current subscription status
+  app.get("/api/stripe/subscription", authMiddleware, merchantOnly, async (req: AuthRequest, res: Response) => {
+    try {
+      const merchant = await storage.getMerchant(req.user!.merchantId!);
+      if (!merchant) {
+        return res.status(404).json({ success: false, error: "Merchant not found" });
+      }
+
+      let stripeSubscription = null;
+      if (merchant.stripeSubscriptionId) {
+        const stripe = await getUncachableStripeClient();
+        stripeSubscription = await stripe.subscriptions.retrieve(merchant.stripeSubscriptionId);
+      }
+
+      const subscription = await storage.getSubscriptionByMerchant(merchant.id);
+      const plan = subscription ? await storage.getPlan(subscription.planId) : null;
+
+      res.json({
+        success: true,
+        data: {
+          merchant: {
+            id: merchant.id,
+            businessName: merchant.businessName,
+            subscriptionStatus: merchant.subscriptionStatus,
+            stripeCustomerId: merchant.stripeCustomerId,
+            stripeSubscriptionId: merchant.stripeSubscriptionId,
+          },
+          subscription,
+          plan,
+          stripeSubscription: stripeSubscription ? {
+            id: stripeSubscription.id,
+            status: stripeSubscription.status,
+            currentPeriodEnd: stripeSubscription.current_period_end,
+            cancelAtPeriodEnd: stripeSubscription.cancel_at_period_end,
+          } : null,
+        },
+      });
+    } catch (error: any) {
+      console.error("Subscription fetch error:", error);
       res.status(500).json({ success: false, error: error.message });
     }
   });
