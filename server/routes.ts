@@ -651,6 +651,125 @@ export async function registerRoutes(
     }
   });
 
+  // ============================================
+  // SHOPIFY SUPPLIER API (GigaB2B-style features)
+  // ============================================
+
+  // Product Details - Access details of a single product
+  app.get("/api/shopify/products/:productId", authMiddleware, async (req: AuthRequest, res: Response) => {
+    try {
+      const { getShopifyService } = await import("./shopify");
+      const shopify = getShopifyService();
+      if (!shopify) {
+        return res.status(400).json({ success: false, error: "Shopify not configured" });
+      }
+      const details = await shopify.getProductDetails(req.params.productId);
+      res.json({ success: true, data: details });
+    } catch (error: any) {
+      res.status(500).json({ success: false, error: error.message });
+    }
+  });
+
+  // Product Price - Access B2B product prices
+  app.get("/api/shopify/products/:productId/price", authMiddleware, async (req: AuthRequest, res: Response) => {
+    try {
+      const { getShopifyService } = await import("./shopify");
+      const shopify = getShopifyService();
+      if (!shopify) {
+        return res.status(400).json({ success: false, error: "Shopify not configured" });
+      }
+      const pricing = await shopify.getProductPrice(req.params.productId);
+      res.json({ success: true, data: pricing });
+    } catch (error: any) {
+      res.status(500).json({ success: false, error: error.message });
+    }
+  });
+
+  // Product Inventory - Access inventory information
+  app.get("/api/shopify/products/:productId/inventory", authMiddleware, async (req: AuthRequest, res: Response) => {
+    try {
+      const { getShopifyService } = await import("./shopify");
+      const shopify = getShopifyService();
+      if (!shopify) {
+        return res.status(400).json({ success: false, error: "Shopify not configured" });
+      }
+      const inventory = await shopify.getProductInventory(req.params.productId);
+      res.json({ success: true, data: inventory });
+    } catch (error: any) {
+      res.status(500).json({ success: false, error: error.message });
+    }
+  });
+
+  // Sync Drop Shipping Orders - Get orders for drop shipping
+  app.get("/api/shopify/orders", authMiddleware, async (req: AuthRequest, res: Response) => {
+    try {
+      const { getShopifyService } = await import("./shopify");
+      const shopify = getShopifyService();
+      if (!shopify) {
+        return res.status(400).json({ success: false, error: "Shopify not configured" });
+      }
+      const status = req.query.status as string | undefined;
+      const limit = parseInt(req.query.limit as string) || 50;
+      const orders = await shopify.getDropShippingOrders(status, limit);
+      res.json({ success: true, data: orders });
+    } catch (error: any) {
+      res.status(500).json({ success: false, error: error.message });
+    }
+  });
+
+  // Order Status - Query order status by order ID
+  app.get("/api/shopify/orders/:orderId", authMiddleware, async (req: AuthRequest, res: Response) => {
+    try {
+      const { getShopifyService } = await import("./shopify");
+      const shopify = getShopifyService();
+      if (!shopify) {
+        return res.status(400).json({ success: false, error: "Shopify not configured" });
+      }
+      const status = await shopify.getOrderStatus(req.params.orderId);
+      res.json({ success: true, data: status });
+    } catch (error: any) {
+      res.status(500).json({ success: false, error: error.message });
+    }
+  });
+
+  // Tracking Number - Query available tracking for an order
+  app.get("/api/shopify/orders/:orderId/tracking", authMiddleware, async (req: AuthRequest, res: Response) => {
+    try {
+      const { getShopifyService } = await import("./shopify");
+      const shopify = getShopifyService();
+      if (!shopify) {
+        return res.status(400).json({ success: false, error: "Shopify not configured" });
+      }
+      const tracking = await shopify.getTrackingNumber(req.params.orderId);
+      res.json({ success: true, data: tracking });
+    } catch (error: any) {
+      res.status(500).json({ success: false, error: error.message });
+    }
+  });
+
+  // Create Fulfillment with Tracking (for drop shipping)
+  app.post("/api/shopify/orders/:orderId/fulfillment", authMiddleware, async (req: AuthRequest, res: Response) => {
+    try {
+      const { getShopifyService } = await import("./shopify");
+      const shopify = getShopifyService();
+      if (!shopify) {
+        return res.status(400).json({ success: false, error: "Shopify not configured" });
+      }
+      const { trackingNumber, trackingCompany, trackingUrl } = req.body;
+      if (!trackingNumber) {
+        return res.status(400).json({ success: false, error: "trackingNumber is required" });
+      }
+      const result = await shopify.createFulfillment(req.params.orderId, trackingNumber, trackingCompany, trackingUrl);
+      if (result.success) {
+        res.json({ success: true, data: { fulfillmentId: result.fulfillmentId } });
+      } else {
+        res.status(400).json({ success: false, error: result.error });
+      }
+    } catch (error: any) {
+      res.status(500).json({ success: false, error: error.message });
+    }
+  });
+
   // GigaB2B supplier integration
   app.get("/api/admin/gigab2b/test", authMiddleware, adminOnly, async (req: AuthRequest, res: Response) => {
     try {
