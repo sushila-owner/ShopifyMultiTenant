@@ -1,0 +1,77 @@
+{
+  "name": "Apex Mart Wholesale",
+  "description": "Multi-tenant B2B wholesale marketplace connecting suppliers with e-commerce merchants",
+  "repository": "https://github.com/sushilaapexmart/apex-mart-wholesale",
+  "keywords": ["b2b", "wholesale", "marketplace", "shopify", "ecommerce"],
+  "stack": "heroku-24",
+  "env": {
+    "NODE_ENV": {
+      "value": "production"
+    },
+    "SESSION_SECRET": {
+      "description": "Secret key for JWT authentication",
+      "generator": "secret"
+    },
+    "DATABASE_URL": {
+      "description": "PostgreSQL database connection URL"
+    },
+    "PGHOST": {
+      "description": "PostgreSQL host"
+    },
+    "PGDATABASE": {
+      "description": "PostgreSQL database name"
+    },
+    "PGUSER": {
+      "description": "PostgreSQL username"
+    },
+    "PGPASSWORD": {
+      "description": "PostgreSQL password"
+    },
+    "PGPORT": {
+      "description": "PostgreSQL port",
+      "value": "5432"
+    },
+    "SHOPIFY_STORE_URL": {
+      "description": "Shopify store URL for product sync"
+    },
+    "SHOPIFY_ACCESS_TOKEN": {
+      "description": "Shopify Admin API access token"
+    },
+    "STRIPE_SECRET_KEY": {
+      "description": "Stripe secret key for payments"
+    },
+    "STRIPE_PUBLISHABLE_KEY": {
+      "description": "Stripe publishable key for frontend"
+    },
+    "AWS_ACCESS_KEY_ID": {
+      "description": "AWS access key for S3 image storage"
+    },
+    "AWS_SECRET_ACCESS_KEY": {
+      "description": "AWS secret key for S3"
+    },
+    "AWS_S3_BUCKET": {
+      "description": "S3 bucket name for images"
+    },
+    "AWS_S3_REGION": {
+      "description": "AWS S3 region",
+      "value": "us-east-1"
+    },
+    "ANTHROPIC_API_KEY": {
+      "description": "Anthropic API key for Claude AI semantic search"
+    }
+  },
+  "formation": {
+    "web": {
+      "quantity": 1,
+      "size": "basic"
+    }
+  },
+  "buildpacks": [
+    {
+      "url": "heroku/nodejs"
+    }
+  ],
+  "scripts": {
+    "postdeploy": "npm run db:push"
+  }
+}
