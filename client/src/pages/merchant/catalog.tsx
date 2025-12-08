@@ -46,10 +46,8 @@ import {
   ChevronRight,
   X,
   Store,
-  Check,
   ShoppingCart,
   Filter,
-  Heart,
   Home,
   ListChecks,
   ArrowUpDown,
@@ -62,8 +60,7 @@ type SortOption = "featured" | "newest" | "price_high" | "price_low" | "stock_hi
 interface FilterState {
   priceRange: [number, number];
   stockMin: number;
-  suppliers: number[];
-  categories: string[];
+  supplierId: number | null;
   inStock: boolean;
   inventoryTier: string;
 }
@@ -113,8 +110,7 @@ export default function CatalogPage() {
   const [filters, setFilters] = useState<FilterState>({
     priceRange: [0, 10000],
     stockMin: 0,
-    suppliers: [],
-    categories: [],
+    supplierId: null,
     inStock: false,
     inventoryTier: "",
   });
@@ -169,14 +165,12 @@ export default function CatalogPage() {
     
     if (selectedSupplier) {
       params.set("supplierId", selectedSupplier.id.toString());
-    } else if (filters.suppliers.length === 1) {
-      params.set("supplierId", filters.suppliers[0].toString());
+    } else if (filters.supplierId) {
+      params.set("supplierId", filters.supplierId.toString());
     }
     
     if (selectedCategory) {
       params.set("category", selectedCategory);
-    } else if (filters.categories.length === 1) {
-      params.set("category", filters.categories[0]);
     }
     
     if (filters.inventoryTier) {
@@ -310,12 +304,10 @@ export default function CatalogPage() {
     return supplierPrice + importSettings.pricingValue;
   };
 
-  const toggleSupplierFilter = (supplierId: number) => {
+  const selectSupplierFilter = (supplierId: number) => {
     setFilters(prev => ({
       ...prev,
-      suppliers: prev.suppliers.includes(supplierId)
-        ? prev.suppliers.filter(id => id !== supplierId)
-        : [...prev.suppliers, supplierId]
+      supplierId: prev.supplierId === supplierId ? null : supplierId
     }));
     resetPage();
   };
@@ -324,8 +316,7 @@ export default function CatalogPage() {
     setFilters({
       priceRange: [0, 10000],
       stockMin: 0,
-      suppliers: [],
-      categories: [],
+      supplierId: null,
       inStock: false,
       inventoryTier: "",
     });
@@ -335,7 +326,7 @@ export default function CatalogPage() {
   };
 
   const activeFilterCount = 
-    filters.suppliers.length + 
+    (filters.supplierId ? 1 : 0) + 
     (filters.inventoryTier ? 1 : 0) + 
     (selectedCategory ? 1 : 0) +
     (debouncedSearch ? 1 : 0);
@@ -393,21 +384,25 @@ export default function CatalogPage() {
           <span>Supplier</span>
           <ChevronDown className={`h-4 w-4 transition-transform ${expandedFilters.supplier ? "" : "-rotate-90"}`} />
         </CollapsibleTrigger>
-        <CollapsibleContent className="pb-4 space-y-2 px-1">
+        <CollapsibleContent className="pb-4 space-y-1 px-1">
+          <button
+            onClick={() => setFilters(prev => ({ ...prev, supplierId: null }))}
+            className={`w-full text-left text-sm py-1.5 px-2 rounded-md transition-colors ${
+              !filters.supplierId ? "bg-primary/10 text-primary font-medium" : "hover:bg-muted/50"
+            }`}
+          >
+            All Suppliers
+          </button>
           {suppliers.map((supplier) => (
-            <div key={supplier.id} className="flex items-center space-x-2">
-              <Checkbox
-                id={`supplier-${supplier.id}`}
-                checked={filters.suppliers.includes(supplier.id)}
-                onCheckedChange={() => toggleSupplierFilter(supplier.id)}
-              />
-              <label
-                htmlFor={`supplier-${supplier.id}`}
-                className="text-sm leading-none cursor-pointer flex-1 truncate"
-              >
-                {supplier.name}
-              </label>
-            </div>
+            <button
+              key={supplier.id}
+              onClick={() => selectSupplierFilter(supplier.id)}
+              className={`w-full text-left text-sm py-1.5 px-2 rounded-md transition-colors truncate ${
+                filters.supplierId === supplier.id ? "bg-primary/10 text-primary font-medium" : "hover:bg-muted/50"
+              }`}
+            >
+              {supplier.name}
+            </button>
           ))}
         </CollapsibleContent>
       </Collapsible>
