@@ -77,33 +77,27 @@ export default function SubscriptionPage() {
     }
   }, [location, toast]);
 
-  const { data, isLoading } = useQuery<{ success: boolean; data: SubscriptionData }>({
+  const { data, isLoading } = useQuery<SubscriptionData>({
     queryKey: ["/api/merchant/subscription"],
   });
 
-  const { data: stripePlansData, isLoading: stripePlansLoading } = useQuery<{ success: boolean; data: StripePlan[] }>({
+  const { data: stripePlansData, isLoading: stripePlansLoading } = useQuery<StripePlan[]>({
     queryKey: ["/api/stripe/plans"],
   });
 
   const { data: stripeSubData, isLoading: stripeSubLoading } = useQuery<{ 
-    success: boolean; 
-    data: { 
-      merchant: any; 
-      subscription: any; 
-      plan: any; 
-      stripeSubscription: any;
-    } 
+    merchant: any; 
+    subscription: any; 
+    plan: any; 
+    stripeSubscription: any;
   }>({
     queryKey: ["/api/stripe/subscription"],
   });
 
   const { data: statsData, isLoading: statsLoading } = useQuery<{
-    success: boolean;
-    data: {
-      currentProductCount: number;
-      productLimit: number;
-      totalOrders: number;
-    };
+    currentProductCount: number;
+    productLimit: number;
+    totalOrders: number;
   }>({
     queryKey: ["/api/merchant/stats"],
   });
@@ -146,13 +140,14 @@ export default function SubscriptionPage() {
     },
   });
 
-  const subscription = data?.data?.subscription;
-  const currentPlan = data?.data?.currentPlan;
-  const stripePlans = stripePlansData?.data || [];
-  const freeForLifeThreshold = data?.data?.freeForLifeThreshold || 5000000;
-  const stats = statsData?.data;
-  const stripeSubscription = stripeSubData?.data?.stripeSubscription;
-  const merchantStripeData = stripeSubData?.data?.merchant;
+  const subscription = data?.subscription;
+  const currentPlan = data?.currentPlan;
+  const availablePlans = data?.availablePlans || [];
+  const stripePlans = stripePlansData || [];
+  const freeForLifeThreshold = data?.freeForLifeThreshold || 5000000;
+  const stats = statsData;
+  const stripeSubscription = stripeSubData?.stripeSubscription;
+  const merchantStripeData = stripeSubData?.merchant;
 
   const lifetimeSales = subscription?.lifetimeSales || 0;
   const progressToFreeForLife = Math.min((lifetimeSales / freeForLifeThreshold) * 100, 100);
@@ -374,111 +369,130 @@ export default function SubscriptionPage() {
         </CardContent>
       </Card>
 
-      {/* Stripe Plans */}
+      {/* All Available Plans */}
       <div>
         <h2 className="text-xl font-semibold mb-4">Available Plans</h2>
-        {stripePlansLoading ? (
+        {isLoading ? (
           <div className="grid gap-6 md:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4">
-            {[1, 2, 3, 4].map((i) => (
+            {[1, 2, 3, 4, 5, 6].map((i) => (
               <Skeleton key={i} className="h-80" />
             ))}
           </div>
         ) : (
           <div className="grid gap-6 md:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4">
-            {stripePlans.filter(p => p.monthlyAmount > 0).map((plan) => {
-              const isPopular = plan.slug === 'growth' || plan.slug === 'professional';
-              const currentSlug = currentPlan?.slug || currentPlan?.name?.toLowerCase();
-              const isCurrentPlan = plan.slug === currentSlug;
-              
-              return (
-                <Card
-                  key={plan.id}
-                  className={`relative ${isPopular ? "border-primary shadow-lg" : ""} ${
-                    isCurrentPlan ? "bg-primary/5 border-primary/50" : ""
-                  }`}
-                  data-testid={`card-plan-${plan.slug}`}
-                >
-                  {isPopular && (
-                    <div className="absolute -top-3 left-1/2 -translate-x-1/2">
-                      <Badge className="bg-primary text-primary-foreground">Popular</Badge>
-                    </div>
-                  )}
-                  <CardHeader className="text-center pt-6">
-                    <div className="flex justify-center mb-2 text-primary">
-                      {getPlanIcon(plan.name)}
-                    </div>
-                    <CardTitle>{plan.name}</CardTitle>
-                    <CardDescription className="min-h-[40px]">{plan.description}</CardDescription>
-                    <div className="pt-4">
-                      <span className="text-4xl font-bold">{formatCurrency(plan.monthlyAmount)}</span>
-                      <span className="text-muted-foreground">/month</span>
-                    </div>
-                    {plan.yearlyAmount > 0 && (
-                      <p className="text-xs text-muted-foreground mt-1">
-                        or {formatCurrency(plan.yearlyAmount)}/year (save 17%)
-                      </p>
+            {availablePlans
+              .filter((plan: Plan) => plan.name?.toLowerCase() !== 'free_for_life')
+              .sort((a: Plan, b: Plan) => (a.monthlyPrice || 0) - (b.monthlyPrice || 0))
+              .map((plan: Plan) => {
+                const isPopular = plan.slug === 'growth' || plan.slug === 'professional';
+                const currentSlug = currentPlan?.slug || currentPlan?.name?.toLowerCase();
+                const isCurrentPlan = plan.slug === currentSlug || plan.id === currentPlan?.id;
+                const stripePlan = stripePlans.find((sp: StripePlan) => sp.slug === plan.slug);
+                const isFree = (plan.monthlyPrice || 0) === 0;
+                
+                return (
+                  <Card
+                    key={plan.id}
+                    className={`relative ${isPopular ? "border-primary shadow-lg" : ""} ${
+                      isCurrentPlan ? "bg-primary/5 border-primary/50" : ""
+                    }`}
+                    data-testid={`card-plan-${plan.slug || plan.id}`}
+                  >
+                    {isPopular && (
+                      <div className="absolute -top-3 left-1/2 -translate-x-1/2">
+                        <Badge className="bg-primary text-primary-foreground">Popular</Badge>
+                      </div>
                     )}
-                  </CardHeader>
-                  <CardContent>
-                    <ul className="space-y-2 mb-6 text-sm">
-                      <li className="flex items-start gap-2">
-                        <Check className="h-4 w-4 text-chart-2 flex-shrink-0 mt-0.5" />
-                        <span>
-                          {plan.productLimit === -1 ? "Unlimited products" : `Up to ${plan.productLimit.toLocaleString()} products`}
+                    <CardHeader className="text-center pt-6">
+                      <div className="flex justify-center mb-2 text-primary">
+                        {getPlanIcon(plan.name || plan.displayName || "free")}
+                      </div>
+                      <CardTitle>{plan.displayName || plan.name}</CardTitle>
+                      <CardDescription className="min-h-[40px]">{plan.description}</CardDescription>
+                      <div className="pt-4">
+                        <span className="text-4xl font-bold">
+                          {isFree ? "Free" : formatCurrency(plan.monthlyPrice || 0)}
                         </span>
-                      </li>
-                      {plan.features.hasAiAds === 'true' && (
+                        {!isFree && <span className="text-muted-foreground">/month</span>}
+                      </div>
+                      {stripePlan?.yearlyAmount && stripePlan.yearlyAmount > 0 && (
+                        <p className="text-xs text-muted-foreground mt-1">
+                          or {formatCurrency(stripePlan.yearlyAmount)}/year (save 17%)
+                        </p>
+                      )}
+                    </CardHeader>
+                    <CardContent>
+                      <ul className="space-y-2 mb-6 text-sm">
                         <li className="flex items-start gap-2">
                           <Check className="h-4 w-4 text-chart-2 flex-shrink-0 mt-0.5" />
-                          <span>AI-generated ads</span>
+                          <span>
+                            {plan.productLimit === -1 ? "Unlimited products" : `Up to ${(plan.productLimit || 25).toLocaleString()} products`}
+                          </span>
                         </li>
-                      )}
-                      {plan.features.hasVideoAds === 'true' && (
                         <li className="flex items-start gap-2">
                           <Check className="h-4 w-4 text-chart-2 flex-shrink-0 mt-0.5" />
-                          <span>Video ad generation</span>
+                          <span>
+                            {plan.orderLimit === -1 ? "Unlimited orders" : `Up to ${(plan.orderLimit || 50).toLocaleString()} orders/month`}
+                          </span>
                         </li>
-                      )}
-                      {plan.features.isWhiteLabel === 'true' && (
-                        <li className="flex items-start gap-2">
-                          <Check className="h-4 w-4 text-chart-2 flex-shrink-0 mt-0.5" />
-                          <span>White-label branding</span>
-                        </li>
-                      )}
-                      {plan.features.hasVipSupport === 'true' && (
-                        <li className="flex items-start gap-2">
-                          <Check className="h-4 w-4 text-chart-2 flex-shrink-0 mt-0.5" />
-                          <span>VIP Support</span>
-                        </li>
-                      )}
-                    </ul>
-                    
-                    {isCurrentPlan ? (
-                      <Button variant="outline" className="w-full" disabled>
-                        Current Plan
-                      </Button>
-                    ) : (
-                      <Button
-                        variant={isPopular ? "default" : "outline"}
-                        className="w-full gap-2"
-                        onClick={() => plan.monthlyPriceId && handleCheckout(plan.monthlyPriceId)}
-                        disabled={checkoutMutation.isPending || !plan.monthlyPriceId}
-                        data-testid={`button-select-${plan.slug}`}
-                      >
-                        {checkoutMutation.isPending ? (
-                          <Loader2 className="h-4 w-4 animate-spin" />
-                        ) : (
-                          <>
-                            Subscribe
-                            <ArrowRight className="h-4 w-4" />
-                          </>
+                        {plan.dailyAdsLimit && plan.dailyAdsLimit > 0 && (
+                          <li className="flex items-start gap-2">
+                            <Check className="h-4 w-4 text-chart-2 flex-shrink-0 mt-0.5" />
+                            <span>
+                              {plan.dailyAdsLimit === -1 ? "Unlimited AI ads" : `${plan.dailyAdsLimit} AI ads/day`}
+                            </span>
+                          </li>
                         )}
-                      </Button>
-                    )}
-                  </CardContent>
-                </Card>
-              );
-            })}
+                        {plan.hasVideoAds && (
+                          <li className="flex items-start gap-2">
+                            <Check className="h-4 w-4 text-chart-2 flex-shrink-0 mt-0.5" />
+                            <span>Video ad generation</span>
+                          </li>
+                        )}
+                        {plan.isWhiteLabel && (
+                          <li className="flex items-start gap-2">
+                            <Check className="h-4 w-4 text-chart-2 flex-shrink-0 mt-0.5" />
+                            <span>White-label branding</span>
+                          </li>
+                        )}
+                        {plan.hasVipSupport && (
+                          <li className="flex items-start gap-2">
+                            <Check className="h-4 w-4 text-chart-2 flex-shrink-0 mt-0.5" />
+                            <span>VIP Support</span>
+                          </li>
+                        )}
+                      </ul>
+                      
+                      {isCurrentPlan ? (
+                        <Button variant="outline" className="w-full" disabled>
+                          Current Plan
+                        </Button>
+                      ) : isFree ? (
+                        <Button variant="outline" className="w-full" disabled>
+                          Free Tier
+                        </Button>
+                      ) : (
+                        <Button
+                          variant={isPopular ? "default" : "outline"}
+                          className="w-full gap-2"
+                          onClick={() => stripePlan?.monthlyPriceId && handleCheckout(stripePlan.monthlyPriceId)}
+                          disabled={checkoutMutation.isPending || !stripePlan?.monthlyPriceId}
+                          data-testid={`button-select-${plan.slug || plan.id}`}
+                        >
+                          {checkoutMutation.isPending ? (
+                            <Loader2 className="h-4 w-4 animate-spin" />
+                          ) : (
+                            <>
+                              {stripePlan?.monthlyPriceId ? "Subscribe" : "Contact Sales"}
+                              <ArrowRight className="h-4 w-4" />
+                            </>
+                          )}
+                        </Button>
+                      )}
+                    </CardContent>
+                  </Card>
+                );
+              })}
           </div>
         )}
       </div>
