@@ -86,7 +86,7 @@ const planConfigs: PlanConfig[] = [
   {
     id: "millionaire",
     nameKey: "pricing.millionaire",
-    price: 499,
+    price: 259,
     period: "month",
     descriptionKey: "pricing.millionaireDescription",
     badge: "millionaire",
