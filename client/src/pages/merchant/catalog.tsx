@@ -7,6 +7,7 @@ import { Skeleton } from "@/components/ui/skeleton";
 import { Checkbox } from "@/components/ui/checkbox";
 import { Separator } from "@/components/ui/separator";
 import { ScrollArea } from "@/components/ui/scroll-area";
+import { Card, CardContent } from "@/components/ui/card";
 import {
   Sheet,
   SheetContent,
@@ -51,11 +52,20 @@ import {
   Home,
   ListChecks,
   ArrowUpDown,
+  Eye,
+  TrendingUp,
+  Boxes,
+  Grid3X3,
+  LayoutList,
+  Sparkles,
+  Heart,
+  Check,
 } from "lucide-react";
 import { Link } from "wouter";
 import type { Product, Supplier } from "@shared/schema";
 
 type SortOption = "featured" | "newest" | "price_high" | "price_low" | "stock_high";
+type ViewMode = "grid" | "list";
 
 interface FilterState {
   priceRange: [number, number];
@@ -81,17 +91,17 @@ interface CatalogResponse {
 const PRODUCTS_PER_PAGE = 48;
 
 const INVENTORY_TIERS = [
-  { id: "25", label: "More than 25" },
-  { id: "50", label: "More than 50" },
-  { id: "100", label: "More than 100" },
+  { id: "25", label: "25+ in stock" },
+  { id: "50", label: "50+ in stock" },
+  { id: "100", label: "100+ in stock" },
 ];
 
 const SORT_OPTIONS = [
   { id: "featured" as SortOption, label: "Featured" },
-  { id: "newest" as SortOption, label: "Newest" },
-  { id: "price_high" as SortOption, label: "Price (High to Low)" },
-  { id: "price_low" as SortOption, label: "Price (Low to High)" },
-  { id: "stock_high" as SortOption, label: "Inventory (High to Low)" },
+  { id: "newest" as SortOption, label: "Newest First" },
+  { id: "price_low" as SortOption, label: "Price: Low to High" },
+  { id: "price_high" as SortOption, label: "Price: High to Low" },
+  { id: "stock_high" as SortOption, label: "Most Stock" },
 ];
 
 export default function CatalogPage() {
@@ -106,6 +116,8 @@ export default function CatalogPage() {
   const [currentPage, setCurrentPage] = useState(1);
   const [bulkSelectMode, setBulkSelectMode] = useState(false);
   const [selectedCategory, setSelectedCategory] = useState<string | null>(null);
+  const [viewMode, setViewMode] = useState<ViewMode>("grid");
+  const [quickViewProduct, setQuickViewProduct] = useState<Product | null>(null);
   
   const [filters, setFilters] = useState<FilterState>({
     priceRange: [0, 10000],
@@ -228,73 +240,86 @@ export default function CatalogPage() {
   const totalPages = pagination?.totalPages || 1;
 
   const importMutation = useMutation({
-    mutationFn: async (data: { productId: number; pricingRule: { type: string; value: number } }) =>
-      apiRequest("POST", "/api/merchant/products/import", data),
+    mutationFn: async (productIds: number[]) => {
+      const results = [];
+      for (const productId of productIds) {
+        const response = await apiRequest("POST", "/api/merchant/products/import", {
+          productId,
+          pricingRule: {
+            type: importSettings.pricingType,
+            value: importSettings.pricingValue,
+          },
+        });
+        results.push(await response.json());
+      }
+      return results;
+    },
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: ["/api/merchant/products"] });
-      queryClient.invalidateQueries({ queryKey: ["/api/merchant/dashboard"] });
-      toast({ title: "Product imported successfully" });
+      toast({
+        title: "Products Imported",
+        description: `Successfully imported ${selectedProducts.length} product(s) to your store.`,
+      });
       setSelectedProducts([]);
       setIsImportDialogOpen(false);
+      setBulkSelectMode(false);
     },
-    onError: () => {
-      toast({ title: "Failed to import product", variant: "destructive" });
+    onError: (error: any) => {
+      toast({
+        title: "Import Failed",
+        description: error.message || "Failed to import products",
+        variant: "destructive",
+      });
     },
   });
 
-  const categories = useMemo(() => {
-    const cats = products.map((p) => p.category).filter((c): c is string => !!c);
-    return Array.from(new Set(cats)).sort();
-  }, [products]);
-
   const categoryTree = useMemo(() => {
-    const tree: { [key: string]: string[] } = {};
-    categories.forEach(cat => {
-      const parts = cat.split(" > ");
-      const parent = parts[0];
-      if (!tree[parent]) {
-        tree[parent] = [];
-      }
-      if (parts.length > 1) {
-        const child = parts.slice(1).join(" > ");
-        if (!tree[parent].includes(child)) {
-          tree[parent].push(child);
+    const tree: Record<string, string[]> = {};
+    products.forEach((p) => {
+      if (p.category) {
+        const parts = p.category.split(" > ");
+        const parent = parts[0];
+        if (!tree[parent]) tree[parent] = [];
+        if (parts[1] && !tree[parent].includes(parts[1])) {
+          tree[parent].push(parts[1]);
         }
       }
     });
     return tree;
-  }, [categories]);
+  }, [products]);
 
-  const resetPage = () => setCurrentPage(1);
+  const handleSelectSupplier = (supplier: Supplier) => {
+    setSelectedSupplier(supplier);
+    setFilters(prev => ({ ...prev, supplierId: supplier.id }));
+    setCurrentPage(1);
+  };
+
+  const handleBackToSuppliers = () => {
+    setSelectedSupplier(null);
+    setFilters(prev => ({ ...prev, supplierId: null }));
+    setSelectedProducts([]);
+    setBulkSelectMode(false);
+  };
 
   const toggleProductSelection = (productId: number) => {
-    setSelectedProducts((prev) =>
+    setSelectedProducts(prev =>
       prev.includes(productId)
-        ? prev.filter((id) => id !== productId)
+        ? prev.filter(id => id !== productId)
         : [...prev, productId]
     );
   };
 
   const selectAllProducts = () => {
-    if (products) {
-      if (selectedProducts.length === products.length) {
-        setSelectedProducts([]);
-      } else {
-        setSelectedProducts(products.map((p) => p.id));
-      }
+    if (selectedProducts.length === products.length) {
+      setSelectedProducts([]);
+    } else {
+      setSelectedProducts(products.map(p => p.id));
     }
   };
 
-  const handleImport = async () => {
-    for (const productId of selectedProducts) {
-      await importMutation.mutateAsync({
-        productId: productId,
-        pricingRule: {
-          type: importSettings.pricingType,
-          value: importSettings.pricingValue,
-        },
-      });
-    }
+  const handleImport = () => {
+    if (selectedProducts.length === 0) return;
+    importMutation.mutate(selectedProducts);
   };
 
   const calculateMerchantPrice = (supplierPrice: number) => {
@@ -312,37 +337,9 @@ export default function CatalogPage() {
     resetPage();
   };
 
-  const clearAllFilters = () => {
-    setFilters({
-      priceRange: [0, 10000],
-      stockMin: 0,
-      supplierId: null,
-      inStock: false,
-      inventoryTier: "",
-    });
-    setSelectedCategory(null);
-    setSearchInput("");
+  const handleCategorySelect = (category: string | null) => {
+    setSelectedCategory(category);
     resetPage();
-  };
-
-  const activeFilterCount = 
-    (filters.supplierId ? 1 : 0) + 
-    (filters.inventoryTier ? 1 : 0) + 
-    (selectedCategory ? 1 : 0) +
-    (debouncedSearch ? 1 : 0);
-
-  const handleBackToSuppliers = () => {
-    setSelectedSupplier(null);
-    setSelectedProducts([]);
-    setSearchInput("");
-    setCurrentPage(1);
-    setBulkSelectMode(false);
-  };
-
-  const handleSelectSupplier = (supplier: Supplier) => {
-    setSelectedSupplier(supplier);
-    setCurrentPage(1);
-    setSearchInput("");
   };
 
   const toggleCategoryExpand = (category: string) => {
@@ -353,25 +350,46 @@ export default function CatalogPage() {
     );
   };
 
-  const handleCategorySelect = (category: string | null) => {
-    setSelectedCategory(category);
-    resetPage();
+  const clearAllFilters = () => {
+    setFilters({
+      priceRange: [0, 10000],
+      stockMin: 0,
+      supplierId: selectedSupplier?.id || null,
+      inStock: false,
+      inventoryTier: "",
+    });
+    setSelectedCategory(null);
+    setSearchInput("");
+    setCurrentPage(1);
+  };
+
+  const resetPage = () => {
+    setCurrentPage(1);
+  };
+
+  const activeFilterCount = [
+    filters.inventoryTier,
+    filters.inStock,
+    selectedCategory,
+  ].filter(Boolean).length;
+
+  const calculateProfit = (supplierPrice: number) => {
+    const merchantPrice = calculateMerchantPrice(supplierPrice);
+    return merchantPrice - supplierPrice;
   };
 
   const FilterSidebar = () => (
     <div className="space-y-1">
-      {activeFilterCount > 0 && (
-        <div className="p-3 bg-muted/50 rounded-lg mb-4">
-          <div className="flex items-center justify-between">
-            <span className="text-sm font-medium">{activeFilterCount} filters applied</span>
-            <Button 
-              variant="ghost" 
-              size="sm" 
-              className="h-7 text-xs text-primary"
-              onClick={clearAllFilters}
-            >
-              Clear All
-            </Button>
+      {selectedSupplier && (
+        <div className="pb-4">
+          <div className="flex items-center gap-3 p-3 rounded-xl bg-gradient-to-r from-primary/10 to-primary/5 border border-primary/20">
+            <div className="h-10 w-10 rounded-full bg-primary/20 flex items-center justify-center">
+              <Store className="h-5 w-5 text-primary" />
+            </div>
+            <div className="flex-1 min-w-0">
+              <p className="font-medium text-sm truncate">{selectedSupplier.name}</p>
+              <p className="text-xs text-muted-foreground">{totalProducts.toLocaleString()} products</p>
+            </div>
           </div>
         </div>
       )}
@@ -380,15 +398,18 @@ export default function CatalogPage() {
         open={expandedFilters.supplier} 
         onOpenChange={(open) => setExpandedFilters(prev => ({ ...prev, supplier: open }))}
       >
-        <CollapsibleTrigger className="flex items-center justify-between w-full py-3 px-1 text-sm font-medium hover:bg-muted/50 rounded-md">
-          <span>Supplier</span>
-          <ChevronDown className={`h-4 w-4 transition-transform ${expandedFilters.supplier ? "" : "-rotate-90"}`} />
+        <CollapsibleTrigger className="flex items-center justify-between w-full py-3 px-2 text-sm font-semibold hover:bg-muted/50 rounded-lg transition-colors">
+          <span className="flex items-center gap-2">
+            <Store className="h-4 w-4 text-muted-foreground" />
+            Supplier
+          </span>
+          <ChevronDown className={`h-4 w-4 transition-transform duration-200 ${expandedFilters.supplier ? "" : "-rotate-90"}`} />
         </CollapsibleTrigger>
         <CollapsibleContent className="pb-4 space-y-1 px-1">
           <button
             onClick={() => setFilters(prev => ({ ...prev, supplierId: null }))}
-            className={`w-full text-left text-sm py-1.5 px-2 rounded-md transition-colors ${
-              !filters.supplierId ? "bg-primary/10 text-primary font-medium" : "hover:bg-muted/50"
+            className={`w-full text-left text-sm py-2 px-3 rounded-lg transition-all ${
+              !filters.supplierId ? "bg-primary text-primary-foreground font-medium" : "hover:bg-muted"
             }`}
           >
             All Suppliers
@@ -397,8 +418,8 @@ export default function CatalogPage() {
             <button
               key={supplier.id}
               onClick={() => selectSupplierFilter(supplier.id)}
-              className={`w-full text-left text-sm py-1.5 px-2 rounded-md transition-colors truncate ${
-                filters.supplierId === supplier.id ? "bg-primary/10 text-primary font-medium" : "hover:bg-muted/50"
+              className={`w-full text-left text-sm py-2 px-3 rounded-lg transition-all truncate ${
+                filters.supplierId === supplier.id ? "bg-primary text-primary-foreground font-medium" : "hover:bg-muted"
               }`}
             >
               {supplier.name}
@@ -407,21 +428,28 @@ export default function CatalogPage() {
         </CollapsibleContent>
       </Collapsible>
 
-      <Separator />
+      <Separator className="my-2" />
 
       <Collapsible 
         open={expandedFilters.inventory} 
         onOpenChange={(open) => setExpandedFilters(prev => ({ ...prev, inventory: open }))}
       >
-        <CollapsibleTrigger className="flex items-center justify-between w-full py-3 px-1 text-sm font-medium hover:bg-muted/50 rounded-md">
-          <span>Inventory</span>
-          <ChevronDown className={`h-4 w-4 transition-transform ${expandedFilters.inventory ? "" : "-rotate-90"}`} />
+        <CollapsibleTrigger className="flex items-center justify-between w-full py-3 px-2 text-sm font-semibold hover:bg-muted/50 rounded-lg transition-colors">
+          <span className="flex items-center gap-2">
+            <Boxes className="h-4 w-4 text-muted-foreground" />
+            Stock Level
+          </span>
+          <ChevronDown className={`h-4 w-4 transition-transform duration-200 ${expandedFilters.inventory ? "" : "-rotate-90"}`} />
         </CollapsibleTrigger>
-        <CollapsibleContent className="pb-4 space-y-2 px-1">
+        <CollapsibleContent className="pb-4 space-y-2 px-2">
           {INVENTORY_TIERS.map((tier) => (
-            <div key={tier.id} className="flex items-center space-x-2">
+            <label
+              key={tier.id}
+              className={`flex items-center gap-3 p-2 rounded-lg cursor-pointer transition-all ${
+                filters.inventoryTier === tier.id ? "bg-primary/10" : "hover:bg-muted"
+              }`}
+            >
               <Checkbox
-                id={`inventory-${tier.id}`}
                 checked={filters.inventoryTier === tier.id}
                 onCheckedChange={(checked) => {
                   setFilters(prev => ({
@@ -431,32 +459,30 @@ export default function CatalogPage() {
                   resetPage();
                 }}
               />
-              <label
-                htmlFor={`inventory-${tier.id}`}
-                className="text-sm leading-none cursor-pointer"
-              >
-                {tier.label}
-              </label>
-            </div>
+              <span className="text-sm">{tier.label}</span>
+            </label>
           ))}
         </CollapsibleContent>
       </Collapsible>
 
-      <Separator />
+      <Separator className="my-2" />
 
       <Collapsible 
         open={expandedFilters.category} 
         onOpenChange={(open) => setExpandedFilters(prev => ({ ...prev, category: open }))}
       >
-        <CollapsibleTrigger className="flex items-center justify-between w-full py-3 px-1 text-sm font-medium hover:bg-muted/50 rounded-md">
-          <span>Category</span>
-          <ChevronDown className={`h-4 w-4 transition-transform ${expandedFilters.category ? "" : "-rotate-90"}`} />
+        <CollapsibleTrigger className="flex items-center justify-between w-full py-3 px-2 text-sm font-semibold hover:bg-muted/50 rounded-lg transition-colors">
+          <span className="flex items-center gap-2">
+            <Package className="h-4 w-4 text-muted-foreground" />
+            Category
+          </span>
+          <ChevronDown className={`h-4 w-4 transition-transform duration-200 ${expandedFilters.category ? "" : "-rotate-90"}`} />
         </CollapsibleTrigger>
         <CollapsibleContent className="pb-4 space-y-1 px-1 max-h-64 overflow-y-auto">
           <button
             onClick={() => handleCategorySelect(null)}
-            className={`w-full text-left text-sm py-1.5 px-2 rounded-md transition-colors ${
-              !selectedCategory ? "bg-primary/10 text-primary font-medium" : "hover:bg-muted/50"
+            className={`w-full text-left text-sm py-2 px-3 rounded-lg transition-all ${
+              !selectedCategory ? "bg-primary text-primary-foreground font-medium" : "hover:bg-muted"
             }`}
           >
             All Categories
@@ -465,8 +491,8 @@ export default function CatalogPage() {
             <div key={parentCat}>
               <button
                 onClick={() => handleCategorySelect(parentCat)}
-                className={`w-full text-left text-sm py-1.5 px-2 rounded-md transition-colors flex items-center justify-between ${
-                  selectedCategory === parentCat ? "bg-primary/10 text-primary font-medium" : "hover:bg-muted/50"
+                className={`w-full text-left text-sm py-2 px-3 rounded-lg transition-all flex items-center justify-between ${
+                  selectedCategory === parentCat ? "bg-primary text-primary-foreground font-medium" : "hover:bg-muted"
                 }`}
               >
                 <span className="truncate">{parentCat}</span>
@@ -484,8 +510,8 @@ export default function CatalogPage() {
                 <button
                   key={child}
                   onClick={() => handleCategorySelect(`${parentCat} > ${child}`)}
-                  className={`w-full text-left text-sm py-1 px-4 rounded-md transition-colors ${
-                    selectedCategory === `${parentCat} > ${child}` ? "bg-primary/10 text-primary font-medium" : "hover:bg-muted/50 text-muted-foreground"
+                  className={`w-full text-left text-sm py-1.5 px-6 rounded-lg transition-all ${
+                    selectedCategory === `${parentCat} > ${child}` ? "bg-primary text-primary-foreground font-medium" : "hover:bg-muted text-muted-foreground"
                   }`}
                 >
                   {child}
@@ -498,62 +524,302 @@ export default function CatalogPage() {
     </div>
   );
 
+  const ProductCard = ({ product }: { product: Product }) => {
+    const stock = product.inventoryQuantity || 0;
+    const isSelected = selectedProducts.includes(product.id);
+    const variantCount = (product.variants as any[])?.length || 0;
+    const profit = calculateProfit(product.supplierPrice);
+    const profitPercent = ((profit / product.supplierPrice) * 100).toFixed(0);
+
+    return (
+      <div
+        className={`group relative bg-card rounded-xl overflow-hidden border transition-all duration-300 ${
+          isSelected 
+            ? "ring-2 ring-primary border-primary shadow-lg" 
+            : "hover:shadow-xl hover:border-primary/30 hover:-translate-y-1"
+        }`}
+        data-testid={`card-catalog-product-${product.id}`}
+      >
+        {bulkSelectMode && (
+          <div className="absolute top-3 left-3 z-20">
+            <div className={`h-6 w-6 rounded-full flex items-center justify-center transition-all ${
+              isSelected ? "bg-primary" : "bg-background/90 backdrop-blur-sm border-2"
+            }`}>
+              {isSelected ? (
+                <Check className="h-4 w-4 text-primary-foreground" />
+              ) : (
+                <Checkbox
+                  checked={isSelected}
+                  onCheckedChange={() => toggleProductSelection(product.id)}
+                  className="h-4 w-4"
+                  data-testid={`checkbox-product-${product.id}`}
+                />
+              )}
+            </div>
+          </div>
+        )}
+
+        <div className="absolute top-3 right-3 z-20 flex flex-col gap-2 opacity-0 group-hover:opacity-100 transition-all duration-200 translate-x-2 group-hover:translate-x-0">
+          <button
+            className="h-9 w-9 rounded-full bg-background/95 backdrop-blur-sm shadow-lg flex items-center justify-center hover:bg-primary hover:text-primary-foreground transition-colors"
+            onClick={(e) => {
+              e.preventDefault();
+              setQuickViewProduct(product);
+            }}
+            data-testid={`button-quick-view-${product.id}`}
+          >
+            <Eye className="h-4 w-4" />
+          </button>
+          <button
+            className="h-9 w-9 rounded-full bg-primary text-primary-foreground shadow-lg flex items-center justify-center hover:bg-primary/90 transition-colors"
+            onClick={(e) => {
+              e.preventDefault();
+              if (!bulkSelectMode) {
+                setSelectedProducts([product.id]);
+                setIsImportDialogOpen(true);
+              }
+            }}
+            data-testid={`button-quick-add-${product.id}`}
+          >
+            <Plus className="h-4 w-4" />
+          </button>
+        </div>
+
+        {stock === 0 && (
+          <div className="absolute top-3 left-3 z-10">
+            <Badge variant="destructive" className="text-xs shadow-sm">
+              Out of Stock
+            </Badge>
+          </div>
+        )}
+
+        {stock > 100 && !bulkSelectMode && (
+          <div className="absolute top-3 left-3 z-10">
+            <Badge className="text-xs bg-emerald-500 hover:bg-emerald-500 shadow-sm">
+              <Sparkles className="h-3 w-3 mr-1" />
+              High Stock
+            </Badge>
+          </div>
+        )}
+
+        <Link href={`/dashboard/catalog/${product.id}`}>
+          <div className="aspect-[3/4] bg-muted relative overflow-hidden">
+            {product.images && (product.images as any[]).length > 0 ? (
+              <img
+                src={(product.images as any[])[0].url}
+                alt={product.title}
+                className="w-full h-full object-cover group-hover:scale-110 transition-transform duration-500 ease-out"
+                loading="lazy"
+              />
+            ) : (
+              <div className="w-full h-full flex items-center justify-center bg-gradient-to-br from-muted to-muted/50">
+                <ImageOff className="h-12 w-12 text-muted-foreground/20" />
+              </div>
+            )}
+
+            {variantCount > 1 && (
+              <div className="absolute bottom-3 left-3 z-10">
+                <Badge variant="secondary" className="text-xs bg-background/90 backdrop-blur-sm shadow-sm">
+                  {variantCount} options
+                </Badge>
+              </div>
+            )}
+          </div>
+        </Link>
+
+        <div className="p-4">
+          <Link href={`/dashboard/catalog/${product.id}`}>
+            <h3 
+              className="text-sm font-medium line-clamp-2 hover:text-primary transition-colors cursor-pointer leading-snug mb-3"
+              data-testid={`link-product-title-${product.id}`}
+            >
+              {product.title}
+            </h3>
+          </Link>
+
+          <div className="space-y-2">
+            <div className="flex items-baseline gap-2">
+              <span className="text-lg font-bold text-foreground">
+                ${product.supplierPrice.toFixed(2)}
+              </span>
+              <span className="text-xs text-muted-foreground">cost</span>
+            </div>
+            
+            <div className="flex items-center gap-2 p-2 rounded-lg bg-emerald-500/10 border border-emerald-500/20">
+              <TrendingUp className="h-3.5 w-3.5 text-emerald-600" />
+              <span className="text-xs font-medium text-emerald-700 dark:text-emerald-400">
+                +${profit.toFixed(2)} profit ({profitPercent}%)
+              </span>
+            </div>
+
+            <div className="flex items-center justify-between pt-1">
+              <Badge variant="outline" className="text-xs px-2 py-0.5 font-normal">
+                {stock > 0 ? `${stock} in stock` : "Out of stock"}
+              </Badge>
+            </div>
+          </div>
+        </div>
+      </div>
+    );
+  };
+
+  const ProductListItem = ({ product }: { product: Product }) => {
+    const stock = product.inventoryQuantity || 0;
+    const isSelected = selectedProducts.includes(product.id);
+    const variantCount = (product.variants as any[])?.length || 0;
+    const profit = calculateProfit(product.supplierPrice);
+    const profitPercent = ((profit / product.supplierPrice) * 100).toFixed(0);
+
+    return (
+      <div
+        className={`group flex gap-4 p-4 bg-card rounded-xl border transition-all duration-200 ${
+          isSelected 
+            ? "ring-2 ring-primary border-primary" 
+            : "hover:shadow-lg hover:border-primary/30"
+        }`}
+        data-testid={`list-catalog-product-${product.id}`}
+      >
+        {bulkSelectMode && (
+          <div className="flex items-center">
+            <Checkbox
+              checked={isSelected}
+              onCheckedChange={() => toggleProductSelection(product.id)}
+              className="h-5 w-5"
+            />
+          </div>
+        )}
+
+        <Link href={`/dashboard/catalog/${product.id}`}>
+          <div className="w-24 h-24 rounded-lg overflow-hidden bg-muted flex-shrink-0">
+            {product.images && (product.images as any[]).length > 0 ? (
+              <img
+                src={(product.images as any[])[0].url}
+                alt={product.title}
+                className="w-full h-full object-cover"
+                loading="lazy"
+              />
+            ) : (
+              <div className="w-full h-full flex items-center justify-center">
+                <ImageOff className="h-8 w-8 text-muted-foreground/30" />
+              </div>
+            )}
+          </div>
+        </Link>
+
+        <div className="flex-1 min-w-0">
+          <Link href={`/dashboard/catalog/${product.id}`}>
+            <h3 className="font-medium hover:text-primary transition-colors line-clamp-1">
+              {product.title}
+            </h3>
+          </Link>
+          <p className="text-sm text-muted-foreground mt-1 line-clamp-1">
+            {product.category || "Uncategorized"} {variantCount > 1 && `• ${variantCount} variants`}
+          </p>
+          <div className="flex items-center gap-3 mt-2">
+            <Badge variant="outline" className="text-xs">
+              {stock > 0 ? `${stock} in stock` : "Out of stock"}
+            </Badge>
+            {stock > 100 && (
+              <Badge className="text-xs bg-emerald-500 hover:bg-emerald-500">
+                High Stock
+              </Badge>
+            )}
+          </div>
+        </div>
+
+        <div className="flex flex-col items-end justify-between">
+          <div className="text-right">
+            <p className="text-lg font-bold">${product.supplierPrice.toFixed(2)}</p>
+            <p className="text-sm text-emerald-600">+${profit.toFixed(2)} ({profitPercent}%)</p>
+          </div>
+          <div className="flex gap-2">
+            <Button
+              variant="ghost"
+              size="icon"
+              onClick={() => setQuickViewProduct(product)}
+            >
+              <Eye className="h-4 w-4" />
+            </Button>
+            <Button
+              size="icon"
+              onClick={() => {
+                setSelectedProducts([product.id]);
+                setIsImportDialogOpen(true);
+              }}
+            >
+              <Plus className="h-4 w-4" />
+            </Button>
+          </div>
+        </div>
+      </div>
+    );
+  };
+
   if (!selectedSupplier) {
     return (
       <div className="flex-1 flex flex-col h-full overflow-hidden bg-background">
-        <div className="flex-shrink-0 border-b">
-          <div className="p-4 md:p-6">
-            <h1 className="text-xl md:text-2xl font-semibold" data-testid="text-catalog-title">
+        <div className="flex-shrink-0 border-b bg-gradient-to-r from-primary/5 to-transparent">
+          <div className="p-6 md:p-8">
+            <h1 className="text-2xl md:text-3xl font-bold" data-testid="text-catalog-title">
               Product Catalog
             </h1>
-            <p className="text-muted-foreground text-sm mt-1">
-              Select a supplier to browse products
+            <p className="text-muted-foreground mt-1">
+              Choose a supplier to start browsing and importing products
             </p>
           </div>
         </div>
         
         <ScrollArea className="flex-1">
-          <div className="p-4 md:p-6">
+          <div className="p-6 md:p-8">
             {suppliersLoading ? (
-              <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-4">
+              <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-6">
                 {[1, 2, 3].map((i) => (
-                  <Skeleton key={i} className="h-24 w-full rounded-lg" />
+                  <Skeleton key={i} className="h-32 w-full rounded-xl" />
                 ))}
               </div>
             ) : !allSuppliers || allSuppliers.length === 0 ? (
-              <div className="flex flex-col items-center justify-center py-16 text-center">
-                <Store className="h-12 w-12 text-muted-foreground mb-4" />
-                <h3 className="text-lg font-medium">No Suppliers Available</h3>
-                <p className="text-muted-foreground text-sm mt-1">
-                  Contact your administrator to add suppliers.
+              <div className="flex flex-col items-center justify-center py-20 text-center">
+                <div className="h-20 w-20 rounded-full bg-muted flex items-center justify-center mb-6">
+                  <Store className="h-10 w-10 text-muted-foreground" />
+                </div>
+                <h3 className="text-xl font-semibold mb-2">No Suppliers Available</h3>
+                <p className="text-muted-foreground max-w-md">
+                  Contact your administrator to add suppliers to your account.
                 </p>
               </div>
             ) : (
-              <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-4">
+              <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-6">
                 {allSuppliers.map((supplier) => (
-                  <button
+                  <Card
                     key={supplier.id}
+                    className="group cursor-pointer hover:shadow-xl hover:border-primary/50 hover:-translate-y-1 transition-all duration-300"
                     onClick={() => handleSelectSupplier(supplier)}
-                    className="text-left p-4 rounded-xl border bg-card hover:border-primary/50 hover:shadow-md transition-all group"
                     data-testid={`button-supplier-${supplier.id}`}
                   >
-                    <div className="flex items-center gap-3">
-                      <div className="h-12 w-12 rounded-full bg-primary/10 flex items-center justify-center group-hover:bg-primary/20 transition-colors">
-                        <Store className="h-6 w-6 text-primary" />
+                    <CardContent className="p-6">
+                      <div className="flex items-start gap-4">
+                        <div className="h-14 w-14 rounded-xl bg-gradient-to-br from-primary/20 to-primary/10 flex items-center justify-center group-hover:from-primary/30 group-hover:to-primary/20 transition-colors">
+                          <Store className="h-7 w-7 text-primary" />
+                        </div>
+                        <div className="flex-1 min-w-0">
+                          <h3 className="font-semibold text-lg group-hover:text-primary transition-colors" data-testid={`text-supplier-name-${supplier.id}`}>
+                            {supplier.name}
+                          </h3>
+                          {supplier.description && (
+                            <p className="text-sm text-muted-foreground line-clamp-2 mt-1">
+                              {supplier.description}
+                            </p>
+                          )}
+                          <div className="flex items-center gap-2 mt-3">
+                            <Badge variant="secondary" className="text-xs">
+                              Verified Supplier
+                            </Badge>
+                          </div>
+                        </div>
+                        <ChevronRight className="h-5 w-5 text-muted-foreground group-hover:text-primary group-hover:translate-x-1 transition-all" />
                       </div>
-                      <div className="flex-1 min-w-0">
-                        <h3 className="font-medium truncate" data-testid={`text-supplier-name-${supplier.id}`}>
-                          {supplier.name}
-                        </h3>
-                        {supplier.description && (
-                          <p className="text-sm text-muted-foreground line-clamp-1">
-                            {supplier.description}
-                          </p>
-                        )}
-                      </div>
-                      <ChevronRight className="h-5 w-5 text-muted-foreground group-hover:text-primary transition-colors" />
-                    </div>
-                  </button>
+                    </CardContent>
+                  </Card>
                 ))}
               </div>
             )}
@@ -566,7 +832,7 @@ export default function CatalogPage() {
   return (
     <div className="flex-1 flex flex-col h-full overflow-hidden bg-background">
       <Sheet open={mobileFilterOpen} onOpenChange={setMobileFilterOpen}>
-        <SheetContent side="left" className="w-[280px] p-0">
+        <SheetContent side="left" className="w-[300px] p-0">
           <SheetHeader className="p-4 border-b">
             <SheetTitle>Filters</SheetTitle>
           </SheetHeader>
@@ -581,14 +847,17 @@ export default function CatalogPage() {
       <Dialog open={isImportDialogOpen} onOpenChange={setIsImportDialogOpen}>
         <DialogContent className="max-w-md">
           <DialogHeader>
-            <DialogTitle>Import Products</DialogTitle>
+            <DialogTitle className="flex items-center gap-2">
+              <ShoppingCart className="h-5 w-5 text-primary" />
+              Import Products
+            </DialogTitle>
             <DialogDescription>
-              Set your pricing strategy for {selectedProducts.length} product(s)
+              Set your markup for {selectedProducts.length} product(s)
             </DialogDescription>
           </DialogHeader>
           <div className="space-y-4 py-4">
             <div className="space-y-2">
-              <Label>Markup Type</Label>
+              <Label className="text-sm font-medium">Markup Type</Label>
               <Select
                 value={importSettings.pricingType}
                 onValueChange={(v) => setImportSettings(prev => ({ ...prev, pricingType: v as "fixed" | "percentage" }))}
@@ -597,32 +866,45 @@ export default function CatalogPage() {
                   <SelectValue />
                 </SelectTrigger>
                 <SelectContent>
-                  <SelectItem value="percentage">Percentage Markup</SelectItem>
-                  <SelectItem value="fixed">Fixed Amount</SelectItem>
+                  <SelectItem value="percentage">Percentage Markup (%)</SelectItem>
+                  <SelectItem value="fixed">Fixed Amount ($)</SelectItem>
                 </SelectContent>
               </Select>
             </div>
             <div className="space-y-2">
-              <Label>
-                {importSettings.pricingType === "percentage" ? "Markup %" : "Markup $"}
+              <Label className="text-sm font-medium">
+                {importSettings.pricingType === "percentage" ? "Markup Percentage" : "Markup Amount"}
               </Label>
-              <Input
-                type="number"
-                value={importSettings.pricingValue}
-                onChange={(e) => setImportSettings(prev => ({ ...prev, pricingValue: parseFloat(e.target.value) || 0 }))}
-                data-testid="input-pricing-value"
-              />
+              <div className="relative">
+                <Input
+                  type="number"
+                  value={importSettings.pricingValue}
+                  onChange={(e) => setImportSettings(prev => ({ ...prev, pricingValue: parseFloat(e.target.value) || 0 }))}
+                  className="pr-8"
+                  data-testid="input-pricing-value"
+                />
+                <span className="absolute right-3 top-1/2 -translate-y-1/2 text-muted-foreground text-sm">
+                  {importSettings.pricingType === "percentage" ? "%" : "$"}
+                </span>
+              </div>
             </div>
             {selectedProducts.length === 1 && products.find(p => p.id === selectedProducts[0]) && (
-              <div className="p-3 bg-muted rounded-lg text-sm">
-                <div className="flex justify-between">
-                  <span className="text-muted-foreground">Supplier Price:</span>
-                  <span>${products.find(p => p.id === selectedProducts[0])?.supplierPrice.toFixed(2)}</span>
+              <div className="p-4 bg-muted/50 rounded-xl space-y-3">
+                <div className="flex justify-between text-sm">
+                  <span className="text-muted-foreground">Your Cost</span>
+                  <span className="font-medium">${products.find(p => p.id === selectedProducts[0])?.supplierPrice.toFixed(2)}</span>
                 </div>
-                <div className="flex justify-between mt-1">
-                  <span className="text-muted-foreground">Your Price:</span>
-                  <span className="font-medium text-primary">
+                <Separator />
+                <div className="flex justify-between text-sm">
+                  <span className="text-muted-foreground">Your Selling Price</span>
+                  <span className="font-bold text-primary text-lg">
                     ${calculateMerchantPrice(products.find(p => p.id === selectedProducts[0])?.supplierPrice || 0).toFixed(2)}
+                  </span>
+                </div>
+                <div className="flex justify-between text-sm">
+                  <span className="text-muted-foreground">Your Profit</span>
+                  <span className="font-medium text-emerald-600">
+                    +${calculateProfit(products.find(p => p.id === selectedProducts[0])?.supplierPrice || 0).toFixed(2)}
                   </span>
                 </div>
               </div>
@@ -635,37 +917,109 @@ export default function CatalogPage() {
             <Button 
               onClick={handleImport} 
               disabled={importMutation.isPending}
+              className="gap-2"
               data-testid="button-confirm-import"
             >
               {importMutation.isPending ? (
-                <Loader2 className="h-4 w-4 animate-spin mr-2" />
+                <Loader2 className="h-4 w-4 animate-spin" />
               ) : (
-                <Plus className="h-4 w-4 mr-2" />
+                <Plus className="h-4 w-4" />
               )}
-              Import
+              Import to Store
             </Button>
           </DialogFooter>
         </DialogContent>
       </Dialog>
 
+      <Dialog open={!!quickViewProduct} onOpenChange={() => setQuickViewProduct(null)}>
+        <DialogContent className="max-w-2xl">
+          {quickViewProduct && (
+            <>
+              <DialogHeader>
+                <DialogTitle className="line-clamp-1">{quickViewProduct.title}</DialogTitle>
+              </DialogHeader>
+              <div className="grid md:grid-cols-2 gap-6">
+                <div className="aspect-square rounded-xl overflow-hidden bg-muted">
+                  {quickViewProduct.images && (quickViewProduct.images as any[]).length > 0 ? (
+                    <img
+                      src={(quickViewProduct.images as any[])[0].url}
+                      alt={quickViewProduct.title}
+                      className="w-full h-full object-cover"
+                    />
+                  ) : (
+                    <div className="w-full h-full flex items-center justify-center">
+                      <ImageOff className="h-16 w-16 text-muted-foreground/30" />
+                    </div>
+                  )}
+                </div>
+                <div className="space-y-4">
+                  <div>
+                    <p className="text-sm text-muted-foreground">Cost Price</p>
+                    <p className="text-3xl font-bold">${quickViewProduct.supplierPrice.toFixed(2)}</p>
+                  </div>
+                  <div className="p-3 rounded-lg bg-emerald-500/10 border border-emerald-500/20">
+                    <p className="text-sm text-muted-foreground">Potential Profit (20% markup)</p>
+                    <p className="text-xl font-bold text-emerald-600">
+                      +${calculateProfit(quickViewProduct.supplierPrice).toFixed(2)} per sale
+                    </p>
+                  </div>
+                  <div className="space-y-2">
+                    <div className="flex justify-between text-sm">
+                      <span className="text-muted-foreground">Stock</span>
+                      <span className="font-medium">{quickViewProduct.inventoryQuantity || 0} units</span>
+                    </div>
+                    <div className="flex justify-between text-sm">
+                      <span className="text-muted-foreground">Category</span>
+                      <span className="font-medium">{quickViewProduct.category || "Uncategorized"}</span>
+                    </div>
+                    <div className="flex justify-between text-sm">
+                      <span className="text-muted-foreground">Variants</span>
+                      <span className="font-medium">{(quickViewProduct.variants as any[])?.length || 1}</span>
+                    </div>
+                  </div>
+                  <div className="flex gap-2 pt-4">
+                    <Button
+                      className="flex-1 gap-2"
+                      onClick={() => {
+                        setSelectedProducts([quickViewProduct.id]);
+                        setQuickViewProduct(null);
+                        setIsImportDialogOpen(true);
+                      }}
+                    >
+                      <Plus className="h-4 w-4" />
+                      Import Product
+                    </Button>
+                    <Link href={`/dashboard/catalog/${quickViewProduct.id}`}>
+                      <Button variant="outline" onClick={() => setQuickViewProduct(null)}>
+                        View Details
+                      </Button>
+                    </Link>
+                  </div>
+                </div>
+              </div>
+            </>
+          )}
+        </DialogContent>
+      </Dialog>
+
       <div className="flex-shrink-0 border-b bg-background">
-        <div className="px-3 sm:px-4 md:px-6 py-2 sm:py-3 flex items-center gap-2 text-sm">
+        <div className="px-4 md:px-6 py-3 flex items-center gap-2 text-sm border-b">
           <button 
             onClick={handleBackToSuppliers}
-            className="flex items-center gap-1 text-muted-foreground hover:text-foreground transition-colors"
+            className="flex items-center gap-1.5 text-muted-foreground hover:text-foreground transition-colors"
             data-testid="button-back-home"
           >
             <Home className="h-4 w-4" />
-            <span className="hidden sm:inline">Home</span>
+            <span className="hidden sm:inline">Suppliers</span>
           </button>
-          <span className="text-muted-foreground">/</span>
+          <ChevronRight className="h-4 w-4 text-muted-foreground" />
           <span className="font-medium truncate">{selectedSupplier.name}</span>
-          <span className="text-muted-foreground ml-auto whitespace-nowrap">
-            ({totalProducts.toLocaleString()} Items)
-          </span>
+          <Badge variant="secondary" className="ml-auto">
+            {totalProducts.toLocaleString()} products
+          </Badge>
         </div>
 
-        <div className="px-3 sm:px-4 md:px-6 py-2 sm:py-3 flex flex-wrap items-center gap-2 border-t">
+        <div className="px-4 md:px-6 py-3 flex flex-wrap items-center gap-3">
           <Button
             variant="outline"
             size="sm"
@@ -674,20 +1028,20 @@ export default function CatalogPage() {
             data-testid="button-mobile-filters"
           >
             <Filter className="h-4 w-4" />
-            <span className="hidden sm:inline">Filters</span>
+            Filters
             {activeFilterCount > 0 && (
-              <Badge variant="secondary" className="h-5 px-1.5 text-xs">
+              <Badge variant="secondary" className="h-5 px-1.5 text-xs ml-1">
                 {activeFilterCount}
               </Badge>
             )}
           </Button>
 
-          <div className="relative flex-1 min-w-[120px] max-w-xs">
+          <div className="relative flex-1 min-w-[200px] max-w-md">
             <Search className="absolute left-3 top-1/2 -translate-y-1/2 h-4 w-4 text-muted-foreground" />
             <Input
               type="search"
-              placeholder="Search..."
-              className="pl-9 h-9"
+              placeholder="Search products..."
+              className="pl-10 h-10 bg-muted/50 border-0 focus-visible:bg-background focus-visible:ring-1"
               value={searchInput}
               onChange={(e) => setSearchInput(e.target.value)}
               data-testid="input-search-catalog"
@@ -695,10 +1049,29 @@ export default function CatalogPage() {
           </div>
 
           <div className="flex items-center gap-2 ml-auto">
+            <div className="hidden md:flex items-center border rounded-lg p-1">
+              <Button
+                variant={viewMode === "grid" ? "secondary" : "ghost"}
+                size="icon"
+                className="h-8 w-8"
+                onClick={() => setViewMode("grid")}
+              >
+                <Grid3X3 className="h-4 w-4" />
+              </Button>
+              <Button
+                variant={viewMode === "list" ? "secondary" : "ghost"}
+                size="icon"
+                className="h-8 w-8"
+                onClick={() => setViewMode("list")}
+              >
+                <LayoutList className="h-4 w-4" />
+              </Button>
+            </div>
+
             <Select value={sortOption} onValueChange={(v) => { setSortOption(v as SortOption); resetPage(); }}>
-              <SelectTrigger className="w-[140px] sm:w-[180px] h-9" data-testid="select-sort">
+              <SelectTrigger className="w-[160px] h-10" data-testid="select-sort">
                 <ArrowUpDown className="h-4 w-4 mr-2 text-muted-foreground" />
-                <SelectValue placeholder="Sort By" />
+                <SelectValue placeholder="Sort" />
               </SelectTrigger>
               <SelectContent>
                 {SORT_OPTIONS.map((opt) => (
@@ -710,7 +1083,7 @@ export default function CatalogPage() {
             <Button
               variant={bulkSelectMode ? "default" : "outline"}
               size="sm"
-              className="gap-2"
+              className="gap-2 h-10"
               onClick={() => {
                 setBulkSelectMode(!bulkSelectMode);
                 if (bulkSelectMode) {
@@ -720,14 +1093,14 @@ export default function CatalogPage() {
               data-testid="button-bulk-select"
             >
               <ListChecks className="h-4 w-4" />
-              <span className="hidden sm:inline">Bulk Select</span>
+              <span className="hidden sm:inline">Select</span>
             </Button>
           </div>
         </div>
       </div>
 
       <div className="flex-1 flex overflow-hidden">
-        <div className="hidden lg:block w-64 border-r flex-shrink-0">
+        <div className="hidden lg:block w-72 border-r flex-shrink-0 bg-muted/30">
           <ScrollArea className="h-full">
             <div className="p-4">
               <FilterSidebar />
@@ -737,131 +1110,76 @@ export default function CatalogPage() {
 
         <div className="flex-1 overflow-hidden flex flex-col">
           <ScrollArea className="flex-1">
-            <div className="p-3 sm:p-4 md:p-6">
+            <div className="p-4 md:p-6">
               {isLoading ? (
-                <div className="grid gap-3 sm:gap-4 grid-cols-2 sm:grid-cols-3 md:grid-cols-3 lg:grid-cols-4 xl:grid-cols-5">
+                <div className={viewMode === "grid" 
+                  ? "grid gap-4 grid-cols-2 sm:grid-cols-3 lg:grid-cols-3 xl:grid-cols-4 2xl:grid-cols-5"
+                  : "space-y-4"
+                }>
                   {[1, 2, 3, 4, 5, 6, 7, 8].map((i) => (
-                    <div key={i} className="space-y-2">
-                      <Skeleton className="aspect-[3/4] w-full rounded-lg" />
-                      <Skeleton className="h-4 w-3/4" />
-                      <Skeleton className="h-4 w-1/2" />
-                    </div>
+                    viewMode === "grid" ? (
+                      <div key={i} className="space-y-3">
+                        <Skeleton className="aspect-[3/4] w-full rounded-xl" />
+                        <Skeleton className="h-4 w-3/4" />
+                        <Skeleton className="h-6 w-1/2" />
+                      </div>
+                    ) : (
+                      <Skeleton key={i} className="h-28 w-full rounded-xl" />
+                    )
                   ))}
                 </div>
               ) : products.length > 0 ? (
                 <>
-                  <div className="grid gap-3 sm:gap-4 grid-cols-2 sm:grid-cols-3 md:grid-cols-3 lg:grid-cols-4 xl:grid-cols-5">
-                    {products.map((product) => {
-                      const stock = product.inventoryQuantity || 0;
-                      const isSelected = selectedProducts.includes(product.id);
-                      const variantCount = product.variants?.length || 0;
-
-                      return (
-                        <div
-                          key={product.id}
-                          className={`group relative bg-card rounded-lg overflow-hidden border transition-all duration-200 hover:shadow-lg ${
-                            isSelected ? "ring-2 ring-primary border-primary" : "hover:border-primary/30"
-                          }`}
-                          data-testid={`card-catalog-product-${product.id}`}
-                        >
-                          {bulkSelectMode && (
-                            <div className="absolute top-2 left-2 z-20">
-                              <Checkbox
-                                checked={isSelected}
-                                onCheckedChange={() => toggleProductSelection(product.id)}
-                                className="h-5 w-5 bg-background/90 backdrop-blur-sm border-2"
-                                data-testid={`checkbox-product-${product.id}`}
-                              />
-                            </div>
-                          )}
-
-                          <button
-                            className="absolute top-2 right-2 z-20 h-8 w-8 rounded-full bg-background/80 backdrop-blur-sm flex items-center justify-center opacity-0 group-hover:opacity-100 transition-opacity hover:bg-background"
-                            onClick={(e) => {
-                              e.preventDefault();
-                              if (!bulkSelectMode) {
-                                setSelectedProducts([product.id]);
-                                setIsImportDialogOpen(true);
-                              }
-                            }}
-                            data-testid={`button-quick-add-${product.id}`}
-                          >
-                            <Plus className="h-4 w-4" />
-                          </button>
-
-                          {stock === 0 && (
-                            <div className="absolute top-2 left-2 z-10">
-                              <Badge variant="secondary" className="text-xs bg-background/90">
-                                Out of Stock
-                              </Badge>
-                            </div>
-                          )}
-
-                          <Link href={`/dashboard/products/${product.id}`}>
-                            <div className="aspect-[3/4] bg-muted relative overflow-hidden">
-                              {product.images && product.images.length > 0 ? (
-                                <img
-                                  src={product.images[0].url}
-                                  alt={product.title}
-                                  className="w-full h-full object-cover group-hover:scale-105 transition-transform duration-300"
-                                  loading="lazy"
-                                />
-                              ) : (
-                                <div className="w-full h-full flex items-center justify-center">
-                                  <ImageOff className="h-8 w-8 text-muted-foreground/30" />
-                                </div>
-                              )}
-
-                              {variantCount > 1 && (
-                                <div className="absolute bottom-2 left-2 z-10">
-                                  <Badge variant="secondary" className="text-xs bg-background/90">
-                                    {variantCount} variants
-                                  </Badge>
-                                </div>
-                              )}
-                            </div>
-                          </Link>
-
-                          <div className="p-2 sm:p-3">
-                            <Link href={`/dashboard/products/${product.id}`}>
-                              <h3 
-                                className="text-xs sm:text-sm font-medium line-clamp-2 hover:text-primary transition-colors cursor-pointer leading-tight"
-                                data-testid={`link-product-title-${product.id}`}
-                              >
-                                {product.title}
-                              </h3>
-                            </Link>
-
-                            <div className="mt-2 flex items-center gap-2">
-                              <Badge variant="outline" className="text-xs px-1.5 py-0 h-5">
-                                Dropship
-                              </Badge>
-                              <span className="text-sm sm:text-base font-bold text-primary">
-                                ${product.supplierPrice.toFixed(2)}
-                              </span>
-                            </div>
-                          </div>
-                        </div>
-                      );
-                    })}
-                  </div>
+                  {viewMode === "grid" ? (
+                    <div className="grid gap-4 grid-cols-2 sm:grid-cols-3 lg:grid-cols-3 xl:grid-cols-4 2xl:grid-cols-5">
+                      {products.map((product) => (
+                        <ProductCard key={product.id} product={product} />
+                      ))}
+                    </div>
+                  ) : (
+                    <div className="space-y-4">
+                      {products.map((product) => (
+                        <ProductListItem key={product.id} product={product} />
+                      ))}
+                    </div>
+                  )}
 
                   {totalPages > 1 && (
-                    <div className="flex items-center justify-center gap-2 mt-6 pt-6 border-t">
+                    <div className="flex items-center justify-center gap-3 mt-8 pt-6 border-t">
                       <Button
                         variant="outline"
-                        size="sm"
                         disabled={currentPage === 1}
                         onClick={() => setCurrentPage(p => Math.max(1, p - 1))}
                       >
                         Previous
                       </Button>
-                      <span className="text-sm text-muted-foreground px-4">
-                        Page {currentPage} of {totalPages}
-                      </span>
+                      <div className="flex items-center gap-1">
+                        {Array.from({ length: Math.min(5, totalPages) }, (_, i) => {
+                          let pageNum;
+                          if (totalPages <= 5) {
+                            pageNum = i + 1;
+                          } else if (currentPage <= 3) {
+                            pageNum = i + 1;
+                          } else if (currentPage >= totalPages - 2) {
+                            pageNum = totalPages - 4 + i;
+                          } else {
+                            pageNum = currentPage - 2 + i;
+                          }
+                          return (
+                            <Button
+                              key={pageNum}
+                              variant={currentPage === pageNum ? "default" : "ghost"}
+                              size="icon"
+                              className="h-9 w-9"
+                              onClick={() => setCurrentPage(pageNum)}
+                            >
+                              {pageNum}
+                            </Button>
+                          );
+                        })}
+                      </div>
                       <Button
                         variant="outline"
-                        size="sm"
                         disabled={currentPage === totalPages}
                         onClick={() => setCurrentPage(p => Math.min(totalPages, p + 1))}
                       >
@@ -871,20 +1189,22 @@ export default function CatalogPage() {
                   )}
                 </>
               ) : (
-                <div className="flex flex-col items-center justify-center py-16 text-center">
-                  <Package className="h-12 w-12 text-muted-foreground mb-4" />
-                  <h3 className="text-lg font-medium">No Products Found</h3>
-                  <p className="text-muted-foreground text-sm mt-1">
-                    Try adjusting your filters or search terms
+                <div className="flex flex-col items-center justify-center py-20 text-center">
+                  <div className="h-20 w-20 rounded-full bg-muted flex items-center justify-center mb-6">
+                    <Package className="h-10 w-10 text-muted-foreground" />
+                  </div>
+                  <h3 className="text-xl font-semibold mb-2">No Products Found</h3>
+                  <p className="text-muted-foreground max-w-md mb-6">
+                    Try adjusting your filters or search terms to find what you're looking for.
                   </p>
                   {activeFilterCount > 0 && (
                     <Button
                       variant="outline"
-                      size="sm"
-                      className="mt-4"
                       onClick={clearAllFilters}
+                      className="gap-2"
                     >
-                      Clear Filters
+                      <X className="h-4 w-4" />
+                      Clear All Filters
                     </Button>
                   )}
                 </div>
@@ -895,33 +1215,31 @@ export default function CatalogPage() {
       </div>
 
       {bulkSelectMode && selectedProducts.length > 0 && (
-        <div className="fixed bottom-0 left-0 right-0 p-3 sm:p-4 bg-background border-t shadow-lg z-50">
+        <div className="fixed bottom-0 left-0 right-0 p-4 bg-background/95 backdrop-blur-sm border-t shadow-2xl z-50">
           <div className="max-w-7xl mx-auto flex items-center justify-between gap-4">
-            <div className="flex items-center gap-3">
+            <div className="flex items-center gap-4">
               <Checkbox
                 checked={selectedProducts.length === products.length}
                 onCheckedChange={selectAllProducts}
               />
-              <span className="text-sm font-medium">
-                {selectedProducts.length} product(s) selected
+              <span className="font-medium">
+                {selectedProducts.length} product{selectedProducts.length !== 1 ? "s" : ""} selected
               </span>
             </div>
-            <div className="flex items-center gap-2">
+            <div className="flex items-center gap-3">
               <Button
-                variant="outline"
-                size="sm"
+                variant="ghost"
                 onClick={() => setSelectedProducts([])}
               >
-                <X className="h-4 w-4 mr-1" />
-                Clear
+                Clear Selection
               </Button>
               <Button
-                size="sm"
                 onClick={() => setIsImportDialogOpen(true)}
+                className="gap-2"
                 data-testid="button-import-selected"
               >
-                <ShoppingCart className="h-4 w-4 mr-2" />
-                Import Selected
+                <ShoppingCart className="h-4 w-4" />
+                Import {selectedProducts.length} Product{selectedProducts.length !== 1 ? "s" : ""}
               </Button>
             </div>
           </div>
@@ -929,8 +1247,8 @@ export default function CatalogPage() {
       )}
 
       {isFetching && !isLoading && (
-        <div className="fixed bottom-4 right-4 bg-background border rounded-full p-2 shadow-lg z-40">
-          <Loader2 className="h-5 w-5 animate-spin text-primary" />
+        <div className="fixed bottom-4 right-4 bg-primary text-primary-foreground rounded-full p-3 shadow-lg z-40">
+          <Loader2 className="h-5 w-5 animate-spin" />
         </div>
       )}
     </div>

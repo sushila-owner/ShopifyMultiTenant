@@ -202,6 +202,13 @@ function Router() {
           </MerchantLayout>
         </ProtectedRoute>
       </Route>
+      <Route path="/dashboard/catalog/:id">
+        <ProtectedRoute>
+          <MerchantLayout>
+            <MerchantProductDetail />
+          </MerchantLayout>
+        </ProtectedRoute>
+      </Route>
       <Route path="/dashboard/products">
         <ProtectedRoute>
           <MerchantLayout>
