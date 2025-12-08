@@ -1,12 +1,10 @@
 import { useState, useMemo, useEffect } from "react";
 import { useQuery, useMutation, keepPreviousData } from "@tanstack/react-query";
-import { Card, CardContent } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Badge } from "@/components/ui/badge";
 import { Skeleton } from "@/components/ui/skeleton";
 import { Checkbox } from "@/components/ui/checkbox";
-import { Slider } from "@/components/ui/slider";
 import { Separator } from "@/components/ui/separator";
 import { ScrollArea } from "@/components/ui/scroll-area";
 import {
@@ -14,7 +12,6 @@ import {
   SheetContent,
   SheetHeader,
   SheetTitle,
-  SheetTrigger,
 } from "@/components/ui/sheet";
 import {
   Dialog,
@@ -42,35 +39,25 @@ import { queryClient, apiRequest } from "@/lib/queryClient";
 import {
   Search,
   Package,
-  Grid,
-  List,
   Plus,
   ImageOff,
   Loader2,
-  DollarSign,
   ChevronDown,
-  ChevronUp,
-  SlidersHorizontal,
+  ChevronRight,
   X,
-  Sparkles,
-  Clock,
-  Flame,
-  TrendingUp,
-  ArrowUp,
-  ArrowDown,
   Store,
-  Boxes,
-  Tag,
   Check,
   ShoppingCart,
   Filter,
+  Heart,
+  Home,
+  ListChecks,
+  ArrowUpDown,
 } from "lucide-react";
 import { Link } from "wouter";
 import type { Product, Supplier } from "@shared/schema";
 
-type SortField = "default" | "price" | "stock" | "createdAt";
-type SortDirection = "asc" | "desc";
-type TabType = "all" | "new" | "deals" | "trending";
+type SortOption = "featured" | "newest" | "price_high" | "price_low" | "stock_high";
 
 interface FilterState {
   priceRange: [number, number];
@@ -78,6 +65,7 @@ interface FilterState {
   suppliers: number[];
   categories: string[];
   inStock: boolean;
+  inventoryTier: string;
 }
 
 interface PaginationInfo {
@@ -93,22 +81,34 @@ interface CatalogResponse {
   pagination: PaginationInfo;
 }
 
-const PRODUCTS_PER_PAGE = 50;
+const PRODUCTS_PER_PAGE = 48;
+
+const INVENTORY_TIERS = [
+  { id: "25", label: "More than 25" },
+  { id: "50", label: "More than 50" },
+  { id: "100", label: "More than 100" },
+];
+
+const SORT_OPTIONS = [
+  { id: "featured" as SortOption, label: "Featured" },
+  { id: "newest" as SortOption, label: "Newest" },
+  { id: "price_high" as SortOption, label: "Price (High to Low)" },
+  { id: "price_low" as SortOption, label: "Price (Low to High)" },
+  { id: "stock_high" as SortOption, label: "Inventory (High to Low)" },
+];
 
 export default function CatalogPage() {
   const { toast } = useToast();
   const [selectedSupplier, setSelectedSupplier] = useState<Supplier | null>(null);
   const [searchInput, setSearchInput] = useState("");
   const [debouncedSearch, setDebouncedSearch] = useState("");
-  const [activeTab, setActiveTab] = useState<TabType>("all");
-  const [viewMode, setViewMode] = useState<"grid" | "list">("grid");
   const [selectedProducts, setSelectedProducts] = useState<number[]>([]);
   const [isImportDialogOpen, setIsImportDialogOpen] = useState(false);
-  const [showFilters, setShowFilters] = useState(true);
   const [mobileFilterOpen, setMobileFilterOpen] = useState(false);
-  const [sortField, setSortField] = useState<SortField>("default");
-  const [sortDirection, setSortDirection] = useState<SortDirection>("desc");
+  const [sortOption, setSortOption] = useState<SortOption>("featured");
   const [currentPage, setCurrentPage] = useState(1);
+  const [bulkSelectMode, setBulkSelectMode] = useState(false);
+  const [selectedCategory, setSelectedCategory] = useState<string | null>(null);
   
   const [filters, setFilters] = useState<FilterState>({
     priceRange: [0, 10000],
@@ -116,13 +116,14 @@ export default function CatalogPage() {
     suppliers: [],
     categories: [],
     inStock: false,
+    inventoryTier: "",
   });
 
-  const [expandedSections, setExpandedSections] = useState({
-    price: true,
-    stock: true,
-    suppliers: true,
-    categories: true,
+  const [expandedCategories, setExpandedCategories] = useState<string[]>([]);
+  const [expandedFilters, setExpandedFilters] = useState({
+    supplier: true,
+    inventory: true,
+    category: true,
   });
 
   const [importSettings, setImportSettings] = useState({
@@ -130,16 +131,14 @@ export default function CatalogPage() {
     pricingValue: 20,
   });
 
-  // Debounce search input to avoid too many API calls
   useEffect(() => {
     const timer = setTimeout(() => {
       setDebouncedSearch(searchInput);
-      setCurrentPage(1); // Reset to page 1 on new search
+      setCurrentPage(1);
     }, 300);
     return () => clearTimeout(timer);
   }, [searchInput]);
 
-  // Fetch all suppliers for the supplier list view
   const { data: allSuppliers, isLoading: suppliersLoading } = useQuery<Supplier[]>({
     queryKey: ["/api/suppliers"],
     queryFn: async () => {
@@ -159,7 +158,6 @@ export default function CatalogPage() {
     staleTime: 60000,
   });
 
-  // Build query params for server-side pagination
   const buildQueryParams = () => {
     const params = new URLSearchParams();
     params.set("page", currentPage.toString());
@@ -169,33 +167,38 @@ export default function CatalogPage() {
       params.set("search", debouncedSearch);
     }
     
-    // Filter by selected supplier
     if (selectedSupplier) {
       params.set("supplierId", selectedSupplier.id.toString());
     } else if (filters.suppliers.length === 1) {
       params.set("supplierId", filters.suppliers[0].toString());
     }
     
-    // Only use first selected category for now
-    if (filters.categories.length === 1) {
+    if (selectedCategory) {
+      params.set("category", selectedCategory);
+    } else if (filters.categories.length === 1) {
       params.set("category", filters.categories[0]);
     }
     
-    if (filters.priceRange[0] > 0) {
-      params.set("priceMin", filters.priceRange[0].toString());
-    }
-    
-    if (filters.priceRange[1] < 10000) {
-      params.set("priceMax", filters.priceRange[1].toString());
+    if (filters.inventoryTier) {
+      params.set("stockMin", filters.inventoryTier);
     }
     
     if (filters.inStock) {
       params.set("inStock", "true");
     }
     
-    if (sortField !== "default") {
-      params.set("sortBy", sortField);
-      params.set("sortDirection", sortDirection);
+    if (sortOption === "newest") {
+      params.set("sortBy", "createdAt");
+      params.set("sortDirection", "desc");
+    } else if (sortOption === "price_high") {
+      params.set("sortBy", "price");
+      params.set("sortDirection", "desc");
+    } else if (sortOption === "price_low") {
+      params.set("sortBy", "price");
+      params.set("sortDirection", "asc");
+    } else if (sortOption === "stock_high") {
+      params.set("sortBy", "stock");
+      params.set("sortDirection", "desc");
     }
     
     return params.toString();
@@ -203,7 +206,6 @@ export default function CatalogPage() {
 
   const queryParams = buildQueryParams();
   
-  // Fetch paginated catalog data from server
   const { data: catalogData, isLoading, isFetching } = useQuery<CatalogResponse>({
     queryKey: ["/api/merchant/catalog", queryParams],
     queryFn: async () => {
@@ -246,63 +248,30 @@ export default function CatalogPage() {
     },
   });
 
-  // Get categories from suppliers' products - cached from initial load
   const categories = useMemo(() => {
     const cats = products.map((p) => p.category).filter((c): c is string => !!c);
-    return Array.from(new Set(cats));
+    return Array.from(new Set(cats)).sort();
   }, [products]);
 
-  const priceStats = useMemo(() => {
-    if (!products?.length) return { min: 0, max: 10000 };
-    const prices = products.map(p => p.supplierPrice);
-    return { min: Math.floor(Math.min(...prices)), max: Math.ceil(Math.max(...prices)) };
-  }, [products]);
+  const categoryTree = useMemo(() => {
+    const tree: { [key: string]: string[] } = {};
+    categories.forEach(cat => {
+      const parts = cat.split(" > ");
+      const parent = parts[0];
+      if (!tree[parent]) {
+        tree[parent] = [];
+      }
+      if (parts.length > 1) {
+        const child = parts.slice(1).join(" > ");
+        if (!tree[parent].includes(child)) {
+          tree[parent].push(child);
+        }
+      }
+    });
+    return tree;
+  }, [categories]);
 
-  const getCompareAtPrice = (product: Product) => {
-    if (product.variants && product.variants.length > 0) {
-      const maxCompareAt = Math.max(
-        ...product.variants.map(v => v.compareAtPrice || 0)
-      );
-      return maxCompareAt;
-    }
-    return 0;
-  };
-
-  // Client-side filtering only for tabs (new arrivals, deals, trending)
-  // Main filtering is done server-side
-  const displayProducts = useMemo(() => {
-    if (activeTab === "all") {
-      return products;
-    }
-    
-    if (activeTab === "new") {
-      return products.filter(p => {
-        if (!p.createdAt) return false;
-        const daysSinceCreation = (Date.now() - new Date(p.createdAt).getTime()) / (1000 * 60 * 60 * 24);
-        return daysSinceCreation <= 30;
-      });
-    }
-    
-    if (activeTab === "deals") {
-      return products.filter(p => {
-        const compareAt = getCompareAtPrice(p);
-        return compareAt > p.supplierPrice;
-      });
-    }
-    
-    if (activeTab === "trending") {
-      return [...products].sort((a, b) => (b.inventoryQuantity || 0) - (a.inventoryQuantity || 0)).slice(0, 50);
-    }
-    
-    return products;
-  }, [products, activeTab]);
-
-  // Reset to page 1 when filters change
   const resetPage = () => setCurrentPage(1);
-
-  const getSupplierName = (supplierId: number) => {
-    return suppliers?.find((s) => s.id === supplierId)?.name || "Unknown";
-  };
 
   const toggleProductSelection = (productId: number) => {
     setSelectedProducts((prev) =>
@@ -313,11 +282,11 @@ export default function CatalogPage() {
   };
 
   const selectAllProducts = () => {
-    if (displayProducts) {
-      if (selectedProducts.length === displayProducts.length) {
+    if (products) {
+      if (selectedProducts.length === products.length) {
         setSelectedProducts([]);
       } else {
-        setSelectedProducts(displayProducts.map((p) => p.id));
+        setSelectedProducts(products.map((p) => p.id));
       }
     }
   };
@@ -351,118 +320,234 @@ export default function CatalogPage() {
     resetPage();
   };
 
-  const toggleCategoryFilter = (category: string) => {
-    setFilters(prev => ({
-      ...prev,
-      categories: prev.categories.includes(category)
-        ? prev.categories.filter(c => c !== category)
-        : [...prev.categories, category]
-    }));
-    resetPage();
-  };
-
   const clearAllFilters = () => {
     setFilters({
-      priceRange: [priceStats.min, priceStats.max],
+      priceRange: [0, 10000],
       stockMin: 0,
       suppliers: [],
       categories: [],
       inStock: false,
+      inventoryTier: "",
     });
+    setSelectedCategory(null);
     setSearchInput("");
     resetPage();
   };
 
-  const hasActiveFilters = filters.suppliers.length > 0 || 
-    filters.categories.length > 0 || 
-    filters.inStock || 
-    filters.stockMin > 0 ||
-    filters.priceRange[0] > priceStats.min ||
-    filters.priceRange[1] < priceStats.max ||
-    debouncedSearch !== "";
+  const activeFilterCount = 
+    filters.suppliers.length + 
+    (filters.inventoryTier ? 1 : 0) + 
+    (selectedCategory ? 1 : 0) +
+    (debouncedSearch ? 1 : 0);
 
-  const toggleSort = (field: SortField) => {
-    if (sortField === field) {
-      if (sortDirection === "asc") {
-        setSortDirection("desc");
-      } else {
-        setSortField("default");
-        setSortDirection("asc");
-      }
-    } else {
-      setSortField(field);
-      setSortDirection("asc");
-    }
-  };
-
-  const tabs = [
-    { id: "all" as TabType, label: "All Products", icon: Package },
-    { id: "new" as TabType, label: "New Arrivals", icon: Sparkles },
-    { id: "deals" as TabType, label: "Hot Deals", icon: Flame },
-    { id: "trending" as TabType, label: "Trending", icon: TrendingUp },
-  ];
-
-  // Handle back to supplier list
   const handleBackToSuppliers = () => {
     setSelectedSupplier(null);
     setSelectedProducts([]);
     setSearchInput("");
     setCurrentPage(1);
+    setBulkSelectMode(false);
   };
 
-  // Handle supplier selection
   const handleSelectSupplier = (supplier: Supplier) => {
     setSelectedSupplier(supplier);
     setCurrentPage(1);
     setSearchInput("");
   };
 
-  // Supplier List View - shown when no supplier is selected
+  const toggleCategoryExpand = (category: string) => {
+    setExpandedCategories(prev =>
+      prev.includes(category)
+        ? prev.filter(c => c !== category)
+        : [...prev, category]
+    );
+  };
+
+  const handleCategorySelect = (category: string | null) => {
+    setSelectedCategory(category);
+    resetPage();
+  };
+
+  const FilterSidebar = () => (
+    <div className="space-y-1">
+      {activeFilterCount > 0 && (
+        <div className="p-3 bg-muted/50 rounded-lg mb-4">
+          <div className="flex items-center justify-between">
+            <span className="text-sm font-medium">{activeFilterCount} filters applied</span>
+            <Button 
+              variant="ghost" 
+              size="sm" 
+              className="h-7 text-xs text-primary"
+              onClick={clearAllFilters}
+            >
+              Clear All
+            </Button>
+          </div>
+        </div>
+      )}
+
+      <Collapsible 
+        open={expandedFilters.supplier} 
+        onOpenChange={(open) => setExpandedFilters(prev => ({ ...prev, supplier: open }))}
+      >
+        <CollapsibleTrigger className="flex items-center justify-between w-full py-3 px-1 text-sm font-medium hover:bg-muted/50 rounded-md">
+          <span>Supplier</span>
+          <ChevronDown className={`h-4 w-4 transition-transform ${expandedFilters.supplier ? "" : "-rotate-90"}`} />
+        </CollapsibleTrigger>
+        <CollapsibleContent className="pb-4 space-y-2 px-1">
+          {suppliers.map((supplier) => (
+            <div key={supplier.id} className="flex items-center space-x-2">
+              <Checkbox
+                id={`supplier-${supplier.id}`}
+                checked={filters.suppliers.includes(supplier.id)}
+                onCheckedChange={() => toggleSupplierFilter(supplier.id)}
+              />
+              <label
+                htmlFor={`supplier-${supplier.id}`}
+                className="text-sm leading-none cursor-pointer flex-1 truncate"
+              >
+                {supplier.name}
+              </label>
+            </div>
+          ))}
+        </CollapsibleContent>
+      </Collapsible>
+
+      <Separator />
+
+      <Collapsible 
+        open={expandedFilters.inventory} 
+        onOpenChange={(open) => setExpandedFilters(prev => ({ ...prev, inventory: open }))}
+      >
+        <CollapsibleTrigger className="flex items-center justify-between w-full py-3 px-1 text-sm font-medium hover:bg-muted/50 rounded-md">
+          <span>Inventory</span>
+          <ChevronDown className={`h-4 w-4 transition-transform ${expandedFilters.inventory ? "" : "-rotate-90"}`} />
+        </CollapsibleTrigger>
+        <CollapsibleContent className="pb-4 space-y-2 px-1">
+          {INVENTORY_TIERS.map((tier) => (
+            <div key={tier.id} className="flex items-center space-x-2">
+              <Checkbox
+                id={`inventory-${tier.id}`}
+                checked={filters.inventoryTier === tier.id}
+                onCheckedChange={(checked) => {
+                  setFilters(prev => ({
+                    ...prev,
+                    inventoryTier: checked ? tier.id : ""
+                  }));
+                  resetPage();
+                }}
+              />
+              <label
+                htmlFor={`inventory-${tier.id}`}
+                className="text-sm leading-none cursor-pointer"
+              >
+                {tier.label}
+              </label>
+            </div>
+          ))}
+        </CollapsibleContent>
+      </Collapsible>
+
+      <Separator />
+
+      <Collapsible 
+        open={expandedFilters.category} 
+        onOpenChange={(open) => setExpandedFilters(prev => ({ ...prev, category: open }))}
+      >
+        <CollapsibleTrigger className="flex items-center justify-between w-full py-3 px-1 text-sm font-medium hover:bg-muted/50 rounded-md">
+          <span>Category</span>
+          <ChevronDown className={`h-4 w-4 transition-transform ${expandedFilters.category ? "" : "-rotate-90"}`} />
+        </CollapsibleTrigger>
+        <CollapsibleContent className="pb-4 space-y-1 px-1 max-h-64 overflow-y-auto">
+          <button
+            onClick={() => handleCategorySelect(null)}
+            className={`w-full text-left text-sm py-1.5 px-2 rounded-md transition-colors ${
+              !selectedCategory ? "bg-primary/10 text-primary font-medium" : "hover:bg-muted/50"
+            }`}
+          >
+            All Categories
+          </button>
+          {Object.keys(categoryTree).slice(0, 20).map((parentCat) => (
+            <div key={parentCat}>
+              <button
+                onClick={() => handleCategorySelect(parentCat)}
+                className={`w-full text-left text-sm py-1.5 px-2 rounded-md transition-colors flex items-center justify-between ${
+                  selectedCategory === parentCat ? "bg-primary/10 text-primary font-medium" : "hover:bg-muted/50"
+                }`}
+              >
+                <span className="truncate">{parentCat}</span>
+                {categoryTree[parentCat].length > 0 && (
+                  <ChevronRight 
+                    className={`h-3 w-3 transition-transform ${expandedCategories.includes(parentCat) ? "rotate-90" : ""}`}
+                    onClick={(e) => {
+                      e.stopPropagation();
+                      toggleCategoryExpand(parentCat);
+                    }}
+                  />
+                )}
+              </button>
+              {expandedCategories.includes(parentCat) && categoryTree[parentCat].map((child) => (
+                <button
+                  key={child}
+                  onClick={() => handleCategorySelect(`${parentCat} > ${child}`)}
+                  className={`w-full text-left text-sm py-1 px-4 rounded-md transition-colors ${
+                    selectedCategory === `${parentCat} > ${child}` ? "bg-primary/10 text-primary font-medium" : "hover:bg-muted/50 text-muted-foreground"
+                  }`}
+                >
+                  {child}
+                </button>
+              ))}
+            </div>
+          ))}
+        </CollapsibleContent>
+      </Collapsible>
+    </div>
+  );
+
   if (!selectedSupplier) {
     return (
-      <div className="flex-1 flex flex-col h-full overflow-hidden">
-        <div className="flex-shrink-0 border-b bg-background/95 backdrop-blur supports-[backdrop-filter]:bg-background/60">
+      <div className="flex-1 flex flex-col h-full overflow-hidden bg-background">
+        <div className="flex-shrink-0 border-b">
           <div className="p-4 md:p-6">
-            <h1 className="text-2xl md:text-3xl font-bold" data-testid="text-catalog-title">
+            <h1 className="text-xl md:text-2xl font-semibold" data-testid="text-catalog-title">
               Product Catalog
             </h1>
             <p className="text-muted-foreground text-sm mt-1">
-              Select a supplier to browse their products
+              Select a supplier to browse products
             </p>
           </div>
         </div>
         
-        <div className="flex-1 overflow-auto p-4 md:p-6">
-          {suppliersLoading ? (
-            <div className="space-y-3">
-              {[1, 2, 3, 4].map((i) => (
-                <Skeleton key={i} className="h-16 w-full" />
-              ))}
-            </div>
-          ) : !allSuppliers || allSuppliers.length === 0 ? (
-            <div className="flex flex-col items-center justify-center py-12 text-center">
-              <Store className="h-12 w-12 text-muted-foreground mb-4" />
-              <h3 className="text-lg font-medium">No Suppliers Available</h3>
-              <p className="text-muted-foreground text-sm mt-1">
-                No suppliers have been added yet. Contact your administrator.
-              </p>
-            </div>
-          ) : (
-            <div className="space-y-3 max-w-3xl mx-auto">
-              {allSuppliers.map((supplier) => (
-                <div
-                  key={supplier.id}
-                  className="border rounded-lg p-4 hover-elevate cursor-pointer bg-card transition-all"
-                  onClick={() => handleSelectSupplier(supplier)}
-                  data-testid={`supplier-row-${supplier.id}`}
-                >
-                  <div className="flex items-center justify-between gap-4">
+        <ScrollArea className="flex-1">
+          <div className="p-4 md:p-6">
+            {suppliersLoading ? (
+              <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-4">
+                {[1, 2, 3].map((i) => (
+                  <Skeleton key={i} className="h-24 w-full rounded-lg" />
+                ))}
+              </div>
+            ) : !allSuppliers || allSuppliers.length === 0 ? (
+              <div className="flex flex-col items-center justify-center py-16 text-center">
+                <Store className="h-12 w-12 text-muted-foreground mb-4" />
+                <h3 className="text-lg font-medium">No Suppliers Available</h3>
+                <p className="text-muted-foreground text-sm mt-1">
+                  Contact your administrator to add suppliers.
+                </p>
+              </div>
+            ) : (
+              <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-4">
+                {allSuppliers.map((supplier) => (
+                  <button
+                    key={supplier.id}
+                    onClick={() => handleSelectSupplier(supplier)}
+                    className="text-left p-4 rounded-xl border bg-card hover:border-primary/50 hover:shadow-md transition-all group"
+                    data-testid={`button-supplier-${supplier.id}`}
+                  >
                     <div className="flex items-center gap-3">
-                      <div className="h-10 w-10 rounded-full bg-primary/10 flex items-center justify-center">
-                        <Store className="h-5 w-5 text-primary" />
+                      <div className="h-12 w-12 rounded-full bg-primary/10 flex items-center justify-center group-hover:bg-primary/20 transition-colors">
+                        <Store className="h-6 w-6 text-primary" />
                       </div>
-                      <div>
-                        <h3 className="font-medium" data-testid={`text-supplier-name-${supplier.id}`}>
+                      <div className="flex-1 min-w-0">
+                        <h3 className="font-medium truncate" data-testid={`text-supplier-name-${supplier.id}`}>
                           {supplier.name}
                         </h3>
                         {supplier.description && (
@@ -471,82 +556,121 @@ export default function CatalogPage() {
                           </p>
                         )}
                       </div>
+                      <ChevronRight className="h-5 w-5 text-muted-foreground group-hover:text-primary transition-colors" />
                     </div>
-                    <ChevronDown className="h-5 w-5 text-muted-foreground rotate-[-90deg]" />
-                  </div>
-                </div>
-              ))}
-            </div>
-          )}
-        </div>
+                  </button>
+                ))}
+              </div>
+            )}
+          </div>
+        </ScrollArea>
       </div>
     );
   }
 
-  // Product Catalog View - shown when a supplier is selected
   return (
-    <div className="flex-1 flex flex-col h-full overflow-hidden">
-      {/* Header */}
-      <div className="flex-shrink-0 border-b bg-background/95 backdrop-blur supports-[backdrop-filter]:bg-background/60">
-        <div className="p-3 sm:p-4 md:p-6">
-          <div className="flex flex-col lg:flex-row lg:items-center justify-between gap-2 sm:gap-4">
-            <div>
-              <div className="flex items-center gap-2">
-                <Button 
-                  variant="ghost" 
-                  size="sm" 
-                  className="gap-1 -ml-2 h-7 px-2"
-                  onClick={handleBackToSuppliers}
-                  data-testid="button-back-to-suppliers"
-                >
-                  <ChevronUp className="h-4 w-4 rotate-[-90deg]" />
-                  <span className="hidden sm:inline">Back</span>
-                </Button>
-              </div>
-              <h1 className="text-lg sm:text-2xl md:text-3xl font-bold leading-tight" data-testid="text-supplier-catalog-title">
-                {selectedSupplier.name}
-              </h1>
-              <p className="text-muted-foreground text-xs sm:text-sm hidden sm:block">
-                {selectedSupplier.description || "Browse products from this supplier"}
-              </p>
+    <div className="flex-1 flex flex-col h-full overflow-hidden bg-background">
+      <Sheet open={mobileFilterOpen} onOpenChange={setMobileFilterOpen}>
+        <SheetContent side="left" className="w-[280px] p-0">
+          <SheetHeader className="p-4 border-b">
+            <SheetTitle>Filters</SheetTitle>
+          </SheetHeader>
+          <ScrollArea className="h-[calc(100vh-60px)]">
+            <div className="p-4">
+              <FilterSidebar />
             </div>
-            <div className="flex items-center gap-2 flex-wrap">
-              {selectedProducts.length > 0 && (
-                <Button 
-                  size="sm"
-                  className="gap-2" 
-                  onClick={() => setIsImportDialogOpen(true)} 
-                  data-testid="button-import-selected"
-                >
-                  <Plus className="h-4 w-4" />
-                  Import {selectedProducts.length}
-                </Button>
-              )}
-            </div>
-          </div>
+          </ScrollArea>
+        </SheetContent>
+      </Sheet>
 
-          {/* Navigation Tabs */}
-          <div className="mt-2 sm:mt-4 flex items-center gap-1 sm:gap-2 overflow-x-auto pb-2 -mx-1 px-1">
-            {tabs.map((tab) => (
-              <Button
-                key={tab.id}
-                variant={activeTab === tab.id ? "default" : "outline"}
-                size="sm"
-                className="gap-1 sm:gap-2 whitespace-nowrap text-xs sm:text-sm px-2 sm:px-3 h-7 sm:h-8"
-                onClick={() => setActiveTab(tab.id)}
-                data-testid={`tab-${tab.id}`}
+      <Dialog open={isImportDialogOpen} onOpenChange={setIsImportDialogOpen}>
+        <DialogContent className="max-w-md">
+          <DialogHeader>
+            <DialogTitle>Import Products</DialogTitle>
+            <DialogDescription>
+              Set your pricing strategy for {selectedProducts.length} product(s)
+            </DialogDescription>
+          </DialogHeader>
+          <div className="space-y-4 py-4">
+            <div className="space-y-2">
+              <Label>Markup Type</Label>
+              <Select
+                value={importSettings.pricingType}
+                onValueChange={(v) => setImportSettings(prev => ({ ...prev, pricingType: v as "fixed" | "percentage" }))}
               >
-                <tab.icon className="h-3 w-3 sm:h-4 sm:w-4" />
-                <span className="hidden xs:inline">{tab.label}</span>
-                <span className="xs:hidden">{tab.label.split(' ')[0]}</span>
-              </Button>
-            ))}
+                <SelectTrigger data-testid="select-pricing-type">
+                  <SelectValue />
+                </SelectTrigger>
+                <SelectContent>
+                  <SelectItem value="percentage">Percentage Markup</SelectItem>
+                  <SelectItem value="fixed">Fixed Amount</SelectItem>
+                </SelectContent>
+              </Select>
+            </div>
+            <div className="space-y-2">
+              <Label>
+                {importSettings.pricingType === "percentage" ? "Markup %" : "Markup $"}
+              </Label>
+              <Input
+                type="number"
+                value={importSettings.pricingValue}
+                onChange={(e) => setImportSettings(prev => ({ ...prev, pricingValue: parseFloat(e.target.value) || 0 }))}
+                data-testid="input-pricing-value"
+              />
+            </div>
+            {selectedProducts.length === 1 && products.find(p => p.id === selectedProducts[0]) && (
+              <div className="p-3 bg-muted rounded-lg text-sm">
+                <div className="flex justify-between">
+                  <span className="text-muted-foreground">Supplier Price:</span>
+                  <span>${products.find(p => p.id === selectedProducts[0])?.supplierPrice.toFixed(2)}</span>
+                </div>
+                <div className="flex justify-between mt-1">
+                  <span className="text-muted-foreground">Your Price:</span>
+                  <span className="font-medium text-primary">
+                    ${calculateMerchantPrice(products.find(p => p.id === selectedProducts[0])?.supplierPrice || 0).toFixed(2)}
+                  </span>
+                </div>
+              </div>
+            )}
           </div>
+          <DialogFooter>
+            <Button variant="outline" onClick={() => setIsImportDialogOpen(false)}>
+              Cancel
+            </Button>
+            <Button 
+              onClick={handleImport} 
+              disabled={importMutation.isPending}
+              data-testid="button-confirm-import"
+            >
+              {importMutation.isPending ? (
+                <Loader2 className="h-4 w-4 animate-spin mr-2" />
+              ) : (
+                <Plus className="h-4 w-4 mr-2" />
+              )}
+              Import
+            </Button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
+
+      <div className="flex-shrink-0 border-b bg-background">
+        <div className="px-3 sm:px-4 md:px-6 py-2 sm:py-3 flex items-center gap-2 text-sm">
+          <button 
+            onClick={handleBackToSuppliers}
+            className="flex items-center gap-1 text-muted-foreground hover:text-foreground transition-colors"
+            data-testid="button-back-home"
+          >
+            <Home className="h-4 w-4" />
+            <span className="hidden sm:inline">Home</span>
+          </button>
+          <span className="text-muted-foreground">/</span>
+          <span className="font-medium truncate">{selectedSupplier.name}</span>
+          <span className="text-muted-foreground ml-auto whitespace-nowrap">
+            ({totalProducts.toLocaleString()} Items)
+          </span>
         </div>
 
-        {/* Search and Sort Bar */}
-        <div className="px-3 sm:px-4 md:px-6 pb-2 sm:pb-4 flex flex-wrap items-center gap-2 md:gap-3">
-          {/* Mobile Filter Button */}
+        <div className="px-3 sm:px-4 md:px-6 py-2 sm:py-3 flex flex-wrap items-center gap-2 border-t">
           <Button
             variant="outline"
             size="sm"
@@ -556,847 +680,216 @@ export default function CatalogPage() {
           >
             <Filter className="h-4 w-4" />
             <span className="hidden sm:inline">Filters</span>
-            {hasActiveFilters && (
+            {activeFilterCount > 0 && (
               <Badge variant="secondary" className="h-5 px-1.5 text-xs">
-                {filters.suppliers.length + filters.categories.length + (filters.inStock ? 1 : 0)}
+                {activeFilterCount}
               </Badge>
             )}
           </Button>
 
-          <div className="relative flex-1 min-w-[140px] sm:min-w-[200px] max-w-md">
+          <div className="relative flex-1 min-w-[120px] max-w-xs">
             <Search className="absolute left-3 top-1/2 -translate-y-1/2 h-4 w-4 text-muted-foreground" />
             <Input
               type="search"
               placeholder="Search..."
-              className="pl-9"
+              className="pl-9 h-9"
               value={searchInput}
               onChange={(e) => setSearchInput(e.target.value)}
               data-testid="input-search-catalog"
             />
           </div>
 
-          <div className="flex items-center gap-1 sm:gap-2 flex-wrap">
-            {/* Desktop Filter Toggle */}
+          <div className="flex items-center gap-2 ml-auto">
+            <Select value={sortOption} onValueChange={(v) => { setSortOption(v as SortOption); resetPage(); }}>
+              <SelectTrigger className="w-[140px] sm:w-[180px] h-9" data-testid="select-sort">
+                <ArrowUpDown className="h-4 w-4 mr-2 text-muted-foreground" />
+                <SelectValue placeholder="Sort By" />
+              </SelectTrigger>
+              <SelectContent>
+                {SORT_OPTIONS.map((opt) => (
+                  <SelectItem key={opt.id} value={opt.id}>{opt.label}</SelectItem>
+                ))}
+              </SelectContent>
+            </Select>
+
             <Button
-              variant="outline"
+              variant={bulkSelectMode ? "default" : "outline"}
               size="sm"
-              className="gap-2 hidden lg:flex"
-              onClick={() => setShowFilters(!showFilters)}
-              data-testid="button-toggle-filters"
+              className="gap-2"
+              onClick={() => {
+                setBulkSelectMode(!bulkSelectMode);
+                if (bulkSelectMode) {
+                  setSelectedProducts([]);
+                }
+              }}
+              data-testid="button-bulk-select"
             >
-              <SlidersHorizontal className="h-4 w-4" />
-              {showFilters ? "Hide" : "Show"} Filters
+              <ListChecks className="h-4 w-4" />
+              <span className="hidden sm:inline">Bulk Select</span>
             </Button>
-
-            <Separator orientation="vertical" className="h-6 hidden lg:block" />
-
-            {/* Sort Buttons - Simplified on mobile */}
-            <div className="flex items-center gap-1">
-              <span className="text-sm text-muted-foreground hidden md:inline">Sort:</span>
-              <Button
-                variant={sortField === "price" ? "secondary" : "ghost"}
-                size="sm"
-                className="gap-1 px-2 sm:px-3"
-                onClick={() => toggleSort("price")}
-                data-testid="button-sort-price"
-                aria-pressed={sortField === "price"}
-                data-sort-direction={sortField === "price" ? sortDirection : undefined}
-              >
-                <DollarSign className="h-3 w-3" />
-                <span className="hidden sm:inline">Price</span>
-                {sortField === "price" && (
-                  sortDirection === "asc" ? <ArrowUp className="h-3 w-3" /> : <ArrowDown className="h-3 w-3" />
-                )}
-              </Button>
-              <Button
-                variant={sortField === "stock" ? "secondary" : "ghost"}
-                size="sm"
-                className="gap-1 px-2 sm:px-3 hidden sm:flex"
-                onClick={() => toggleSort("stock")}
-                data-testid="button-sort-stock"
-                aria-pressed={sortField === "stock"}
-                data-sort-direction={sortField === "stock" ? sortDirection : undefined}
-              >
-                <Boxes className="h-3 w-3" />
-                <span className="hidden sm:inline">Stock</span>
-                {sortField === "stock" && (
-                  sortDirection === "asc" ? <ArrowUp className="h-3 w-3" /> : <ArrowDown className="h-3 w-3" />
-                )}
-              </Button>
-              <Button
-                variant={sortField === "createdAt" ? "secondary" : "ghost"}
-                size="sm"
-                className="gap-1 px-2 sm:px-3 hidden md:flex"
-                onClick={() => toggleSort("createdAt")}
-                data-testid="button-sort-date"
-                aria-pressed={sortField === "createdAt"}
-                data-sort-direction={sortField === "createdAt" ? sortDirection : undefined}
-              >
-                <Clock className="h-3 w-3" />
-                <span className="hidden sm:inline">Date</span>
-                {sortField === "createdAt" && (
-                  sortDirection === "asc" ? <ArrowUp className="h-3 w-3" /> : <ArrowDown className="h-3 w-3" />
-                )}
-              </Button>
-            </div>
-
-            <Separator orientation="vertical" className="h-6 hidden sm:block" />
-
-            {/* View Mode */}
-            <div className="flex border rounded-md">
-              <Button
-                variant={viewMode === "grid" ? "secondary" : "ghost"}
-                size="icon"
-                className="rounded-r-none"
-                onClick={() => setViewMode("grid")}
-                data-testid="button-grid-view"
-              >
-                <Grid className="h-4 w-4" />
-              </Button>
-              <Button
-                variant={viewMode === "list" ? "secondary" : "ghost"}
-                size="icon"
-                className="rounded-l-none"
-                onClick={() => setViewMode("list")}
-                data-testid="button-list-view"
-              >
-                <List className="h-4 w-4" />
-              </Button>
-            </div>
           </div>
         </div>
       </div>
 
-      {/* Main Content */}
       <div className="flex-1 flex overflow-hidden">
-        {/* Mobile Filter Sheet */}
-        <Sheet open={mobileFilterOpen} onOpenChange={setMobileFilterOpen}>
-          <SheetContent side="left" className="w-[280px] p-0">
-            <SheetHeader className="p-4 border-b">
-              <SheetTitle className="flex items-center justify-between">
-                <span>Filters</span>
-                {hasActiveFilters && (
-                  <Button
-                    variant="ghost"
-                    size="sm"
-                    className="h-7 text-xs gap-1"
-                    onClick={clearAllFilters}
-                    data-testid="button-clear-filters-mobile"
-                  >
-                    <X className="h-3 w-3" />
-                    Clear
-                  </Button>
-                )}
-              </SheetTitle>
-            </SheetHeader>
-            <ScrollArea className="h-[calc(100vh-80px)]">
-              <div className="p-4 space-y-4">
-                {/* Price Range */}
-                <Collapsible
-                  open={expandedSections.price}
-                  onOpenChange={(open) => setExpandedSections(prev => ({ ...prev, price: open }))}
-                >
-                  <CollapsibleTrigger className="flex items-center justify-between w-full py-2 text-sm font-medium hover:text-primary transition-colors">
-                    <span className="flex items-center gap-2">
-                      <DollarSign className="h-4 w-4" />
-                      Price Range
-                    </span>
-                    {expandedSections.price ? <ChevronUp className="h-4 w-4" /> : <ChevronDown className="h-4 w-4" />}
-                  </CollapsibleTrigger>
-                  <CollapsibleContent className="pt-2 pb-4 space-y-4">
-                    <Slider
-                      value={filters.priceRange}
-                      onValueChange={(value) => setFilters(prev => ({ ...prev, priceRange: value as [number, number] }))}
-                      min={priceStats.min}
-                      max={priceStats.max}
-                      step={1}
-                      className="mt-2"
-                    />
-                    <div className="flex items-center gap-2">
-                      <div className="flex-1">
-                        <Label className="text-xs text-muted-foreground">Min</Label>
-                        <Input
-                          type="number"
-                          value={filters.priceRange[0]}
-                          onChange={(e) => setFilters(prev => ({ 
-                            ...prev, 
-                            priceRange: [Number(e.target.value), prev.priceRange[1]] 
-                          }))}
-                          className="h-8 text-sm"
-                        />
-                      </div>
-                      <span className="text-muted-foreground mt-5">-</span>
-                      <div className="flex-1">
-                        <Label className="text-xs text-muted-foreground">Max</Label>
-                        <Input
-                          type="number"
-                          value={filters.priceRange[1]}
-                          onChange={(e) => setFilters(prev => ({ 
-                            ...prev, 
-                            priceRange: [prev.priceRange[0], Number(e.target.value)] 
-                          }))}
-                          className="h-8 text-sm"
-                        />
-                      </div>
-                    </div>
-                  </CollapsibleContent>
-                </Collapsible>
-
-                <Separator />
-
-                {/* Stock */}
-                <Collapsible
-                  open={expandedSections.stock}
-                  onOpenChange={(open) => setExpandedSections(prev => ({ ...prev, stock: open }))}
-                >
-                  <CollapsibleTrigger className="flex items-center justify-between w-full py-2 text-sm font-medium hover:text-primary transition-colors">
-                    <span className="flex items-center gap-2">
-                      <Boxes className="h-4 w-4" />
-                      Availability
-                    </span>
-                    {expandedSections.stock ? <ChevronUp className="h-4 w-4" /> : <ChevronDown className="h-4 w-4" />}
-                  </CollapsibleTrigger>
-                  <CollapsibleContent className="pt-2 pb-4 space-y-3">
-                    <div className="flex items-center space-x-2">
-                      <Checkbox
-                        id="in-stock-mobile"
-                        checked={filters.inStock}
-                        onCheckedChange={(checked) => setFilters(prev => ({ ...prev, inStock: !!checked }))}
-                      />
-                      <label htmlFor="in-stock-mobile" className="text-sm font-medium leading-none">
-                        In Stock Only
-                      </label>
-                    </div>
-                    <div>
-                      <Label className="text-xs text-muted-foreground">Minimum Quantity</Label>
-                      <Input
-                        type="number"
-                        value={filters.stockMin}
-                        onChange={(e) => setFilters(prev => ({ ...prev, stockMin: Number(e.target.value) }))}
-                        className="h-8 text-sm mt-1"
-                        placeholder="0"
-                      />
-                    </div>
-                  </CollapsibleContent>
-                </Collapsible>
-
-                <Separator />
-
-                {/* Suppliers */}
-                <Collapsible
-                  open={expandedSections.suppliers}
-                  onOpenChange={(open) => setExpandedSections(prev => ({ ...prev, suppliers: open }))}
-                >
-                  <CollapsibleTrigger className="flex items-center justify-between w-full py-2 text-sm font-medium hover:text-primary transition-colors">
-                    <span className="flex items-center gap-2">
-                      <Store className="h-4 w-4" />
-                      Suppliers
-                      {filters.suppliers.length > 0 && (
-                        <Badge variant="secondary" className="ml-1 h-5 px-1.5">
-                          {filters.suppliers.length}
-                        </Badge>
-                      )}
-                    </span>
-                    {expandedSections.suppliers ? <ChevronUp className="h-4 w-4" /> : <ChevronDown className="h-4 w-4" />}
-                  </CollapsibleTrigger>
-                  <CollapsibleContent className="pt-2 pb-4 space-y-2">
-                    {suppliers?.map((supplier) => (
-                      <div key={supplier.id} className="flex items-center space-x-2">
-                        <Checkbox
-                          id={`supplier-mobile-${supplier.id}`}
-                          checked={filters.suppliers.includes(supplier.id)}
-                          onCheckedChange={() => toggleSupplierFilter(supplier.id)}
-                        />
-                        <label htmlFor={`supplier-mobile-${supplier.id}`} className="text-sm leading-none flex-1 truncate">
-                          {supplier.name}
-                        </label>
-                      </div>
-                    ))}
-                  </CollapsibleContent>
-                </Collapsible>
-
-                <Separator />
-
-                {/* Categories */}
-                <Collapsible
-                  open={expandedSections.categories}
-                  onOpenChange={(open) => setExpandedSections(prev => ({ ...prev, categories: open }))}
-                >
-                  <CollapsibleTrigger className="flex items-center justify-between w-full py-2 text-sm font-medium hover:text-primary transition-colors">
-                    <span className="flex items-center gap-2">
-                      <Tag className="h-4 w-4" />
-                      Categories
-                      {filters.categories.length > 0 && (
-                        <Badge variant="secondary" className="ml-1 h-5 px-1.5">
-                          {filters.categories.length}
-                        </Badge>
-                      )}
-                    </span>
-                    {expandedSections.categories ? <ChevronUp className="h-4 w-4" /> : <ChevronDown className="h-4 w-4" />}
-                  </CollapsibleTrigger>
-                  <CollapsibleContent className="pt-2 pb-4 space-y-2">
-                    {categories.map((category) => (
-                      <div key={category} className="flex items-center space-x-2">
-                        <Checkbox
-                          id={`category-mobile-${category}`}
-                          checked={filters.categories.includes(category)}
-                          onCheckedChange={() => toggleCategoryFilter(category)}
-                        />
-                        <label htmlFor={`category-mobile-${category}`} className="text-sm leading-none flex-1 truncate">
-                          {category}
-                        </label>
-                      </div>
-                    ))}
-                  </CollapsibleContent>
-                </Collapsible>
-              </div>
-            </ScrollArea>
-          </SheetContent>
-        </Sheet>
-
-        {/* Desktop Filter Sidebar - hidden on mobile */}
-        {showFilters && (
-          <div className="hidden lg:flex w-64 flex-shrink-0 border-r bg-muted/30 overflow-hidden flex-col">
-            <ScrollArea className="flex-1">
-              <div className="p-4 space-y-4">
-                {/* Filter Header */}
-                <div className="flex items-center justify-between">
-                  <h3 className="font-semibold text-sm">Filters</h3>
-                  {hasActiveFilters && (
-                    <Button
-                      variant="ghost"
-                      size="sm"
-                      className="h-7 text-xs gap-1"
-                      onClick={clearAllFilters}
-                      data-testid="button-clear-filters"
-                    >
-                      <X className="h-3 w-3" />
-                      Clear All
-                    </Button>
-                  )}
-                </div>
-
-                {/* Price Range */}
-                <Collapsible
-                  open={expandedSections.price}
-                  onOpenChange={(open) => setExpandedSections(prev => ({ ...prev, price: open }))}
-                >
-                  <CollapsibleTrigger className="flex items-center justify-between w-full py-2 text-sm font-medium hover:text-primary transition-colors">
-                    <span className="flex items-center gap-2">
-                      <DollarSign className="h-4 w-4" />
-                      Price Range
-                    </span>
-                    {expandedSections.price ? <ChevronUp className="h-4 w-4" /> : <ChevronDown className="h-4 w-4" />}
-                  </CollapsibleTrigger>
-                  <CollapsibleContent className="pt-2 pb-4 space-y-4">
-                    <Slider
-                      value={filters.priceRange}
-                      onValueChange={(value) => setFilters(prev => ({ ...prev, priceRange: value as [number, number] }))}
-                      min={priceStats.min}
-                      max={priceStats.max}
-                      step={1}
-                      className="mt-2"
-                      data-testid="slider-price-range"
-                    />
-                    <div className="flex items-center gap-2">
-                      <div className="flex-1">
-                        <Label className="text-xs text-muted-foreground">Min</Label>
-                        <Input
-                          type="number"
-                          value={filters.priceRange[0]}
-                          onChange={(e) => setFilters(prev => ({ 
-                            ...prev, 
-                            priceRange: [Number(e.target.value), prev.priceRange[1]] 
-                          }))}
-                          className="h-8 text-sm"
-                          data-testid="input-price-min"
-                        />
-                      </div>
-                      <span className="text-muted-foreground mt-5">-</span>
-                      <div className="flex-1">
-                        <Label className="text-xs text-muted-foreground">Max</Label>
-                        <Input
-                          type="number"
-                          value={filters.priceRange[1]}
-                          onChange={(e) => setFilters(prev => ({ 
-                            ...prev, 
-                            priceRange: [prev.priceRange[0], Number(e.target.value)] 
-                          }))}
-                          className="h-8 text-sm"
-                          data-testid="input-price-max"
-                        />
-                      </div>
-                    </div>
-                  </CollapsibleContent>
-                </Collapsible>
-
-                <Separator />
-
-                {/* Stock */}
-                <Collapsible
-                  open={expandedSections.stock}
-                  onOpenChange={(open) => setExpandedSections(prev => ({ ...prev, stock: open }))}
-                >
-                  <CollapsibleTrigger className="flex items-center justify-between w-full py-2 text-sm font-medium hover:text-primary transition-colors">
-                    <span className="flex items-center gap-2">
-                      <Boxes className="h-4 w-4" />
-                      Availability
-                    </span>
-                    {expandedSections.stock ? <ChevronUp className="h-4 w-4" /> : <ChevronDown className="h-4 w-4" />}
-                  </CollapsibleTrigger>
-                  <CollapsibleContent className="pt-2 pb-4 space-y-3">
-                    <div className="flex items-center space-x-2">
-                      <Checkbox
-                        id="in-stock"
-                        checked={filters.inStock}
-                        onCheckedChange={(checked) => setFilters(prev => ({ ...prev, inStock: !!checked }))}
-                        data-testid="checkbox-in-stock"
-                      />
-                      <label
-                        htmlFor="in-stock"
-                        className="text-sm font-medium leading-none peer-disabled:cursor-not-allowed peer-disabled:opacity-70"
-                      >
-                        In Stock Only
-                      </label>
-                    </div>
-                    <div>
-                      <Label className="text-xs text-muted-foreground">Minimum Quantity</Label>
-                      <Input
-                        type="number"
-                        value={filters.stockMin}
-                        onChange={(e) => setFilters(prev => ({ ...prev, stockMin: Number(e.target.value) }))}
-                        className="h-8 text-sm mt-1"
-                        placeholder="0"
-                        data-testid="input-stock-min"
-                      />
-                    </div>
-                  </CollapsibleContent>
-                </Collapsible>
-
-                <Separator />
-
-                {/* Suppliers */}
-                <Collapsible
-                  open={expandedSections.suppliers}
-                  onOpenChange={(open) => setExpandedSections(prev => ({ ...prev, suppliers: open }))}
-                >
-                  <CollapsibleTrigger className="flex items-center justify-between w-full py-2 text-sm font-medium hover:text-primary transition-colors">
-                    <span className="flex items-center gap-2">
-                      <Store className="h-4 w-4" />
-                      Suppliers
-                      {filters.suppliers.length > 0 && (
-                        <Badge variant="secondary" className="ml-1 h-5 px-1.5">
-                          {filters.suppliers.length}
-                        </Badge>
-                      )}
-                    </span>
-                    {expandedSections.suppliers ? <ChevronUp className="h-4 w-4" /> : <ChevronDown className="h-4 w-4" />}
-                  </CollapsibleTrigger>
-                  <CollapsibleContent className="pt-2 pb-4 space-y-2">
-                    {suppliers?.map((supplier) => (
-                      <div key={supplier.id} className="flex items-center space-x-2">
-                        <Checkbox
-                          id={`supplier-${supplier.id}`}
-                          checked={filters.suppliers.includes(supplier.id)}
-                          onCheckedChange={() => toggleSupplierFilter(supplier.id)}
-                          data-testid={`checkbox-supplier-${supplier.id}`}
-                        />
-                        <label
-                          htmlFor={`supplier-${supplier.id}`}
-                          className="text-sm leading-none peer-disabled:cursor-not-allowed peer-disabled:opacity-70 flex-1 truncate"
-                        >
-                          {supplier.name}
-                        </label>
-                      </div>
-                    ))}
-                    {(!suppliers || suppliers.length === 0) && (
-                      <p className="text-xs text-muted-foreground">No suppliers available</p>
-                    )}
-                  </CollapsibleContent>
-                </Collapsible>
-
-                <Separator />
-
-                {/* Categories */}
-                <Collapsible
-                  open={expandedSections.categories}
-                  onOpenChange={(open) => setExpandedSections(prev => ({ ...prev, categories: open }))}
-                >
-                  <CollapsibleTrigger className="flex items-center justify-between w-full py-2 text-sm font-medium hover:text-primary transition-colors">
-                    <span className="flex items-center gap-2">
-                      <Tag className="h-4 w-4" />
-                      Categories
-                      {filters.categories.length > 0 && (
-                        <Badge variant="secondary" className="ml-1 h-5 px-1.5">
-                          {filters.categories.length}
-                        </Badge>
-                      )}
-                    </span>
-                    {expandedSections.categories ? <ChevronUp className="h-4 w-4" /> : <ChevronDown className="h-4 w-4" />}
-                  </CollapsibleTrigger>
-                  <CollapsibleContent className="pt-2 pb-4 space-y-2">
-                    {categories.map((category) => (
-                      <div key={category} className="flex items-center space-x-2">
-                        <Checkbox
-                          id={`category-${category}`}
-                          checked={filters.categories.includes(category)}
-                          onCheckedChange={() => toggleCategoryFilter(category)}
-                          data-testid={`checkbox-category-${category}`}
-                        />
-                        <label
-                          htmlFor={`category-${category}`}
-                          className="text-sm leading-none peer-disabled:cursor-not-allowed peer-disabled:opacity-70 flex-1 truncate"
-                        >
-                          {category}
-                        </label>
-                      </div>
-                    ))}
-                    {categories.length === 0 && (
-                      <p className="text-xs text-muted-foreground">No categories available</p>
-                    )}
-                  </CollapsibleContent>
-                </Collapsible>
-              </div>
-            </ScrollArea>
-          </div>
-        )}
-
-        {/* Products Grid */}
-        <div className="flex-1 overflow-hidden flex flex-col">
-          {/* Results Count & Selection */}
-          <div className="flex-shrink-0 px-3 sm:px-4 md:px-6 py-2 sm:py-3 border-b bg-muted/20 flex items-center justify-between gap-2">
-            <div className="flex items-center gap-1 sm:gap-2">
-              <span className="text-xs sm:text-sm text-muted-foreground" data-testid="text-product-count">
-                {totalProducts.toLocaleString()} items
-                {isFetching && !isLoading && <Loader2 className="inline h-3 w-3 ml-1 animate-spin" />}
-              </span>
-              {hasActiveFilters && (
-                <Badge variant="outline" className="gap-1 text-xs hidden sm:inline-flex">
-                  <SlidersHorizontal className="h-3 w-3" />
-                  Filtered
-                </Badge>
-              )}
+        <div className="hidden lg:block w-64 border-r flex-shrink-0">
+          <ScrollArea className="h-full">
+            <div className="p-4">
+              <FilterSidebar />
             </div>
-            {displayProducts.length > 0 && (
-              <Button variant="ghost" size="sm" className="h-7 px-2 text-xs sm:text-sm" onClick={selectAllProducts} data-testid="button-select-all">
-                {selectedProducts.length === displayProducts.length ? (
-                  <>
-                    <X className="h-3 w-3 sm:h-4 sm:w-4 mr-1" />
-                    <span className="hidden sm:inline">Deselect All</span>
-                    <span className="sm:hidden">Clear</span>
-                  </>
-                ) : (
-                  <>
-                    <Check className="h-3 w-3 sm:h-4 sm:w-4 mr-1" />
-                    Select All
-                  </>
-                )}
-              </Button>
-            )}
-          </div>
+          </ScrollArea>
+        </div>
 
-          {/* Products */}
+        <div className="flex-1 overflow-hidden flex flex-col">
           <ScrollArea className="flex-1">
             <div className="p-3 sm:p-4 md:p-6">
               {isLoading ? (
-                <div className={`grid gap-2 sm:gap-4 ${viewMode === "grid" ? "grid-cols-2 sm:grid-cols-2 md:grid-cols-3 lg:grid-cols-4 xl:grid-cols-5" : ""}`}>
-                  {[1, 2, 3, 4, 5, 6].map((i) => (
-                    <div key={i} className={viewMode === "grid" ? "" : "flex items-center gap-4"}>
-                      <Skeleton className={viewMode === "grid" ? "aspect-square w-full rounded-lg" : "h-16 sm:h-20 w-16 sm:w-20 rounded-lg"} />
-                      <div className={`${viewMode === "grid" ? "mt-2 sm:mt-3" : "flex-1"} space-y-2`}>
-                        <Skeleton className="h-3 sm:h-4 w-3/4" />
-                        <Skeleton className="h-2 sm:h-3 w-1/2" />
-                        <Skeleton className="h-3 sm:h-4 w-1/3" />
-                      </div>
+                <div className="grid gap-3 sm:gap-4 grid-cols-2 sm:grid-cols-3 md:grid-cols-3 lg:grid-cols-4 xl:grid-cols-5">
+                  {[1, 2, 3, 4, 5, 6, 7, 8].map((i) => (
+                    <div key={i} className="space-y-2">
+                      <Skeleton className="aspect-[3/4] w-full rounded-lg" />
+                      <Skeleton className="h-4 w-3/4" />
+                      <Skeleton className="h-4 w-1/2" />
                     </div>
                   ))}
                 </div>
-              ) : displayProducts.length > 0 ? (
+              ) : products.length > 0 ? (
                 <>
-                {viewMode === "grid" ? (
-                  <div className="grid gap-2 sm:gap-4 grid-cols-2 sm:grid-cols-2 md:grid-cols-3 lg:grid-cols-4 xl:grid-cols-5">
-                    {displayProducts.map((product) => {
+                  <div className="grid gap-3 sm:gap-4 grid-cols-2 sm:grid-cols-3 md:grid-cols-3 lg:grid-cols-4 xl:grid-cols-5">
+                    {products.map((product) => {
                       const stock = product.inventoryQuantity || 0;
-                      const compareAt = getCompareAtPrice(product);
-                      const hasDiscount = compareAt > product.supplierPrice;
-                      const discountPercent = hasDiscount 
-                        ? Math.round((1 - product.supplierPrice / compareAt) * 100)
-                        : 0;
+                      const isSelected = selectedProducts.includes(product.id);
+                      const variantCount = product.variants?.length || 0;
 
                       return (
                         <div
                           key={product.id}
-                          className={`group relative rounded-lg border bg-card overflow-hidden transition-all duration-200 hover:shadow-lg hover:border-primary/50 ${
-                            selectedProducts.includes(product.id) ? "ring-2 ring-primary shadow-lg" : ""
+                          className={`group relative bg-card rounded-lg overflow-hidden border transition-all duration-200 hover:shadow-lg ${
+                            isSelected ? "ring-2 ring-primary border-primary" : "hover:border-primary/30"
                           }`}
                           data-testid={`card-catalog-product-${product.id}`}
                         >
-                          {/* Selection Checkbox */}
-                          <div className="absolute top-2 left-2 z-10">
-                            <Checkbox
-                              checked={selectedProducts.includes(product.id)}
-                              onCheckedChange={() => toggleProductSelection(product.id)}
-                              className="bg-background/80 backdrop-blur-sm"
-                              data-testid={`checkbox-product-${product.id}`}
-                            />
-                          </div>
+                          {bulkSelectMode && (
+                            <div className="absolute top-2 left-2 z-20">
+                              <Checkbox
+                                checked={isSelected}
+                                onCheckedChange={() => toggleProductSelection(product.id)}
+                                className="h-5 w-5 bg-background/90 backdrop-blur-sm border-2"
+                                data-testid={`checkbox-product-${product.id}`}
+                              />
+                            </div>
+                          )}
 
-                          {/* Badges */}
-                          <div className="absolute top-2 right-2 z-10 flex flex-col gap-1">
-                            {hasDiscount && (
-                              <Badge className="bg-red-500 hover:bg-red-600 text-white text-xs">
-                                -{discountPercent}%
-                              </Badge>
-                            )}
-                            {stock === 0 && (
-                              <Badge variant="secondary" className="text-xs">
+                          <button
+                            className="absolute top-2 right-2 z-20 h-8 w-8 rounded-full bg-background/80 backdrop-blur-sm flex items-center justify-center opacity-0 group-hover:opacity-100 transition-opacity hover:bg-background"
+                            onClick={(e) => {
+                              e.preventDefault();
+                              if (!bulkSelectMode) {
+                                setSelectedProducts([product.id]);
+                                setIsImportDialogOpen(true);
+                              }
+                            }}
+                            data-testid={`button-quick-add-${product.id}`}
+                          >
+                            <Plus className="h-4 w-4" />
+                          </button>
+
+                          {stock === 0 && (
+                            <div className="absolute top-2 left-2 z-10">
+                              <Badge variant="secondary" className="text-xs bg-background/90">
                                 Out of Stock
                               </Badge>
-                            )}
-                          </div>
+                            </div>
+                          )}
 
-                          {/* Image - Click to view product details */}
                           <Link href={`/dashboard/products/${product.id}`}>
-                            <div 
-                              className="aspect-[4/3] sm:aspect-square bg-muted cursor-pointer"
-                              data-testid={`link-product-image-${product.id}`}
-                            >
+                            <div className="aspect-[3/4] bg-muted relative overflow-hidden">
                               {product.images && product.images.length > 0 ? (
                                 <img
                                   src={product.images[0].url}
                                   alt={product.title}
                                   className="w-full h-full object-cover group-hover:scale-105 transition-transform duration-300"
+                                  loading="lazy"
                                 />
                               ) : (
                                 <div className="w-full h-full flex items-center justify-center">
-                                  <ImageOff className="h-8 w-8 sm:h-12 sm:w-12 text-muted-foreground/30" />
+                                  <ImageOff className="h-8 w-8 text-muted-foreground/30" />
+                                </div>
+                              )}
+
+                              {variantCount > 1 && (
+                                <div className="absolute bottom-2 left-2 z-10">
+                                  <Badge variant="secondary" className="text-xs bg-background/90">
+                                    {variantCount} variants
+                                  </Badge>
                                 </div>
                               )}
                             </div>
                           </Link>
 
-                          {/* Content */}
-                          <div className="p-2 sm:p-3 space-y-1 sm:space-y-2">
-                            <div className="flex items-start justify-between gap-1">
-                              <Link href={`/dashboard/products/${product.id}`}>
-                                <h3 
-                                  className="font-medium text-xs sm:text-sm line-clamp-2 cursor-pointer hover:text-primary transition-colors"
-                                  data-testid={`link-product-title-${product.id}`}
-                                >
-                                  {product.title}
-                                </h3>
-                              </Link>
-                            </div>
-
-                            <p className="text-xs text-muted-foreground flex items-center gap-1 hidden sm:flex">
-                              <Store className="h-3 w-3" />
-                              {getSupplierName(product.supplierId)}
-                            </p>
-
-                            <div className="flex flex-col sm:flex-row sm:items-end sm:justify-between gap-1 sm:gap-2">
-                              <div>
-                                <div className="flex items-baseline gap-1">
-                                  <span className="text-sm sm:text-lg font-bold text-primary">
-                                    ${product.supplierPrice.toFixed(2)}
-                                  </span>
-                                  {hasDiscount && (
-                                    <span className="text-xs text-muted-foreground line-through hidden sm:inline">
-                                      ${compareAt.toFixed(2)}
-                                    </span>
-                                  )}
-                                </div>
-                                <p className="text-xs text-muted-foreground hidden sm:block">Supplier price</p>
-                              </div>
-                              <Badge 
-                                variant={stock > 10 ? "default" : stock > 0 ? "secondary" : "outline"}
-                                className="text-xs whitespace-nowrap w-fit"
-                              >
-                                {stock > 0 ? `${stock}` : "Out"}
-                              </Badge>
-                            </div>
-
-                            {product.category && (
-                              <Badge variant="outline" className="text-xs hidden sm:inline-flex">
-                                {product.category}
-                              </Badge>
-                            )}
-                          </div>
-
-                          {/* Quick Actions */}
-                          <div className="absolute bottom-0 left-0 right-0 p-3 bg-gradient-to-t from-background via-background/95 to-transparent opacity-0 group-hover:opacity-100 transition-opacity">
-                            <Button
-                              size="sm"
-                              className="w-full gap-2"
-                              onClick={(e) => {
-                                e.stopPropagation();
-                                setSelectedProducts([product.id]);
-                                setIsImportDialogOpen(true);
-                              }}
-                              data-testid={`button-quick-import-${product.id}`}
-                            >
-                              <ShoppingCart className="h-4 w-4" />
-                              Quick Import
-                            </Button>
-                          </div>
-                        </div>
-                      );
-                    })}
-                  </div>
-                ) : (
-                  <div className="space-y-2">
-                    {displayProducts.map((product) => {
-                      const stock = product.inventoryQuantity || 0;
-                      const compareAt = getCompareAtPrice(product);
-                      const hasDiscount = compareAt > product.supplierPrice;
-
-                      return (
-                        <div
-                          key={product.id}
-                          className={`flex items-center gap-2 sm:gap-4 p-2 sm:p-4 rounded-lg border bg-card hover:shadow-md hover:border-primary/50 transition-all ${
-                            selectedProducts.includes(product.id) ? "ring-2 ring-primary shadow-md" : ""
-                          }`}
-                          data-testid={`row-catalog-product-${product.id}`}
-                        >
-                          <Checkbox
-                            checked={selectedProducts.includes(product.id)}
-                            onCheckedChange={() => toggleProductSelection(product.id)}
-                            data-testid={`checkbox-product-${product.id}`}
-                          />
-                          
-                          <Link href={`/dashboard/products/${product.id}`} className="relative h-16 w-16 sm:h-20 sm:w-20 flex-shrink-0 cursor-pointer">
-                            {product.images && product.images.length > 0 ? (
-                              <img
-                                src={product.images[0].url}
-                                alt={product.title}
-                                className="h-full w-full rounded-lg object-cover"
-                              />
-                            ) : (
-                              <div className="h-full w-full rounded-lg bg-muted flex items-center justify-center">
-                                <ImageOff className="h-6 w-6 text-muted-foreground/50" />
-                              </div>
-                            )}
-                            {hasDiscount && (
-                              <Badge className="absolute -top-1 -right-1 bg-red-500 text-white text-xs">
-                                Sale
-                              </Badge>
-                            )}
-                          </Link>
-
-                          <div className="flex-1 min-w-0">
+                          <div className="p-2 sm:p-3">
                             <Link href={`/dashboard/products/${product.id}`}>
-                              <h3 className="font-medium truncate cursor-pointer hover:text-primary transition-colors">{product.title}</h3>
+                              <h3 
+                                className="text-xs sm:text-sm font-medium line-clamp-2 hover:text-primary transition-colors cursor-pointer leading-tight"
+                                data-testid={`link-product-title-${product.id}`}
+                              >
+                                {product.title}
+                              </h3>
                             </Link>
-                            <p className="text-sm text-muted-foreground flex items-center gap-2">
-                              <Store className="h-3 w-3" />
-                              {getSupplierName(product.supplierId)}
-                              {product.category && (
-                                <>
-                                  <span className="text-muted-foreground/50">|</span>
-                                  {product.category}
-                                </>
-                              )}
-                            </p>
-                            {product.supplierSku && (
-                              <p className="text-xs text-muted-foreground mt-1">SKU: {product.supplierSku}</p>
-                            )}
-                          </div>
 
-                          <div className="text-right flex-shrink-0">
-                            <div className="flex items-baseline gap-1.5 justify-end">
-                              <span className="text-lg font-bold text-primary">
+                            <div className="mt-2 flex items-center gap-2">
+                              <Badge variant="outline" className="text-xs px-1.5 py-0 h-5">
+                                Dropship
+                              </Badge>
+                              <span className="text-sm sm:text-base font-bold text-primary">
                                 ${product.supplierPrice.toFixed(2)}
                               </span>
-                              {hasDiscount && (
-                                <span className="text-xs text-muted-foreground line-through">
-                                  ${compareAt.toFixed(2)}
-                                </span>
-                              )}
                             </div>
-                            <Badge 
-                              variant={stock > 10 ? "default" : stock > 0 ? "secondary" : "outline"}
-                              className="mt-1 text-xs"
-                            >
-                              {stock > 0 ? `${stock} in stock` : "Out of stock"}
-                            </Badge>
                           </div>
-
-                          <Button
-                            size="sm"
-                            variant="outline"
-                            className="gap-1 flex-shrink-0"
-                            onClick={(e) => {
-                              e.stopPropagation();
-                              setSelectedProducts([product.id]);
-                              setIsImportDialogOpen(true);
-                            }}
-                            data-testid={`button-quick-import-${product.id}`}
-                          >
-                            <Plus className="h-4 w-4" />
-                            Import
-                          </Button>
                         </div>
                       );
                     })}
                   </div>
-                )}
-                
-                {/* Pagination Controls */}
-                {totalPages > 1 && (
-                  <div className="flex items-center justify-center gap-2 mt-6 pb-4">
-                    <Button
-                      variant="outline"
-                      size="sm"
-                      onClick={() => setCurrentPage(1)}
-                      disabled={currentPage === 1}
-                      data-testid="button-first-page"
-                    >
-                      First
-                    </Button>
-                    <Button
-                      variant="outline"
-                      size="sm"
-                      onClick={() => setCurrentPage(p => Math.max(1, p - 1))}
-                      disabled={currentPage === 1}
-                      data-testid="button-prev-page"
-                    >
-                      Previous
-                    </Button>
-                    <span className="text-sm text-muted-foreground px-4" data-testid="text-page-info">
-                      Page {currentPage} of {totalPages}
-                    </span>
-                    <Button
-                      variant="outline"
-                      size="sm"
-                      onClick={() => setCurrentPage(p => Math.min(totalPages, p + 1))}
-                      disabled={currentPage === totalPages}
-                      data-testid="button-next-page"
-                    >
-                      Next
-                    </Button>
-                    <Button
-                      variant="outline"
-                      size="sm"
-                      onClick={() => setCurrentPage(totalPages)}
-                      disabled={currentPage === totalPages}
-                      data-testid="button-last-page"
-                    >
-                      Last
-                    </Button>
-                  </div>
-                )}
+
+                  {totalPages > 1 && (
+                    <div className="flex items-center justify-center gap-2 mt-6 pt-6 border-t">
+                      <Button
+                        variant="outline"
+                        size="sm"
+                        disabled={currentPage === 1}
+                        onClick={() => setCurrentPage(p => Math.max(1, p - 1))}
+                      >
+                        Previous
+                      </Button>
+                      <span className="text-sm text-muted-foreground px-4">
+                        Page {currentPage} of {totalPages}
+                      </span>
+                      <Button
+                        variant="outline"
+                        size="sm"
+                        disabled={currentPage === totalPages}
+                        onClick={() => setCurrentPage(p => Math.min(totalPages, p + 1))}
+                      >
+                        Next
+                      </Button>
+                    </div>
+                  )}
                 </>
               ) : (
-                <div className="text-center py-16 text-muted-foreground">
-                  <Package className="h-20 w-20 mx-auto mb-4 opacity-30" />
-                  <h3 className="text-lg font-medium mb-2">No products found</h3>
-                  <p className="text-sm mb-4">
-                    {hasActiveFilters
-                      ? "Try adjusting your filters or search terms"
-                      : "Check back later for more products from suppliers"}
+                <div className="flex flex-col items-center justify-center py-16 text-center">
+                  <Package className="h-12 w-12 text-muted-foreground mb-4" />
+                  <h3 className="text-lg font-medium">No Products Found</h3>
+                  <p className="text-muted-foreground text-sm mt-1">
+                    Try adjusting your filters or search terms
                   </p>
-                  {hasActiveFilters && (
-                    <Button variant="outline" onClick={clearAllFilters} data-testid="button-clear-filters-empty">
-                      Clear All Filters
+                  {activeFilterCount > 0 && (
+                    <Button
+                      variant="outline"
+                      size="sm"
+                      className="mt-4"
+                      onClick={clearAllFilters}
+                    >
+                      Clear Filters
                     </Button>
                   )}
                 </div>
@@ -1406,86 +899,45 @@ export default function CatalogPage() {
         </div>
       </div>
 
-      {/* Import Dialog */}
-      <Dialog open={isImportDialogOpen} onOpenChange={setIsImportDialogOpen}>
-        <DialogContent>
-          <DialogHeader>
-            <DialogTitle>Import Products</DialogTitle>
-            <DialogDescription>
-              Set your pricing rules for the {selectedProducts.length} selected product{selectedProducts.length !== 1 ? "s" : ""}
-            </DialogDescription>
-          </DialogHeader>
-          <div className="space-y-6 py-4">
-            <div className="space-y-4">
-              <Label>Pricing Rule</Label>
-              <Select
-                value={importSettings.pricingType}
-                onValueChange={(v) =>
-                  setImportSettings({ ...importSettings, pricingType: v as "fixed" | "percentage" })
-                }
+      {bulkSelectMode && selectedProducts.length > 0 && (
+        <div className="fixed bottom-0 left-0 right-0 p-3 sm:p-4 bg-background border-t shadow-lg z-50">
+          <div className="max-w-7xl mx-auto flex items-center justify-between gap-4">
+            <div className="flex items-center gap-3">
+              <Checkbox
+                checked={selectedProducts.length === products.length}
+                onCheckedChange={selectAllProducts}
+              />
+              <span className="text-sm font-medium">
+                {selectedProducts.length} product(s) selected
+              </span>
+            </div>
+            <div className="flex items-center gap-2">
+              <Button
+                variant="outline"
+                size="sm"
+                onClick={() => setSelectedProducts([])}
               >
-                <SelectTrigger data-testid="select-pricing-type">
-                  <SelectValue />
-                </SelectTrigger>
-                <SelectContent>
-                  <SelectItem value="percentage">Percentage Markup</SelectItem>
-                  <SelectItem value="fixed">Fixed Markup</SelectItem>
-                </SelectContent>
-              </Select>
-            </div>
-            <div className="space-y-4">
-              <Label>
-                {importSettings.pricingType === "percentage"
-                  ? "Markup Percentage (%)"
-                  : "Fixed Markup ($)"}
-              </Label>
-              <div className="relative">
-                {importSettings.pricingType === "fixed" && (
-                  <DollarSign className="absolute left-2.5 top-2.5 h-4 w-4 text-muted-foreground" />
-                )}
-                <Input
-                  type="number"
-                  value={importSettings.pricingValue}
-                  onChange={(e) =>
-                    setImportSettings({
-                      ...importSettings,
-                      pricingValue: Number(e.target.value),
-                    })
-                  }
-                  className={importSettings.pricingType === "fixed" ? "pl-8" : ""}
-                  data-testid="input-pricing-value"
-                />
-                {importSettings.pricingType === "percentage" && (
-                  <span className="absolute right-2.5 top-2.5 text-muted-foreground">%</span>
-                )}
-              </div>
-            </div>
-            <div className="p-4 rounded-lg bg-muted/50">
-              <p className="text-sm font-medium mb-2">Preview</p>
-              <p className="text-xs text-muted-foreground">
-                Example: $50.00 supplier price →{" "}
-                <span className="font-medium text-foreground">
-                  ${calculateMerchantPrice(50).toFixed(2)}
-                </span>{" "}
-                selling price
-              </p>
+                <X className="h-4 w-4 mr-1" />
+                Clear
+              </Button>
+              <Button
+                size="sm"
+                onClick={() => setIsImportDialogOpen(true)}
+                data-testid="button-import-selected"
+              >
+                <ShoppingCart className="h-4 w-4 mr-2" />
+                Import Selected
+              </Button>
             </div>
           </div>
-          <DialogFooter>
-            <Button variant="outline" onClick={() => setIsImportDialogOpen(false)}>
-              Cancel
-            </Button>
-            <Button
-              onClick={handleImport}
-              disabled={importMutation.isPending}
-              data-testid="button-confirm-import"
-            >
-              {importMutation.isPending && <Loader2 className="mr-2 h-4 w-4 animate-spin" />}
-              Import Products
-            </Button>
-          </DialogFooter>
-        </DialogContent>
-      </Dialog>
+        </div>
+      )}
+
+      {isFetching && !isLoading && (
+        <div className="fixed bottom-4 right-4 bg-background border rounded-full p-2 shadow-lg z-40">
+          <Loader2 className="h-5 w-5 animate-spin text-primary" />
+        </div>
+      )}
     </div>
   );
 }
