@@ -10,6 +10,13 @@ import { Slider } from "@/components/ui/slider";
 import { Separator } from "@/components/ui/separator";
 import { ScrollArea } from "@/components/ui/scroll-area";
 import {
+  Sheet,
+  SheetContent,
+  SheetHeader,
+  SheetTitle,
+  SheetTrigger,
+} from "@/components/ui/sheet";
+import {
   Dialog,
   DialogContent,
   DialogDescription,
@@ -56,6 +63,7 @@ import {
   Tag,
   Check,
   ShoppingCart,
+  Filter,
 } from "lucide-react";
 import { Link } from "wouter";
 import type { Product, Supplier } from "@shared/schema";
@@ -97,6 +105,7 @@ export default function CatalogPage() {
   const [selectedProducts, setSelectedProducts] = useState<number[]>([]);
   const [isImportDialogOpen, setIsImportDialogOpen] = useState(false);
   const [showFilters, setShowFilters] = useState(true);
+  const [mobileFilterOpen, setMobileFilterOpen] = useState(false);
   const [sortField, setSortField] = useState<SortField>("default");
   const [sortDirection, setSortDirection] = useState<SortDirection>("desc");
   const [currentPage, setCurrentPage] = useState(1);
@@ -534,12 +543,29 @@ export default function CatalogPage() {
         </div>
 
         {/* Search and Sort Bar */}
-        <div className="px-4 md:px-6 pb-4 flex flex-wrap items-center gap-3">
-          <div className="relative flex-1 min-w-[200px] max-w-md">
+        <div className="px-4 md:px-6 pb-4 flex flex-wrap items-center gap-2 md:gap-3">
+          {/* Mobile Filter Button */}
+          <Button
+            variant="outline"
+            size="sm"
+            className="lg:hidden gap-2"
+            onClick={() => setMobileFilterOpen(true)}
+            data-testid="button-mobile-filters"
+          >
+            <Filter className="h-4 w-4" />
+            <span className="hidden sm:inline">Filters</span>
+            {hasActiveFilters && (
+              <Badge variant="secondary" className="h-5 px-1.5 text-xs">
+                {filters.suppliers.length + filters.categories.length + (filters.inStock ? 1 : 0)}
+              </Badge>
+            )}
+          </Button>
+
+          <div className="relative flex-1 min-w-[140px] sm:min-w-[200px] max-w-md">
             <Search className="absolute left-3 top-1/2 -translate-y-1/2 h-4 w-4 text-muted-foreground" />
             <Input
               type="search"
-              placeholder="Search products, SKU, category..."
+              placeholder="Search..."
               className="pl-9"
               value={searchInput}
               onChange={(e) => setSearchInput(e.target.value)}
@@ -547,11 +573,12 @@ export default function CatalogPage() {
             />
           </div>
 
-          <div className="flex items-center gap-2">
+          <div className="flex items-center gap-1 sm:gap-2 flex-wrap">
+            {/* Desktop Filter Toggle */}
             <Button
               variant="outline"
               size="sm"
-              className="gap-2"
+              className="gap-2 hidden lg:flex"
               onClick={() => setShowFilters(!showFilters)}
               data-testid="button-toggle-filters"
             >
@@ -559,22 +586,22 @@ export default function CatalogPage() {
               {showFilters ? "Hide" : "Show"} Filters
             </Button>
 
-            <Separator orientation="vertical" className="h-6" />
+            <Separator orientation="vertical" className="h-6 hidden lg:block" />
 
-            {/* Sort Buttons */}
+            {/* Sort Buttons - Simplified on mobile */}
             <div className="flex items-center gap-1">
-              <span className="text-sm text-muted-foreground hidden sm:inline">Sort:</span>
+              <span className="text-sm text-muted-foreground hidden md:inline">Sort:</span>
               <Button
                 variant={sortField === "price" ? "secondary" : "ghost"}
                 size="sm"
-                className="gap-1"
+                className="gap-1 px-2 sm:px-3"
                 onClick={() => toggleSort("price")}
                 data-testid="button-sort-price"
                 aria-pressed={sortField === "price"}
                 data-sort-direction={sortField === "price" ? sortDirection : undefined}
               >
                 <DollarSign className="h-3 w-3" />
-                Price
+                <span className="hidden sm:inline">Price</span>
                 {sortField === "price" && (
                   sortDirection === "asc" ? <ArrowUp className="h-3 w-3" /> : <ArrowDown className="h-3 w-3" />
                 )}
@@ -582,14 +609,14 @@ export default function CatalogPage() {
               <Button
                 variant={sortField === "stock" ? "secondary" : "ghost"}
                 size="sm"
-                className="gap-1"
+                className="gap-1 px-2 sm:px-3 hidden sm:flex"
                 onClick={() => toggleSort("stock")}
                 data-testid="button-sort-stock"
                 aria-pressed={sortField === "stock"}
                 data-sort-direction={sortField === "stock" ? sortDirection : undefined}
               >
                 <Boxes className="h-3 w-3" />
-                Stock
+                <span className="hidden sm:inline">Stock</span>
                 {sortField === "stock" && (
                   sortDirection === "asc" ? <ArrowUp className="h-3 w-3" /> : <ArrowDown className="h-3 w-3" />
                 )}
@@ -597,21 +624,21 @@ export default function CatalogPage() {
               <Button
                 variant={sortField === "createdAt" ? "secondary" : "ghost"}
                 size="sm"
-                className="gap-1"
+                className="gap-1 px-2 sm:px-3 hidden md:flex"
                 onClick={() => toggleSort("createdAt")}
                 data-testid="button-sort-date"
                 aria-pressed={sortField === "createdAt"}
                 data-sort-direction={sortField === "createdAt" ? sortDirection : undefined}
               >
                 <Clock className="h-3 w-3" />
-                Date
+                <span className="hidden sm:inline">Date</span>
                 {sortField === "createdAt" && (
                   sortDirection === "asc" ? <ArrowUp className="h-3 w-3" /> : <ArrowDown className="h-3 w-3" />
                 )}
               </Button>
             </div>
 
-            <Separator orientation="vertical" className="h-6" />
+            <Separator orientation="vertical" className="h-6 hidden sm:block" />
 
             {/* View Mode */}
             <div className="flex border rounded-md">
@@ -640,9 +667,194 @@ export default function CatalogPage() {
 
       {/* Main Content */}
       <div className="flex-1 flex overflow-hidden">
-        {/* Filter Sidebar */}
+        {/* Mobile Filter Sheet */}
+        <Sheet open={mobileFilterOpen} onOpenChange={setMobileFilterOpen}>
+          <SheetContent side="left" className="w-[280px] p-0">
+            <SheetHeader className="p-4 border-b">
+              <SheetTitle className="flex items-center justify-between">
+                <span>Filters</span>
+                {hasActiveFilters && (
+                  <Button
+                    variant="ghost"
+                    size="sm"
+                    className="h-7 text-xs gap-1"
+                    onClick={clearAllFilters}
+                    data-testid="button-clear-filters-mobile"
+                  >
+                    <X className="h-3 w-3" />
+                    Clear
+                  </Button>
+                )}
+              </SheetTitle>
+            </SheetHeader>
+            <ScrollArea className="h-[calc(100vh-80px)]">
+              <div className="p-4 space-y-4">
+                {/* Price Range */}
+                <Collapsible
+                  open={expandedSections.price}
+                  onOpenChange={(open) => setExpandedSections(prev => ({ ...prev, price: open }))}
+                >
+                  <CollapsibleTrigger className="flex items-center justify-between w-full py-2 text-sm font-medium hover:text-primary transition-colors">
+                    <span className="flex items-center gap-2">
+                      <DollarSign className="h-4 w-4" />
+                      Price Range
+                    </span>
+                    {expandedSections.price ? <ChevronUp className="h-4 w-4" /> : <ChevronDown className="h-4 w-4" />}
+                  </CollapsibleTrigger>
+                  <CollapsibleContent className="pt-2 pb-4 space-y-4">
+                    <Slider
+                      value={filters.priceRange}
+                      onValueChange={(value) => setFilters(prev => ({ ...prev, priceRange: value as [number, number] }))}
+                      min={priceStats.min}
+                      max={priceStats.max}
+                      step={1}
+                      className="mt-2"
+                    />
+                    <div className="flex items-center gap-2">
+                      <div className="flex-1">
+                        <Label className="text-xs text-muted-foreground">Min</Label>
+                        <Input
+                          type="number"
+                          value={filters.priceRange[0]}
+                          onChange={(e) => setFilters(prev => ({ 
+                            ...prev, 
+                            priceRange: [Number(e.target.value), prev.priceRange[1]] 
+                          }))}
+                          className="h-8 text-sm"
+                        />
+                      </div>
+                      <span className="text-muted-foreground mt-5">-</span>
+                      <div className="flex-1">
+                        <Label className="text-xs text-muted-foreground">Max</Label>
+                        <Input
+                          type="number"
+                          value={filters.priceRange[1]}
+                          onChange={(e) => setFilters(prev => ({ 
+                            ...prev, 
+                            priceRange: [prev.priceRange[0], Number(e.target.value)] 
+                          }))}
+                          className="h-8 text-sm"
+                        />
+                      </div>
+                    </div>
+                  </CollapsibleContent>
+                </Collapsible>
+
+                <Separator />
+
+                {/* Stock */}
+                <Collapsible
+                  open={expandedSections.stock}
+                  onOpenChange={(open) => setExpandedSections(prev => ({ ...prev, stock: open }))}
+                >
+                  <CollapsibleTrigger className="flex items-center justify-between w-full py-2 text-sm font-medium hover:text-primary transition-colors">
+                    <span className="flex items-center gap-2">
+                      <Boxes className="h-4 w-4" />
+                      Availability
+                    </span>
+                    {expandedSections.stock ? <ChevronUp className="h-4 w-4" /> : <ChevronDown className="h-4 w-4" />}
+                  </CollapsibleTrigger>
+                  <CollapsibleContent className="pt-2 pb-4 space-y-3">
+                    <div className="flex items-center space-x-2">
+                      <Checkbox
+                        id="in-stock-mobile"
+                        checked={filters.inStock}
+                        onCheckedChange={(checked) => setFilters(prev => ({ ...prev, inStock: !!checked }))}
+                      />
+                      <label htmlFor="in-stock-mobile" className="text-sm font-medium leading-none">
+                        In Stock Only
+                      </label>
+                    </div>
+                    <div>
+                      <Label className="text-xs text-muted-foreground">Minimum Quantity</Label>
+                      <Input
+                        type="number"
+                        value={filters.stockMin}
+                        onChange={(e) => setFilters(prev => ({ ...prev, stockMin: Number(e.target.value) }))}
+                        className="h-8 text-sm mt-1"
+                        placeholder="0"
+                      />
+                    </div>
+                  </CollapsibleContent>
+                </Collapsible>
+
+                <Separator />
+
+                {/* Suppliers */}
+                <Collapsible
+                  open={expandedSections.suppliers}
+                  onOpenChange={(open) => setExpandedSections(prev => ({ ...prev, suppliers: open }))}
+                >
+                  <CollapsibleTrigger className="flex items-center justify-between w-full py-2 text-sm font-medium hover:text-primary transition-colors">
+                    <span className="flex items-center gap-2">
+                      <Store className="h-4 w-4" />
+                      Suppliers
+                      {filters.suppliers.length > 0 && (
+                        <Badge variant="secondary" className="ml-1 h-5 px-1.5">
+                          {filters.suppliers.length}
+                        </Badge>
+                      )}
+                    </span>
+                    {expandedSections.suppliers ? <ChevronUp className="h-4 w-4" /> : <ChevronDown className="h-4 w-4" />}
+                  </CollapsibleTrigger>
+                  <CollapsibleContent className="pt-2 pb-4 space-y-2">
+                    {suppliers?.map((supplier) => (
+                      <div key={supplier.id} className="flex items-center space-x-2">
+                        <Checkbox
+                          id={`supplier-mobile-${supplier.id}`}
+                          checked={filters.suppliers.includes(supplier.id)}
+                          onCheckedChange={() => toggleSupplierFilter(supplier.id)}
+                        />
+                        <label htmlFor={`supplier-mobile-${supplier.id}`} className="text-sm leading-none flex-1 truncate">
+                          {supplier.name}
+                        </label>
+                      </div>
+                    ))}
+                  </CollapsibleContent>
+                </Collapsible>
+
+                <Separator />
+
+                {/* Categories */}
+                <Collapsible
+                  open={expandedSections.categories}
+                  onOpenChange={(open) => setExpandedSections(prev => ({ ...prev, categories: open }))}
+                >
+                  <CollapsibleTrigger className="flex items-center justify-between w-full py-2 text-sm font-medium hover:text-primary transition-colors">
+                    <span className="flex items-center gap-2">
+                      <Tag className="h-4 w-4" />
+                      Categories
+                      {filters.categories.length > 0 && (
+                        <Badge variant="secondary" className="ml-1 h-5 px-1.5">
+                          {filters.categories.length}
+                        </Badge>
+                      )}
+                    </span>
+                    {expandedSections.categories ? <ChevronUp className="h-4 w-4" /> : <ChevronDown className="h-4 w-4" />}
+                  </CollapsibleTrigger>
+                  <CollapsibleContent className="pt-2 pb-4 space-y-2">
+                    {categories.map((category) => (
+                      <div key={category} className="flex items-center space-x-2">
+                        <Checkbox
+                          id={`category-mobile-${category}`}
+                          checked={filters.categories.includes(category)}
+                          onCheckedChange={() => toggleCategoryFilter(category)}
+                        />
+                        <label htmlFor={`category-mobile-${category}`} className="text-sm leading-none flex-1 truncate">
+                          {category}
+                        </label>
+                      </div>
+                    ))}
+                  </CollapsibleContent>
+                </Collapsible>
+              </div>
+            </ScrollArea>
+          </SheetContent>
+        </Sheet>
+
+        {/* Desktop Filter Sidebar - hidden on mobile */}
         {showFilters && (
-          <div className="w-64 flex-shrink-0 border-r bg-muted/30 overflow-hidden flex flex-col">
+          <div className="hidden lg:flex w-64 flex-shrink-0 border-r bg-muted/30 overflow-hidden flex-col">
             <ScrollArea className="flex-1">
               <div className="p-4 space-y-4">
                 {/* Filter Header */}
@@ -882,16 +1094,16 @@ export default function CatalogPage() {
 
           {/* Products */}
           <ScrollArea className="flex-1">
-            <div className="p-4 md:p-6">
+            <div className="p-3 sm:p-4 md:p-6">
               {isLoading ? (
-                <div className={`grid gap-4 ${viewMode === "grid" ? "grid-cols-2 md:grid-cols-3 lg:grid-cols-4 xl:grid-cols-5" : ""}`}>
-                  {[1, 2, 3, 4, 5, 6, 7, 8, 9, 10].map((i) => (
+                <div className={`grid gap-2 sm:gap-4 ${viewMode === "grid" ? "grid-cols-2 sm:grid-cols-2 md:grid-cols-3 lg:grid-cols-4 xl:grid-cols-5" : ""}`}>
+                  {[1, 2, 3, 4, 5, 6].map((i) => (
                     <div key={i} className={viewMode === "grid" ? "" : "flex items-center gap-4"}>
-                      <Skeleton className={viewMode === "grid" ? "aspect-square w-full rounded-lg" : "h-20 w-20 rounded-lg"} />
-                      <div className={`${viewMode === "grid" ? "mt-3" : "flex-1"} space-y-2`}>
-                        <Skeleton className="h-4 w-3/4" />
-                        <Skeleton className="h-3 w-1/2" />
-                        <Skeleton className="h-4 w-1/3" />
+                      <Skeleton className={viewMode === "grid" ? "aspect-square w-full rounded-lg" : "h-16 sm:h-20 w-16 sm:w-20 rounded-lg"} />
+                      <div className={`${viewMode === "grid" ? "mt-2 sm:mt-3" : "flex-1"} space-y-2`}>
+                        <Skeleton className="h-3 sm:h-4 w-3/4" />
+                        <Skeleton className="h-2 sm:h-3 w-1/2" />
+                        <Skeleton className="h-3 sm:h-4 w-1/3" />
                       </div>
                     </div>
                   ))}
@@ -899,7 +1111,7 @@ export default function CatalogPage() {
               ) : displayProducts.length > 0 ? (
                 <>
                 {viewMode === "grid" ? (
-                  <div className="grid gap-4 grid-cols-2 md:grid-cols-3 lg:grid-cols-4 xl:grid-cols-5">
+                  <div className="grid gap-2 sm:gap-4 grid-cols-2 sm:grid-cols-2 md:grid-cols-3 lg:grid-cols-4 xl:grid-cols-5">
                     {displayProducts.map((product) => {
                       const stock = product.inventoryQuantity || 0;
                       const compareAt = getCompareAtPrice(product);
@@ -961,11 +1173,11 @@ export default function CatalogPage() {
                           </Link>
 
                           {/* Content */}
-                          <div className="p-3 space-y-2">
-                            <div className="flex items-start justify-between gap-2">
+                          <div className="p-2 sm:p-3 space-y-1 sm:space-y-2">
+                            <div className="flex items-start justify-between gap-1">
                               <Link href={`/dashboard/products/${product.id}`}>
                                 <h3 
-                                  className="font-medium text-sm line-clamp-2 cursor-pointer hover:text-primary transition-colors"
+                                  className="font-medium text-xs sm:text-sm line-clamp-2 cursor-pointer hover:text-primary transition-colors"
                                   data-testid={`link-product-title-${product.id}`}
                                 >
                                   {product.title}
@@ -973,35 +1185,35 @@ export default function CatalogPage() {
                               </Link>
                             </div>
 
-                            <p className="text-xs text-muted-foreground flex items-center gap-1">
+                            <p className="text-xs text-muted-foreground flex items-center gap-1 hidden sm:flex">
                               <Store className="h-3 w-3" />
                               {getSupplierName(product.supplierId)}
                             </p>
 
-                            <div className="flex items-end justify-between gap-2">
+                            <div className="flex flex-col sm:flex-row sm:items-end sm:justify-between gap-1 sm:gap-2">
                               <div>
-                                <div className="flex items-baseline gap-1.5">
-                                  <span className="text-lg font-bold text-primary">
+                                <div className="flex items-baseline gap-1">
+                                  <span className="text-sm sm:text-lg font-bold text-primary">
                                     ${product.supplierPrice.toFixed(2)}
                                   </span>
                                   {hasDiscount && (
-                                    <span className="text-xs text-muted-foreground line-through">
+                                    <span className="text-xs text-muted-foreground line-through hidden sm:inline">
                                       ${compareAt.toFixed(2)}
                                     </span>
                                   )}
                                 </div>
-                                <p className="text-xs text-muted-foreground">Supplier price</p>
+                                <p className="text-xs text-muted-foreground hidden sm:block">Supplier price</p>
                               </div>
                               <Badge 
                                 variant={stock > 10 ? "default" : stock > 0 ? "secondary" : "outline"}
-                                className="text-xs whitespace-nowrap"
+                                className="text-xs whitespace-nowrap w-fit"
                               >
-                                {stock > 0 ? `${stock} in stock` : "Out of stock"}
+                                {stock > 0 ? `${stock}` : "Out"}
                               </Badge>
                             </div>
 
                             {product.category && (
-                              <Badge variant="outline" className="text-xs">
+                              <Badge variant="outline" className="text-xs hidden sm:inline-flex">
                                 {product.category}
                               </Badge>
                             )}
@@ -1037,7 +1249,7 @@ export default function CatalogPage() {
                       return (
                         <div
                           key={product.id}
-                          className={`flex items-center gap-4 p-4 rounded-lg border bg-card hover:shadow-md hover:border-primary/50 transition-all ${
+                          className={`flex items-center gap-2 sm:gap-4 p-2 sm:p-4 rounded-lg border bg-card hover:shadow-md hover:border-primary/50 transition-all ${
                             selectedProducts.includes(product.id) ? "ring-2 ring-primary shadow-md" : ""
                           }`}
                           data-testid={`row-catalog-product-${product.id}`}
@@ -1048,7 +1260,7 @@ export default function CatalogPage() {
                             data-testid={`checkbox-product-${product.id}`}
                           />
                           
-                          <Link href={`/dashboard/products/${product.id}`} className="relative h-20 w-20 flex-shrink-0 cursor-pointer">
+                          <Link href={`/dashboard/products/${product.id}`} className="relative h-16 w-16 sm:h-20 sm:w-20 flex-shrink-0 cursor-pointer">
                             {product.images && product.images.length > 0 ? (
                               <img
                                 src={product.images[0].url}
