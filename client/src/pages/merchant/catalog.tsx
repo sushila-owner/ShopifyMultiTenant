@@ -488,62 +488,64 @@ export default function CatalogPage() {
     <div className="flex-1 flex flex-col h-full overflow-hidden">
       {/* Header */}
       <div className="flex-shrink-0 border-b bg-background/95 backdrop-blur supports-[backdrop-filter]:bg-background/60">
-        <div className="p-4 md:p-6">
-          <div className="flex flex-col lg:flex-row lg:items-center justify-between gap-4">
+        <div className="p-3 sm:p-4 md:p-6">
+          <div className="flex flex-col lg:flex-row lg:items-center justify-between gap-2 sm:gap-4">
             <div>
-              <div className="flex items-center gap-2 mb-1">
+              <div className="flex items-center gap-2">
                 <Button 
                   variant="ghost" 
                   size="sm" 
-                  className="gap-1 -ml-2"
+                  className="gap-1 -ml-2 h-7 px-2"
                   onClick={handleBackToSuppliers}
                   data-testid="button-back-to-suppliers"
                 >
                   <ChevronUp className="h-4 w-4 rotate-[-90deg]" />
-                  Back
+                  <span className="hidden sm:inline">Back</span>
                 </Button>
               </div>
-              <h1 className="text-2xl md:text-3xl font-bold" data-testid="text-supplier-catalog-title">
+              <h1 className="text-lg sm:text-2xl md:text-3xl font-bold leading-tight" data-testid="text-supplier-catalog-title">
                 {selectedSupplier.name}
               </h1>
-              <p className="text-muted-foreground text-sm">
+              <p className="text-muted-foreground text-xs sm:text-sm hidden sm:block">
                 {selectedSupplier.description || "Browse products from this supplier"}
               </p>
             </div>
             <div className="flex items-center gap-2 flex-wrap">
               {selectedProducts.length > 0 && (
                 <Button 
+                  size="sm"
                   className="gap-2" 
                   onClick={() => setIsImportDialogOpen(true)} 
                   data-testid="button-import-selected"
                 >
                   <Plus className="h-4 w-4" />
-                  Import {selectedProducts.length} Products
+                  Import {selectedProducts.length}
                 </Button>
               )}
             </div>
           </div>
 
           {/* Navigation Tabs */}
-          <div className="mt-4 flex items-center gap-2 overflow-x-auto pb-2">
+          <div className="mt-2 sm:mt-4 flex items-center gap-1 sm:gap-2 overflow-x-auto pb-2 -mx-1 px-1">
             {tabs.map((tab) => (
               <Button
                 key={tab.id}
                 variant={activeTab === tab.id ? "default" : "outline"}
                 size="sm"
-                className="gap-2 whitespace-nowrap"
+                className="gap-1 sm:gap-2 whitespace-nowrap text-xs sm:text-sm px-2 sm:px-3 h-7 sm:h-8"
                 onClick={() => setActiveTab(tab.id)}
                 data-testid={`tab-${tab.id}`}
               >
-                <tab.icon className="h-4 w-4" />
-                {tab.label}
+                <tab.icon className="h-3 w-3 sm:h-4 sm:w-4" />
+                <span className="hidden xs:inline">{tab.label}</span>
+                <span className="xs:hidden">{tab.label.split(' ')[0]}</span>
               </Button>
             ))}
           </div>
         </div>
 
         {/* Search and Sort Bar */}
-        <div className="px-4 md:px-6 pb-4 flex flex-wrap items-center gap-2 md:gap-3">
+        <div className="px-3 sm:px-4 md:px-6 pb-2 sm:pb-4 flex flex-wrap items-center gap-2 md:gap-3">
           {/* Mobile Filter Button */}
           <Button
             variant="outline"
@@ -1062,29 +1064,30 @@ export default function CatalogPage() {
         {/* Products Grid */}
         <div className="flex-1 overflow-hidden flex flex-col">
           {/* Results Count & Selection */}
-          <div className="flex-shrink-0 px-4 md:px-6 py-3 border-b bg-muted/20 flex items-center justify-between gap-2">
-            <div className="flex items-center gap-2">
-              <span className="text-sm text-muted-foreground" data-testid="text-product-count">
-                {totalProducts.toLocaleString()} products
-                {isFetching && !isLoading && <Loader2 className="inline h-3 w-3 ml-2 animate-spin" />}
+          <div className="flex-shrink-0 px-3 sm:px-4 md:px-6 py-2 sm:py-3 border-b bg-muted/20 flex items-center justify-between gap-2">
+            <div className="flex items-center gap-1 sm:gap-2">
+              <span className="text-xs sm:text-sm text-muted-foreground" data-testid="text-product-count">
+                {totalProducts.toLocaleString()} items
+                {isFetching && !isLoading && <Loader2 className="inline h-3 w-3 ml-1 animate-spin" />}
               </span>
               {hasActiveFilters && (
-                <Badge variant="outline" className="gap-1">
+                <Badge variant="outline" className="gap-1 text-xs hidden sm:inline-flex">
                   <SlidersHorizontal className="h-3 w-3" />
                   Filtered
                 </Badge>
               )}
             </div>
             {displayProducts.length > 0 && (
-              <Button variant="ghost" size="sm" onClick={selectAllProducts} data-testid="button-select-all">
+              <Button variant="ghost" size="sm" className="h-7 px-2 text-xs sm:text-sm" onClick={selectAllProducts} data-testid="button-select-all">
                 {selectedProducts.length === displayProducts.length ? (
                   <>
-                    <X className="h-4 w-4 mr-1" />
-                    Deselect All
+                    <X className="h-3 w-3 sm:h-4 sm:w-4 mr-1" />
+                    <span className="hidden sm:inline">Deselect All</span>
+                    <span className="sm:hidden">Clear</span>
                   </>
                 ) : (
                   <>
-                    <Check className="h-4 w-4 mr-1" />
+                    <Check className="h-3 w-3 sm:h-4 sm:w-4 mr-1" />
                     Select All
                   </>
                 )}
@@ -1155,7 +1158,7 @@ export default function CatalogPage() {
                           {/* Image - Click to view product details */}
                           <Link href={`/dashboard/products/${product.id}`}>
                             <div 
-                              className="aspect-square bg-muted cursor-pointer"
+                              className="aspect-[4/3] sm:aspect-square bg-muted cursor-pointer"
                               data-testid={`link-product-image-${product.id}`}
                             >
                               {product.images && product.images.length > 0 ? (
@@ -1166,7 +1169,7 @@ export default function CatalogPage() {
                                 />
                               ) : (
                                 <div className="w-full h-full flex items-center justify-center">
-                                  <ImageOff className="h-12 w-12 text-muted-foreground/30" />
+                                  <ImageOff className="h-8 w-8 sm:h-12 sm:w-12 text-muted-foreground/30" />
                                 </div>
                               )}
                             </div>
