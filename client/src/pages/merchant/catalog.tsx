@@ -645,22 +645,25 @@ export default function CatalogPage() {
         )}
 
         <Link href={`/dashboard/catalog/${product.id}`}>
-          <div className="aspect-square bg-gray-100 dark:bg-gray-800 relative overflow-hidden rounded-lg">
-            {product.images && Array.isArray(product.images) && (product.images as any[]).length > 0 && (product.images as any[])[0]?.url ? (
-              <img
-                src={(product.images as any[])[0].url}
-                alt={product.title}
-                className="w-full h-full object-contain p-2 group-hover:scale-105 transition-transform duration-300"
-                loading="lazy"
-                onError={(e) => {
-                  (e.target as HTMLImageElement).style.display = 'none';
-                  (e.target as HTMLImageElement).nextElementSibling?.classList.remove('hidden');
-                }}
-              />
-            ) : null}
-            <div className={`w-full h-full flex items-center justify-center absolute inset-0 ${product.images && Array.isArray(product.images) && (product.images as any[]).length > 0 && (product.images as any[])[0]?.url ? 'hidden' : ''}`}>
-              <ImageOff className="h-12 w-12 text-muted-foreground/30" />
-            </div>
+          <div className="aspect-square bg-muted relative overflow-hidden rounded-lg">
+            {(() => {
+              const images = product.images as any[] | undefined;
+              const imageUrl = images && images.length > 0 ? images[0]?.url : null;
+              if (imageUrl) {
+                return (
+                  <img
+                    src={imageUrl}
+                    alt={product.title}
+                    className="w-full h-full object-cover group-hover:scale-105 transition-transform duration-300"
+                  />
+                );
+              }
+              return (
+                <div className="w-full h-full flex items-center justify-center">
+                  <ImageOff className="h-12 w-12 text-muted-foreground/30" />
+                </div>
+              );
+            })()}
 
             {variantCount > 1 && (
               <div className="absolute bottom-3 left-3 z-10">
@@ -735,19 +738,25 @@ export default function CatalogPage() {
         )}
 
         <Link href={`/dashboard/catalog/${product.id}`}>
-          <div className="w-24 h-24 rounded-lg overflow-hidden bg-gray-100 dark:bg-gray-800 flex-shrink-0 relative">
-            {product.images && Array.isArray(product.images) && (product.images as any[]).length > 0 && (product.images as any[])[0]?.url ? (
-              <img
-                src={(product.images as any[])[0].url}
-                alt={product.title}
-                className="w-full h-full object-contain p-1"
-                loading="lazy"
-              />
-            ) : (
-              <div className="w-full h-full flex items-center justify-center">
-                <ImageOff className="h-8 w-8 text-muted-foreground/30" />
-              </div>
-            )}
+          <div className="w-24 h-24 rounded-lg overflow-hidden bg-muted flex-shrink-0">
+            {(() => {
+              const images = product.images as any[] | undefined;
+              const imageUrl = images && images.length > 0 ? images[0]?.url : null;
+              if (imageUrl) {
+                return (
+                  <img
+                    src={imageUrl}
+                    alt={product.title}
+                    className="w-full h-full object-cover"
+                  />
+                );
+              }
+              return (
+                <div className="w-full h-full flex items-center justify-center">
+                  <ImageOff className="h-8 w-8 text-muted-foreground/30" />
+                </div>
+              );
+            })()}
           </div>
         </Link>
 
@@ -984,18 +993,25 @@ export default function CatalogPage() {
                 <DialogTitle className="line-clamp-1">{quickViewProduct.title}</DialogTitle>
               </DialogHeader>
               <div className="grid md:grid-cols-2 gap-6">
-                <div className="aspect-square rounded-xl overflow-hidden bg-gray-100 dark:bg-gray-800">
-                  {quickViewProduct.images && Array.isArray(quickViewProduct.images) && (quickViewProduct.images as any[]).length > 0 && (quickViewProduct.images as any[])[0]?.url ? (
-                    <img
-                      src={(quickViewProduct.images as any[])[0].url}
-                      alt={quickViewProduct.title}
-                      className="w-full h-full object-contain p-2"
-                    />
-                  ) : (
-                    <div className="w-full h-full flex items-center justify-center">
-                      <ImageOff className="h-16 w-16 text-muted-foreground/30" />
-                    </div>
-                  )}
+                <div className="aspect-square rounded-xl overflow-hidden bg-muted">
+                  {(() => {
+                    const images = quickViewProduct.images as any[] | undefined;
+                    const imageUrl = images && images.length > 0 ? images[0]?.url : null;
+                    if (imageUrl) {
+                      return (
+                        <img
+                          src={imageUrl}
+                          alt={quickViewProduct.title}
+                          className="w-full h-full object-cover"
+                        />
+                      );
+                    }
+                    return (
+                      <div className="w-full h-full flex items-center justify-center">
+                        <ImageOff className="h-16 w-16 text-muted-foreground/30" />
+                      </div>
+                    );
+                  })()}
                 </div>
                 <div className="space-y-4">
                   <div>
