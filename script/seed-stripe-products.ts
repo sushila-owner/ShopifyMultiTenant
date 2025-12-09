@@ -110,8 +110,8 @@ const plans: PlanConfig[] = [
     name: 'Millionaire',
     slug: 'millionaire',
     description: 'Enterprise-grade features',
-    monthlyPrice: 49900, // $499
-    yearlyPrice: 499000, // $4990
+    monthlyPrice: 25900, // $259
+    yearlyPrice: 259000, // $2590
     productLimit: -1, // Unlimited
     features: [
       'Unlimited products',

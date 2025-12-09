@@ -2301,8 +2301,15 @@ export async function registerRoutes(
         .filter(p => p.metadata.planSlug) // Only our subscription products
         .map(product => {
           const productPrices = prices.data.filter(price => price.product === product.id);
-          const monthlyPrice = productPrices.find(p => p.recurring?.interval === 'month');
-          const yearlyPrice = productPrices.find(p => p.recurring?.interval === 'year');
+          // Get the most recent (lowest ID = oldest, so we want highest/newest) monthly and yearly prices
+          const monthlyPrices = productPrices
+            .filter(p => p.recurring?.interval === 'month')
+            .sort((a, b) => b.created - a.created); // Sort by creation date, newest first
+          const yearlyPrices = productPrices
+            .filter(p => p.recurring?.interval === 'year')
+            .sort((a, b) => b.created - a.created); // Sort by creation date, newest first
+          const monthlyPrice = monthlyPrices[0]; // Get the newest price
+          const yearlyPrice = yearlyPrices[0]; // Get the newest price
           
           return {
             id: product.id,
