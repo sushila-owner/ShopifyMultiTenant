@@ -603,12 +603,12 @@ export default function CatalogPage() {
         )}
 
         <Link href={`/dashboard/catalog/${product.id}`}>
-          <div className="aspect-[3/4] bg-muted relative overflow-hidden">
+          <div className="aspect-square bg-white dark:bg-muted relative overflow-hidden rounded-lg">
             {product.images && (product.images as any[]).length > 0 ? (
               <img
                 src={(product.images as any[])[0].url}
                 alt={product.title}
-                className="w-full h-full object-cover group-hover:scale-110 transition-transform duration-500 ease-out"
+                className="w-full h-full object-contain p-2 group-hover:scale-105 transition-transform duration-300"
                 loading="lazy"
               />
             ) : (
@@ -690,12 +690,12 @@ export default function CatalogPage() {
         )}
 
         <Link href={`/dashboard/catalog/${product.id}`}>
-          <div className="w-24 h-24 rounded-lg overflow-hidden bg-muted flex-shrink-0">
+          <div className="w-24 h-24 rounded-lg overflow-hidden bg-white dark:bg-muted flex-shrink-0">
             {product.images && (product.images as any[]).length > 0 ? (
               <img
                 src={(product.images as any[])[0].url}
                 alt={product.title}
-                className="w-full h-full object-cover"
+                className="w-full h-full object-contain p-1"
                 loading="lazy"
               />
             ) : (
@@ -939,12 +939,12 @@ export default function CatalogPage() {
                 <DialogTitle className="line-clamp-1">{quickViewProduct.title}</DialogTitle>
               </DialogHeader>
               <div className="grid md:grid-cols-2 gap-6">
-                <div className="aspect-square rounded-xl overflow-hidden bg-muted">
+                <div className="aspect-square rounded-xl overflow-hidden bg-white dark:bg-muted">
                   {quickViewProduct.images && (quickViewProduct.images as any[]).length > 0 ? (
                     <img
                       src={(quickViewProduct.images as any[])[0].url}
                       alt={quickViewProduct.title}
-                      className="w-full h-full object-cover"
+                      className="w-full h-full object-contain p-2"
                     />
                   ) : (
                     <div className="w-full h-full flex items-center justify-center">
