@@ -104,6 +104,16 @@ const SORT_OPTIONS = [
   { id: "stock_high" as SortOption, label: "Most Stock" },
 ];
 
+interface MerchantSettings {
+  id: number;
+  settings?: {
+    defaultPricingRule?: {
+      type: "fixed" | "percentage";
+      value: number;
+    };
+  };
+}
+
 export default function CatalogPage() {
   const { toast } = useToast();
   const [selectedSupplier, setSelectedSupplier] = useState<Supplier | null>(null);
@@ -118,6 +128,7 @@ export default function CatalogPage() {
   const [selectedCategory, setSelectedCategory] = useState<string | null>(null);
   const [viewMode, setViewMode] = useState<ViewMode>("grid");
   const [quickViewProduct, setQuickViewProduct] = useState<Product | null>(null);
+  const [settingsLoaded, setSettingsLoaded] = useState(false);
   
   const [filters, setFilters] = useState<FilterState>({
     priceRange: [0, 10000],
@@ -138,6 +149,37 @@ export default function CatalogPage() {
     pricingType: "percentage" as "fixed" | "percentage",
     pricingValue: 20,
   });
+
+  // Fetch merchant settings to get default pricing rule
+  const { data: merchantSettings } = useQuery<{ data: MerchantSettings }>({
+    queryKey: ["/api/merchant/settings"],
+    queryFn: async () => {
+      const token = localStorage.getItem("apex_token");
+      const headers: HeadersInit = {};
+      if (token) {
+        headers["Authorization"] = `Bearer ${token}`;
+      }
+      const res = await fetch("/api/merchant/settings", {
+        credentials: "include",
+        headers,
+      });
+      if (!res.ok) throw new Error("Failed to fetch merchant settings");
+      return res.json();
+    },
+    staleTime: 60000,
+  });
+
+  // Update import settings when merchant settings load
+  useEffect(() => {
+    if (merchantSettings?.data?.settings?.defaultPricingRule && !settingsLoaded) {
+      const { type, value } = merchantSettings.data.settings.defaultPricingRule;
+      setImportSettings({
+        pricingType: type || "percentage",
+        pricingValue: value || 20,
+      });
+      setSettingsLoaded(true);
+    }
+  }, [merchantSettings, settingsLoaded]);
 
   useEffect(() => {
     const timer = setTimeout(() => {

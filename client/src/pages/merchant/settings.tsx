@@ -52,6 +52,10 @@ export default function SettingsPage() {
   const { toast } = useToast();
   const { user } = useAuth();
 
+  const pricingType = user?.merchant?.settings?.defaultPricingRule?.type;
+  const validPricingType: "fixed" | "percentage" = 
+    pricingType === "fixed" || pricingType === "percentage" ? pricingType : "percentage";
+
   const form = useForm<SettingsFormData>({
     resolver: zodResolver(settingsSchema),
     defaultValues: {
@@ -60,7 +64,7 @@ export default function SettingsPage() {
       emailOnOrder: user?.merchant?.settings?.notifications?.emailOnOrder ?? true,
       emailOnLowStock: user?.merchant?.settings?.notifications?.emailOnLowStock ?? true,
       smsNotifications: user?.merchant?.settings?.notifications?.smsNotifications ?? false,
-      defaultPricingType: user?.merchant?.settings?.defaultPricingRule?.type || "percentage",
+      defaultPricingType: validPricingType,
       defaultPricingValue: user?.merchant?.settings?.defaultPricingRule?.value || 20,
       autoFulfillment: user?.merchant?.settings?.autoFulfillment ?? false,
       autoSyncInventory: user?.merchant?.settings?.autoSyncInventory ?? true,
@@ -68,8 +72,9 @@ export default function SettingsPage() {
   });
 
   const updateMutation = useMutation({
-    mutationFn: (data: SettingsFormData) => apiRequest("PATCH", "/api/merchants/settings", data),
+    mutationFn: (data: SettingsFormData) => apiRequest("PUT", "/api/merchant/settings", data),
     onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ["/api/merchant/settings"] });
       queryClient.invalidateQueries({ queryKey: ["/api/merchants/stats"] });
       toast({ title: "Settings updated successfully" });
     },

@@ -1933,7 +1933,67 @@ export async function registerRoutes(
         return res.status(400).json({ success: false, error: "No merchant associated" });
       }
 
-      const merchant = await storage.updateMerchant(req.user.merchantId, req.body);
+      // Get existing merchant to preserve existing settings
+      const existingMerchant = await storage.getMerchant(req.user.merchantId);
+      if (!existingMerchant) {
+        return res.status(404).json({ success: false, error: "Merchant not found" });
+      }
+
+      const existingSettings = (existingMerchant.settings as any) || {};
+
+      const {
+        businessName,
+        primaryColor,
+        emailOnOrder,
+        emailOnLowStock,
+        smsNotifications,
+        defaultPricingType,
+        defaultPricingValue,
+        autoFulfillment,
+        autoSyncInventory,
+      } = req.body;
+
+      // Structure the settings object properly, merging with existing
+      const updateData: any = {};
+      
+      if (businessName !== undefined) {
+        updateData.businessName = businessName;
+      }
+
+      // Build settings object, merging with existing
+      const settings: any = { ...existingSettings };
+      
+      if (primaryColor !== undefined) {
+        settings.branding = { ...(existingSettings.branding || {}), primaryColor };
+      }
+      
+      if (emailOnOrder !== undefined || emailOnLowStock !== undefined || smsNotifications !== undefined) {
+        settings.notifications = {
+          ...(existingSettings.notifications || {}),
+          emailOnOrder: emailOnOrder ?? existingSettings.notifications?.emailOnOrder ?? true,
+          emailOnLowStock: emailOnLowStock ?? existingSettings.notifications?.emailOnLowStock ?? true,
+          smsNotifications: smsNotifications ?? existingSettings.notifications?.smsNotifications ?? false,
+        };
+      }
+      
+      if (defaultPricingType !== undefined || defaultPricingValue !== undefined) {
+        settings.defaultPricingRule = {
+          type: defaultPricingType || existingSettings.defaultPricingRule?.type || "percentage",
+          value: defaultPricingValue ?? existingSettings.defaultPricingRule?.value ?? 20,
+        };
+      }
+      
+      if (autoFulfillment !== undefined) {
+        settings.autoFulfillment = autoFulfillment;
+      }
+      
+      if (autoSyncInventory !== undefined) {
+        settings.autoSyncInventory = autoSyncInventory;
+      }
+
+      updateData.settings = settings;
+
+      const merchant = await storage.updateMerchant(req.user.merchantId, updateData);
       res.json({ success: true, data: merchant });
     } catch (error: any) {
       res.status(400).json({ success: false, error: error.message });
