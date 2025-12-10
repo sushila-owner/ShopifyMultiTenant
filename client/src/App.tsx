@@ -31,6 +31,11 @@ import AdminMerchants from "@/pages/admin/merchants";
 import AdminProducts from "@/pages/admin/products";
 import AdminProductDetail from "@/pages/admin/product-detail";
 import AdminOrders from "@/pages/admin/orders";
+import AdminAnalytics from "@/pages/admin/analytics";
+import AdminReports from "@/pages/admin/reports";
+import AdminPlans from "@/pages/admin/plans";
+import AdminNotifications from "@/pages/admin/notifications";
+import AdminSettings from "@/pages/admin/settings";
 
 import MerchantDashboard from "@/pages/merchant/dashboard";
 import CatalogPage from "@/pages/merchant/catalog";
@@ -170,35 +175,35 @@ function Router() {
       <Route path="/admin/analytics">
         <ProtectedRoute requireAdmin>
           <AdminLayout>
-            <AdminDashboard />
+            <AdminAnalytics />
           </AdminLayout>
         </ProtectedRoute>
       </Route>
       <Route path="/admin/reports">
         <ProtectedRoute requireAdmin>
           <AdminLayout>
-            <AdminDashboard />
+            <AdminReports />
           </AdminLayout>
         </ProtectedRoute>
       </Route>
       <Route path="/admin/plans">
         <ProtectedRoute requireAdmin>
           <AdminLayout>
-            <AdminDashboard />
+            <AdminPlans />
           </AdminLayout>
         </ProtectedRoute>
       </Route>
       <Route path="/admin/notifications">
         <ProtectedRoute requireAdmin>
           <AdminLayout>
-            <AdminDashboard />
+            <AdminNotifications />
           </AdminLayout>
         </ProtectedRoute>
       </Route>
       <Route path="/admin/settings">
         <ProtectedRoute requireAdmin>
           <AdminLayout>
-            <AdminDashboard />
+            <AdminSettings />
           </AdminLayout>
         </ProtectedRoute>
       </Route>
