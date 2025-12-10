@@ -29,6 +29,7 @@ export interface PaginationParams {
   search?: string;
   supplierId?: number;
   category?: string;
+  categoryId?: number;
   priceMin?: number;
   priceMax?: number;
   inStock?: boolean;
@@ -491,7 +492,7 @@ export class DatabaseStorage implements IStorage {
   }
 
   async getGlobalProductsPaginated(params: PaginationParams): Promise<PaginatedResponse<Product>> {
-    const { page, pageSize, search, supplierId, category, priceMin, priceMax, inStock, sortBy = "createdAt", sortDirection = "desc" } = params;
+    const { page, pageSize, search, supplierId, category, categoryId, priceMin, priceMax, inStock, sortBy = "createdAt", sortDirection = "desc" } = params;
     const offset = (page - 1) * pageSize;
 
     // Build filter conditions - only active global products
@@ -507,6 +508,10 @@ export class DatabaseStorage implements IStorage {
 
     if (category) {
       conditions.push(eq(products.category, category));
+    }
+
+    if (categoryId) {
+      conditions.push(eq(products.categoryId, categoryId));
     }
 
     if (priceMin !== undefined) {

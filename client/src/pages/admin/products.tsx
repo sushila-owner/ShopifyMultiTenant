@@ -45,7 +45,7 @@ import {
 } from "lucide-react";
 import { apiRequest, queryClient } from "@/lib/queryClient";
 import { useToast } from "@/hooks/use-toast";
-import type { Product, Supplier } from "@shared/schema";
+import type { Product, Supplier, Category } from "@shared/schema";
 
 const statusColors: Record<string, "default" | "secondary" | "destructive" | "outline"> = {
   active: "default",
@@ -73,6 +73,11 @@ type CatalogResponse = {
   };
 };
 
+type CategoriesResponse = {
+  success: boolean;
+  data: Category[];
+};
+
 export default function AdminProductsPage() {
   const { toast } = useToast();
   const [search, setSearch] = useState("");
@@ -80,6 +85,7 @@ export default function AdminProductsPage() {
   const [currentPage, setCurrentPage] = useState(1);
   const [supplierFilter, setSupplierFilter] = useState<string>("all");
   const [statusFilter, setStatusFilter] = useState<string>("all");
+  const [categoryFilter, setCategoryFilter] = useState<string>("all");
   const [selectedProducts, setSelectedProducts] = useState<Set<number>>(new Set());
   const [editingProduct, setEditingProduct] = useState<Product | null>(null);
   const [bulkEditOpen, setBulkEditOpen] = useState(false);
@@ -99,8 +105,14 @@ export default function AdminProductsPage() {
     }, 300);
   };
 
+  const { data: categoriesData } = useQuery<CategoriesResponse>({
+    queryKey: ["/api/admin/categories"],
+  });
+
+  const categories = categoriesData?.data || [];
+
   const { data: catalogData, isLoading } = useQuery<CatalogResponse>({
-    queryKey: ["/api/admin/products", { page: currentPage, search: debouncedSearch, supplierId: supplierFilter }],
+    queryKey: ["/api/admin/products", { page: currentPage, search: debouncedSearch, supplierId: supplierFilter, categoryId: categoryFilter }],
     queryFn: async () => {
       const params = new URLSearchParams({
         page: currentPage.toString(),
@@ -108,6 +120,7 @@ export default function AdminProductsPage() {
       });
       if (debouncedSearch) params.append("search", debouncedSearch);
       if (supplierFilter && supplierFilter !== "all") params.append("supplierId", supplierFilter);
+      if (categoryFilter && categoryFilter !== "all") params.append("categoryId", categoryFilter);
       
       const response = await fetch(`/api/admin/products?${params}`, {
         headers: {
@@ -397,6 +410,19 @@ export default function AdminProductsPage() {
                 {suppliers?.map((s) => (
                   <SelectItem key={s.id} value={s.id.toString()}>
                     {s.name}
+                  </SelectItem>
+                ))}
+              </SelectContent>
+            </Select>
+            <Select value={categoryFilter} onValueChange={(value) => { setCategoryFilter(value); setCurrentPage(1); }}>
+              <SelectTrigger className="w-[180px]" data-testid="select-category-filter">
+                <SelectValue placeholder="Category" />
+              </SelectTrigger>
+              <SelectContent>
+                <SelectItem value="all">All Categories</SelectItem>
+                {categories.map((c) => (
+                  <SelectItem key={c.id} value={c.id.toString()}>
+                    {c.name}
                   </SelectItem>
                 ))}
               </SelectContent>

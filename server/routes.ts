@@ -1263,6 +1263,7 @@ export async function registerRoutes(
         search,
         supplierId,
         category,
+        categoryId,
         status,
         sortBy = "createdAt",
         sortDirection = "desc"
@@ -1274,6 +1275,7 @@ export async function registerRoutes(
         search: search as string | undefined,
         supplierId: supplierId && supplierId !== "all" ? parseInt(supplierId as string, 10) : undefined,
         category: category as string | undefined,
+        categoryId: categoryId && categoryId !== "all" ? parseInt(categoryId as string, 10) : undefined,
         sortBy: (sortBy as "createdAt" | "price" | "title" | "stock") || "createdAt",
         sortDirection: (sortDirection as "asc" | "desc") || "desc"
       });
