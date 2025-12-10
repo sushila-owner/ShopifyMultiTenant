@@ -86,6 +86,245 @@ export async function registerRoutes(
   await storage.seedAdminUser();
   await storage.seedSampleOrders();
 
+  // ==================== SHOPIFY OAUTH ROUTES ====================
+  // These routes handle public app installation from Shopify App Store
+  
+  // In-memory nonce store for OAuth state validation (consider Redis for production)
+  const oauthNonces = new Map<string, { shop: string; timestamp: number }>();
+
+  // Cleanup old nonces every 5 minutes
+  setInterval(() => {
+    const now = Date.now();
+    for (const [nonce, data] of oauthNonces.entries()) {
+      if (now - data.timestamp > 10 * 60 * 1000) { // 10 minutes expiry
+        oauthNonces.delete(nonce);
+      }
+    }
+  }, 5 * 60 * 1000);
+
+  // Get app URL for OAuth redirects
+  function getAppUrl(req: Request): string {
+    const protocol = req.headers["x-forwarded-proto"] || req.protocol || "https";
+    const host = req.headers["x-forwarded-host"] || req.headers.host || req.hostname;
+    return `${protocol}://${host}`;
+  }
+
+  // Install route - merchants start here from Shopify App Store
+  app.get("/api/shopify/oauth/install", async (req: Request, res: Response) => {
+    try {
+      const { 
+        isShopifyConfigured, 
+        getShopifyConfig, 
+        validateShopDomain, 
+        generateNonce, 
+        buildInstallUrl 
+      } = await import("./shopifyOAuth");
+
+      if (!isShopifyConfigured()) {
+        return res.status(500).json({ 
+          success: false, 
+          error: "Shopify app not configured. Missing SHOPIFY_API_KEY or SHOPIFY_API_SECRET." 
+        });
+      }
+
+      const shop = req.query.shop as string;
+      if (!shop) {
+        return res.status(400).json({ success: false, error: "Missing shop parameter" });
+      }
+
+      if (!validateShopDomain(shop)) {
+        return res.status(400).json({ success: false, error: "Invalid shop domain" });
+      }
+
+      const appUrl = getAppUrl(req);
+      const config = getShopifyConfig(appUrl);
+      if (!config) {
+        return res.status(500).json({ success: false, error: "Failed to get Shopify config" });
+      }
+
+      const nonce = generateNonce();
+      oauthNonces.set(nonce, { shop, timestamp: Date.now() });
+
+      const installUrl = buildInstallUrl(shop, config, nonce);
+      res.redirect(installUrl);
+    } catch (error: any) {
+      console.error("[Shopify OAuth] Install error:", error);
+      res.status(500).json({ success: false, error: error.message });
+    }
+  });
+
+  // Callback route - Shopify redirects here after merchant authorization
+  app.get("/api/shopify/oauth/callback", async (req: Request, res: Response) => {
+    try {
+      const { 
+        isShopifyConfigured, 
+        getShopifyConfig, 
+        validateHmac, 
+        exchangeCodeForToken,
+        getShopInfo
+      } = await import("./shopifyOAuth");
+
+      if (!isShopifyConfigured()) {
+        return res.redirect("/merchant/settings?error=shopify_not_configured");
+      }
+
+      const { shop, code, state, hmac } = req.query as Record<string, string>;
+
+      if (!shop || !code || !state) {
+        return res.redirect("/merchant/settings?error=missing_params");
+      }
+
+      // Validate HMAC for security
+      const appUrl = getAppUrl(req);
+      const config = getShopifyConfig(appUrl);
+      if (!config) {
+        return res.redirect("/merchant/settings?error=config_error");
+      }
+
+      const queryParams = { ...req.query } as Record<string, string>;
+      if (!validateHmac(queryParams, config.apiSecret)) {
+        console.error("[Shopify OAuth] HMAC validation failed");
+        return res.redirect("/merchant/settings?error=invalid_hmac");
+      }
+
+      // Validate state/nonce
+      const nonceData = oauthNonces.get(state);
+      if (!nonceData || nonceData.shop !== shop) {
+        console.error("[Shopify OAuth] Invalid state/nonce");
+        return res.redirect("/merchant/settings?error=invalid_state");
+      }
+      oauthNonces.delete(state);
+
+      // Exchange code for access token
+      const tokenResponse = await exchangeCodeForToken(shop, code, config);
+      const { access_token, scope } = tokenResponse;
+
+      // Get shop info to verify connection
+      const shopInfo = await getShopInfo(shop, access_token);
+
+      console.log(`[Shopify OAuth] Successfully connected shop: ${shopInfo.shop.name} (${shop})`);
+
+      // Store the connection temporarily in session/query for the frontend to complete
+      // The frontend will call an API to associate this with the merchant
+      const encodedData = encodeURIComponent(JSON.stringify({
+        domain: shop,
+        accessToken: access_token,
+        scopes: scope.split(","),
+        shopName: shopInfo.shop.name,
+        shopEmail: shopInfo.shop.email,
+      }));
+
+      res.redirect(`/merchant/settings?shopify_connected=true&shopify_data=${encodedData}`);
+    } catch (error: any) {
+      console.error("[Shopify OAuth] Callback error:", error);
+      res.redirect(`/merchant/settings?error=oauth_failed&message=${encodeURIComponent(error.message)}`);
+    }
+  });
+
+  // Save Shopify connection to merchant (called by frontend after OAuth)
+  app.post("/api/merchant/shopify/connect", authMiddleware, merchantOnly, async (req: AuthRequest, res: Response) => {
+    try {
+      const { domain, accessToken, scopes, shopName } = req.body;
+
+      if (!domain || !accessToken) {
+        return res.status(400).json({ success: false, error: "Missing domain or access token" });
+      }
+
+      const merchantId = req.user?.merchantId;
+      if (!merchantId) {
+        return res.status(400).json({ success: false, error: "No merchant account found" });
+      }
+
+      const merchant = await storage.getMerchant(merchantId);
+      if (!merchant) {
+        return res.status(404).json({ success: false, error: "Merchant not found" });
+      }
+
+      // Update merchant with Shopify connection
+      await storage.updateMerchant(merchantId, {
+        shopifyStore: {
+          domain,
+          accessToken,
+          scopes: scopes || [],
+          installedAt: new Date().toISOString(),
+          isConnected: true,
+        },
+      });
+
+      console.log(`[Shopify] Connected merchant ${merchantId} to shop ${domain}`);
+
+      res.json({ 
+        success: true, 
+        data: { 
+          connected: true, 
+          shopName, 
+          domain 
+        } 
+      });
+    } catch (error: any) {
+      console.error("[Shopify] Connect error:", error);
+      res.status(500).json({ success: false, error: error.message });
+    }
+  });
+
+  // Disconnect Shopify from merchant
+  app.post("/api/merchant/shopify/disconnect", authMiddleware, merchantOnly, async (req: AuthRequest, res: Response) => {
+    try {
+      const merchantId = req.user?.merchantId;
+      if (!merchantId) {
+        return res.status(400).json({ success: false, error: "No merchant account found" });
+      }
+
+      await storage.updateMerchant(merchantId, {
+        shopifyStore: {
+          domain: undefined,
+          accessToken: undefined,
+          scopes: [],
+          installedAt: undefined,
+          isConnected: false,
+        },
+      });
+
+      res.json({ success: true, data: { disconnected: true } });
+    } catch (error: any) {
+      res.status(500).json({ success: false, error: error.message });
+    }
+  });
+
+  // Get merchant's Shopify connection status
+  app.get("/api/merchant/shopify/status", authMiddleware, merchantOnly, async (req: AuthRequest, res: Response) => {
+    try {
+      const merchantId = req.user?.merchantId;
+      if (!merchantId) {
+        return res.status(400).json({ success: false, error: "No merchant account found" });
+      }
+
+      const merchant = await storage.getMerchant(merchantId);
+      if (!merchant) {
+        return res.status(404).json({ success: false, error: "Merchant not found" });
+      }
+
+      const shopifyStore = merchant.shopifyStore as {
+        domain?: string;
+        isConnected?: boolean;
+        scopes?: string[];
+        installedAt?: string;
+      } | null;
+
+      res.json({
+        success: true,
+        data: {
+          isConnected: shopifyStore?.isConnected || false,
+          domain: shopifyStore?.domain || null,
+          scopes: shopifyStore?.scopes || [],
+          installedAt: shopifyStore?.installedAt || null,
+        },
+      });
+    } catch (error: any) {
+      res.status(500).json({ success: false, error: error.message });
+    }
+  });
+
   // ==================== AUTH ROUTES ====================
   app.post("/api/auth/register", async (req: Request, res: Response) => {
     try {
