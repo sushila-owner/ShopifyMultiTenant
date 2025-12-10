@@ -42,7 +42,7 @@ export const PRICING_PLANS: PricingPlan[] = [
     productLimit: 25,
     orderLimit: 50,
     teamLimit: 1,
-    trialDays: 2
+    trialDays: 0
   },
   {
     id: "starter",
