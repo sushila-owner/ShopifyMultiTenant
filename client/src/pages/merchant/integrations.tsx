@@ -1,5 +1,5 @@
-import { useState } from "react";
-import { useMutation } from "@tanstack/react-query";
+import { useState, useEffect } from "react";
+import { useMutation, useQuery } from "@tanstack/react-query";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
@@ -21,8 +21,19 @@ import {
   CheckCircle,
   ExternalLink,
   Loader2,
+  AlertCircle,
 } from "lucide-react";
 import { SiShopify, SiWoo, SiAmazon } from "react-icons/si";
+
+interface ShopifyStatusResponse {
+  success: boolean;
+  data?: {
+    isConnected: boolean;
+    domain: string | null;
+    scopes: string[];
+    installedAt: string | null;
+  };
+}
 
 const integrations = [
   {
@@ -40,6 +51,7 @@ const integrations = [
     icon: SiWoo,
     color: "#96588A",
     popular: false,
+    comingSoon: true,
   },
   {
     id: "amazon",
@@ -59,28 +71,90 @@ export default function IntegrationsPage() {
   const [isShopifyDialogOpen, setIsShopifyDialogOpen] = useState(false);
   const [shopifyDomain, setShopifyDomain] = useState("");
 
-  const isShopifyConnected = user?.merchant?.shopifyStore?.isConnected;
+  const { data: shopifyStatus, refetch: refetchShopifyStatus } = useQuery<ShopifyStatusResponse>({
+    queryKey: ["/api/merchant/shopify/status"],
+    enabled: !!user?.merchantId,
+  });
 
-  const connectMutation = useMutation({
-    mutationFn: (data: { platform: string; domain?: string }) =>
-      apiRequest("POST", "/api/integrations/connect", data),
+  const shopifyStore = user?.merchant?.shopifyStore as { isConnected?: boolean; domain?: string } | undefined;
+  const isShopifyConnected = shopifyStatus?.data?.isConnected || shopifyStore?.isConnected;
+  const connectedDomain = shopifyStatus?.data?.domain || shopifyStore?.domain;
+
+  useEffect(() => {
+    const urlParams = new URLSearchParams(window.location.search);
+    const shopifyPending = urlParams.get("shopify_pending");
+    const error = urlParams.get("error");
+    const errorMessage = urlParams.get("message");
+
+    if (error) {
+      let displayMessage = "Failed to connect Shopify store";
+      if (error === "shopify_not_configured") {
+        displayMessage = "Shopify app is not configured on the server";
+      } else if (error === "invalid_hmac") {
+        displayMessage = "Security validation failed. Please try again.";
+      } else if (error === "invalid_state") {
+        displayMessage = "Session expired. Please try connecting again.";
+      } else if (error === "oauth_failed" && errorMessage) {
+        displayMessage = decodeURIComponent(errorMessage);
+      }
+      toast({ title: displayMessage, variant: "destructive" });
+      window.history.replaceState({}, "", window.location.pathname);
+    }
+
+    if (shopifyPending) {
+      // SECURITY: Verify this session initiated the OAuth flow
+      // Prevents phishing attacks where attacker crafts URL with their pending code
+      const oauthInitiated = sessionStorage.getItem("shopify_oauth_initiated");
+      if (!oauthInitiated) {
+        console.warn("[Security] Shopify pending code received without OAuth initiation marker");
+        toast({ 
+          title: "Invalid connection request", 
+          description: "Please start the Shopify connection process from this page.",
+          variant: "destructive" 
+        });
+        window.history.replaceState({}, "", window.location.pathname);
+        return;
+      }
+      
+      // Clear the session markers
+      sessionStorage.removeItem("shopify_oauth_initiated");
+      sessionStorage.removeItem("shopify_oauth_domain");
+      
+      // Now safe to redeem the pending code - backend will also verify merchantId
+      saveShopifyConnection({ pendingCode: shopifyPending });
+      window.history.replaceState({}, "", window.location.pathname);
+    }
+  }, []);
+
+  const saveShopifyConnectionMutation = useMutation({
+    mutationFn: (data: { pendingCode: string }) =>
+      apiRequest("POST", "/api/merchant/shopify/connect", data),
     onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ["/api/merchant/shopify/status"] });
       queryClient.invalidateQueries({ queryKey: ["/api/merchants/stats"] });
-      toast({ title: "Integration connected successfully" });
-      setIsShopifyDialogOpen(false);
-      setConnectingId(null);
+      refetchShopifyStatus();
+      toast({ title: "Shopify store connected successfully!" });
     },
-    onError: () => {
-      toast({ title: "Failed to connect integration", variant: "destructive" });
-      setConnectingId(null);
+    onError: (error: any) => {
+      toast({ title: error.message || "Failed to save Shopify connection", variant: "destructive" });
     },
   });
 
+  const saveShopifyConnection = (data: { pendingCode: string }) => {
+    saveShopifyConnectionMutation.mutate(data);
+  };
+
   const disconnectMutation = useMutation({
-    mutationFn: (platform: string) =>
-      apiRequest("POST", "/api/integrations/disconnect", { platform }),
+    mutationFn: (platform: string) => {
+      if (platform === "shopify") {
+        return apiRequest("POST", "/api/merchant/shopify/disconnect", {});
+      }
+      return apiRequest("POST", "/api/integrations/disconnect", { platform });
+    },
     onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ["/api/merchant/shopify/status"] });
       queryClient.invalidateQueries({ queryKey: ["/api/merchants/stats"] });
+      refetchShopifyStatus();
       toast({ title: "Integration disconnected" });
     },
     onError: () => {
@@ -88,22 +162,63 @@ export default function IntegrationsPage() {
     },
   });
 
-  const handleConnect = (integrationId: string) => {
-    if (integrationId === "shopify") {
-      setIsShopifyDialogOpen(true);
-    } else {
-      setConnectingId(integrationId);
-      connectMutation.mutate({ platform: integrationId });
-    }
-  };
-
-  const handleShopifyConnect = () => {
+  const handleShopifyConnect = async () => {
     if (!shopifyDomain) {
       toast({ title: "Please enter your Shopify store domain", variant: "destructive" });
       return;
     }
+
+    const cleanDomain = shopifyDomain.replace(/\.myshopify\.com$/, "").trim();
+    if (!cleanDomain) {
+      toast({ title: "Please enter a valid store name", variant: "destructive" });
+      return;
+    }
+
+    const token = localStorage.getItem("apex_token");
+    if (!token) {
+      toast({ title: "Please log in to connect your Shopify store", variant: "destructive" });
+      return;
+    }
+
     setConnectingId("shopify");
-    connectMutation.mutate({ platform: "shopify", domain: shopifyDomain });
+    setIsShopifyDialogOpen(false);
+    
+    try {
+      const fullDomain = `${cleanDomain}.myshopify.com`;
+      const response = await fetch("/api/shopify/oauth/install", {
+        method: "POST",
+        headers: {
+          "Content-Type": "application/json",
+          Authorization: `Bearer ${token}`,
+        },
+        body: JSON.stringify({ shop: fullDomain }),
+      });
+      
+      const data = await response.json();
+      
+      if (data.success && data.redirectUrl) {
+        // Mark that this session initiated Shopify OAuth - prevents phishing attacks
+        sessionStorage.setItem("shopify_oauth_initiated", "true");
+        sessionStorage.setItem("shopify_oauth_domain", fullDomain);
+        // Redirect to Shopify OAuth
+        window.location.href = data.redirectUrl;
+      } else {
+        toast({ title: data.error || "Failed to start Shopify connection", variant: "destructive" });
+        setConnectingId(null);
+      }
+    } catch (error) {
+      console.error("OAuth install error:", error);
+      toast({ title: "Failed to connect to Shopify", variant: "destructive" });
+      setConnectingId(null);
+    }
+  };
+
+  const handleConnect = (integrationId: string) => {
+    if (integrationId === "shopify") {
+      setIsShopifyDialogOpen(true);
+    } else {
+      toast({ title: "This integration is not yet available", variant: "destructive" });
+    }
   };
 
   return (
@@ -115,7 +230,6 @@ export default function IntegrationsPage() {
         </div>
       </div>
 
-      {/* Connected Integration Banner */}
       {isShopifyConnected && (
         <Card className="border-chart-2 bg-chart-2/5">
           <CardContent className="p-4">
@@ -129,22 +243,26 @@ export default function IntegrationsPage() {
                   <CheckCircle className="h-4 w-4 text-chart-2" />
                 </div>
                 <p className="text-sm text-muted-foreground">
-                  {user?.merchant?.shopifyStore?.domain}
+                  {connectedDomain}
                 </p>
               </div>
               <Button
                 variant="outline"
                 onClick={() => disconnectMutation.mutate("shopify")}
                 disabled={disconnectMutation.isPending}
+                data-testid="button-disconnect-shopify"
               >
-                Disconnect
+                {disconnectMutation.isPending ? (
+                  <Loader2 className="h-4 w-4 animate-spin" />
+                ) : (
+                  "Disconnect"
+                )}
               </Button>
             </div>
           </CardContent>
         </Card>
       )}
 
-      {/* Available Integrations */}
       <div className="grid gap-6 md:grid-cols-2 lg:grid-cols-3">
         {integrations.map((integration) => {
           const isConnected = integration.id === "shopify" && isShopifyConnected;
@@ -186,7 +304,15 @@ export default function IntegrationsPage() {
                   </Button>
                 ) : isConnected ? (
                   <div className="flex gap-2">
-                    <Button variant="outline" className="flex-1 gap-2">
+                    <Button
+                      variant="outline"
+                      className="flex-1 gap-2"
+                      onClick={() => {
+                        if (connectedDomain) {
+                          window.open(`https://${connectedDomain}/admin`, "_blank");
+                        }
+                      }}
+                    >
                       <ExternalLink className="h-4 w-4" />
                       Open Store
                     </Button>
@@ -216,7 +342,6 @@ export default function IntegrationsPage() {
         })}
       </div>
 
-      {/* How It Works */}
       <Card>
         <CardHeader>
           <CardTitle>How Integrations Work</CardTitle>
@@ -255,13 +380,15 @@ export default function IntegrationsPage() {
         </CardContent>
       </Card>
 
-      {/* Shopify Connect Dialog */}
       <Dialog open={isShopifyDialogOpen} onOpenChange={setIsShopifyDialogOpen}>
         <DialogContent>
           <DialogHeader>
-            <DialogTitle>Connect Shopify Store</DialogTitle>
+            <DialogTitle className="flex items-center gap-2">
+              <SiShopify className="h-5 w-5 text-[#95BF47]" />
+              Connect Shopify Store
+            </DialogTitle>
             <DialogDescription>
-              Enter your Shopify store domain to connect
+              Enter your Shopify store domain to start the secure OAuth connection
             </DialogDescription>
           </DialogHeader>
           <div className="space-y-4 py-4">
@@ -275,15 +402,23 @@ export default function IntegrationsPage() {
                   onChange={(e) => setShopifyDomain(e.target.value)}
                   className="rounded-r-none"
                   data-testid="input-shopify-domain"
+                  onKeyDown={(e) => {
+                    if (e.key === "Enter") {
+                      handleShopifyConnect();
+                    }
+                  }}
                 />
                 <div className="flex items-center rounded-r-md border border-l-0 bg-muted px-3 text-sm text-muted-foreground">
                   .myshopify.com
                 </div>
               </div>
             </div>
-            <p className="text-xs text-muted-foreground">
-              You'll be redirected to Shopify to authorize the connection. This uses secure OAuth authentication.
-            </p>
+            <div className="flex items-start gap-2 rounded-lg border border-blue-200 bg-blue-50 p-3 dark:border-blue-900 dark:bg-blue-950">
+              <AlertCircle className="h-4 w-4 mt-0.5 text-blue-600 dark:text-blue-400" />
+              <p className="text-xs text-blue-800 dark:text-blue-200">
+                You'll be redirected to Shopify to authorize the connection. We request access to manage products, orders, customers, and inventory in your store.
+              </p>
+            </div>
           </div>
           <DialogFooter>
             <Button variant="outline" onClick={() => setIsShopifyDialogOpen(false)}>
@@ -291,13 +426,13 @@ export default function IntegrationsPage() {
             </Button>
             <Button
               onClick={handleShopifyConnect}
-              disabled={connectMutation.isPending}
+              disabled={connectingId === "shopify"}
               className="gap-2"
               data-testid="button-confirm-shopify-connect"
             >
-              {connectMutation.isPending && <Loader2 className="h-4 w-4 animate-spin" />}
+              {connectingId === "shopify" && <Loader2 className="h-4 w-4 animate-spin" />}
               <SiShopify className="h-4 w-4" />
-              Connect Store
+              Connect to Shopify
             </Button>
           </DialogFooter>
         </DialogContent>

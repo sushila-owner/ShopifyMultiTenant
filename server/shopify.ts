@@ -750,6 +750,9 @@ export class ShopifyService {
 let activeSyncProgress: SyncProgress | null = null;
 let shopifyServiceInstance: ShopifyService | null = null;
 
+// Cache for merchant-specific Shopify services - keyed by merchantId:domain for proper invalidation
+const merchantShopifyServices = new Map<string, ShopifyService>();
+
 export function getShopifyService(): ShopifyService | null {
   const storeUrl = process.env.SHOPIFY_STORE_URL;
   const accessToken = process.env.SHOPIFY_ACCESS_TOKEN;
@@ -762,6 +765,76 @@ export function getShopifyService(): ShopifyService | null {
     shopifyServiceInstance = new ShopifyService(storeUrl, accessToken);
   }
   return shopifyServiceInstance;
+}
+
+/**
+ * Get a ShopifyService for a specific merchant's connected store
+ * Used for multi-tenant Shopify app functionality
+ * Cache key includes both merchantId and domain to ensure proper invalidation on reconnect
+ */
+export function getShopifyServiceForMerchant(
+  merchantId: number,
+  storeUrl: string,
+  accessToken: string
+): ShopifyService {
+  const cacheKey = `${merchantId}:${storeUrl}`;
+  
+  // Check cache first
+  let service = merchantShopifyServices.get(cacheKey);
+  
+  if (service) {
+    return service;
+  }
+  
+  // Clear any old entries for this merchant with different domains
+  for (const key of merchantShopifyServices.keys()) {
+    if (key.startsWith(`${merchantId}:`)) {
+      merchantShopifyServices.delete(key);
+    }
+  }
+  
+  // Create new service for this merchant
+  service = new ShopifyService(storeUrl, accessToken);
+  merchantShopifyServices.set(cacheKey, service);
+  
+  return service;
+}
+
+/**
+ * Clear cached ShopifyService for a merchant (e.g., when they disconnect)
+ */
+export function clearMerchantShopifyService(merchantId: number): void {
+  // Clear all entries for this merchant
+  for (const key of merchantShopifyServices.keys()) {
+    if (key.startsWith(`${merchantId}:`)) {
+      merchantShopifyServices.delete(key);
+    }
+  }
+}
+
+/**
+ * Create a ShopifyService from merchant's stored credentials
+ * Returns null if merchant doesn't have Shopify connected
+ */
+export async function getShopifyServiceFromMerchant(merchantId: number): Promise<ShopifyService | null> {
+  const { storage } = await import("./storage");
+  
+  const merchant = await storage.getMerchant(merchantId);
+  if (!merchant) {
+    return null;
+  }
+  
+  const shopifyStore = merchant.shopifyStore as {
+    domain?: string;
+    accessToken?: string;
+    isConnected?: boolean;
+  } | null;
+  
+  if (!shopifyStore?.isConnected || !shopifyStore.domain || !shopifyStore.accessToken) {
+    return null;
+  }
+  
+  return getShopifyServiceForMerchant(merchantId, shopifyStore.domain, shopifyStore.accessToken);
 }
 
 export function getActiveSyncProgress(): SyncProgress | null {

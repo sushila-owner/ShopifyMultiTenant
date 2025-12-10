@@ -27,6 +27,19 @@ Preferred communication style: Simple, everyday language.
 - **Implementation**: Custom auth context, JWT (localStorage, 7-day expiry), `ProtectedRoute` component, role-based UI rendering.
 - **Security**: `SESSION_SECRET` env var required, bcrypt password hashing, protected routes, role enforcement.
 
+### Shopify OAuth Integration (Public App)
+- **OAuth Flow**: Secure public app OAuth for Shopify App Store distribution.
+- **Multi-Tenant Security**:
+  - OAuth nonces bound to merchantId at creation (prevents cross-tenant reuse)
+  - Pending connections stored server-side with merchantId binding
+  - Connect endpoint validates authenticated merchantId matches pending connection
+  - Install endpoint requires authentication (POST-only with JSON response)
+  - Frontend sessionStorage markers prevent phishing attacks with crafted URLs
+- **Token Storage**: Access tokens stored in merchant.shopifyStore JSON field, never exposed to client
+- **Service Caching**: ShopifyService instances keyed by `merchantId:domain` for proper cache invalidation
+- **Required Secrets**: `SHOPIFY_API_KEY`, `SHOPIFY_API_SECRET` from Shopify Partner Dashboard
+- **Files**: `server/shopifyOAuth.ts` (OAuth helpers), `server/routes.ts` (OAuth endpoints)
+
 ### Data Storage
 - **Database**: Drizzle ORM configured for PostgreSQL, PlanetScale PostgreSQL (`us-east-3.pg.psdb.cloud`).
 - **Schema**: Defined in `shared/schema.ts` with Zod validation.
