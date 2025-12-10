@@ -3046,5 +3046,143 @@ export async function registerRoutes(
     }
   });
 
+  // ==================== TRANSLATION (DEEPL) ROUTES ====================
+  const { deeplService } = await import("./deepl");
+
+  // Check if DeepL translation service is available
+  app.get("/api/translation/status", async (req: Request, res: Response) => {
+    try {
+      const isAvailable = deeplService.isAvailable();
+      const usage = isAvailable ? await deeplService.getUsage() : null;
+      
+      res.json({
+        success: true,
+        data: {
+          available: isAvailable,
+          usage: usage,
+          message: isAvailable 
+            ? "DeepL translation service is active" 
+            : "DeepL API key not configured"
+        }
+      });
+    } catch (error: any) {
+      res.status(500).json({ success: false, error: error.message });
+    }
+  });
+
+  // Translate text (single or batch)
+  app.post("/api/translation/translate", async (req: Request, res: Response) => {
+    try {
+      const { text, texts, targetLang, sourceLang } = req.body;
+
+      if (!targetLang) {
+        return res.status(400).json({ success: false, error: "Target language is required" });
+      }
+
+      // Single text translation
+      if (text && typeof text === "string") {
+        const result = await deeplService.translateText(text, targetLang, sourceLang);
+        return res.json({ success: true, data: result });
+      }
+
+      // Batch translation
+      if (texts && Array.isArray(texts)) {
+        const results = await deeplService.translateBatch(texts, targetLang, sourceLang);
+        return res.json({ success: true, data: { translations: results } });
+      }
+
+      return res.status(400).json({ success: false, error: "Either 'text' or 'texts' is required" });
+    } catch (error: any) {
+      console.error("Translation error:", error);
+      res.status(500).json({ success: false, error: error.message });
+    }
+  });
+
+  // Translate product (title, description, tags)
+  app.post("/api/translation/product", async (req: Request, res: Response) => {
+    try {
+      const { product, targetLang } = req.body;
+
+      if (!product || !targetLang) {
+        return res.status(400).json({ 
+          success: false, 
+          error: "Product and targetLang are required" 
+        });
+      }
+
+      const translated = await deeplService.translateProduct(product, targetLang);
+      res.json({ success: true, data: translated });
+    } catch (error: any) {
+      console.error("Product translation error:", error);
+      res.status(500).json({ success: false, error: error.message });
+    }
+  });
+
+  // Translate product by ID (fetches from database and translates)
+  app.get("/api/translation/product/:id", async (req: Request, res: Response) => {
+    try {
+      const productId = parseInt(req.params.id);
+      const targetLang = req.query.lang as string || 'en';
+
+      if (isNaN(productId)) {
+        return res.status(400).json({ success: false, error: "Invalid product ID" });
+      }
+
+      const product = await storage.getProduct(productId);
+      if (!product) {
+        return res.status(404).json({ success: false, error: "Product not found" });
+      }
+
+      // If English is requested, return original
+      if (targetLang === 'en') {
+        return res.json({
+          success: true,
+          data: {
+            id: product.id,
+            title: product.title,
+            description: product.description,
+            tags: product.tags,
+            translated: false
+          }
+        });
+      }
+
+      // Translate product content
+      const translated = await deeplService.translateProduct(
+        {
+          title: product.title,
+          description: product.description,
+          tags: product.tags
+        },
+        targetLang
+      );
+
+      res.json({
+        success: true,
+        data: {
+          id: product.id,
+          title: translated.title,
+          description: translated.description,
+          tags: translated.tags,
+          translated: true,
+          originalTitle: product.title
+        }
+      });
+    } catch (error: any) {
+      console.error("Product translation fetch error:", error);
+      res.status(500).json({ success: false, error: error.message });
+    }
+  });
+
+  // Get supported languages
+  app.get("/api/translation/languages", async (req: Request, res: Response) => {
+    try {
+      const languages = await deeplService.getSupportedLanguages();
+      res.json({ success: true, data: languages });
+    } catch (error: any) {
+      res.status(500).json({ success: false, error: error.message });
+    }
+  });
+
   return httpServer;
 }
