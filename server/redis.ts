@@ -1,63 +1,29 @@
-import Redis from "ioredis";
+import { Redis } from "@upstash/redis";
 
 let redisClient: Redis | null = null;
 
 export function getRedisClient(): Redis | null {
-  if (!process.env.REDIS_URL) {
-    console.log("[Redis] No REDIS_URL configured, using in-memory storage");
+  if (!process.env.UPSTASH_REDIS_REST_URL || !process.env.UPSTASH_REDIS_REST_TOKEN) {
+    console.log("[Redis] No Upstash REST credentials configured, using in-memory storage");
     return null;
   }
 
   if (!redisClient) {
-    console.log("[Redis] Connecting to Redis...");
-    redisClient = new Redis(process.env.REDIS_URL, {
-      maxRetriesPerRequest: 3,
-      retryStrategy: (times) => {
-        if (times > 3) {
-          console.error("[Redis] Max retries reached, giving up");
-          return null;
-        }
-        return Math.min(times * 100, 3000);
-      },
+    console.log("[Redis] Connecting to Upstash Redis (REST API)...");
+    redisClient = new Redis({
+      url: process.env.UPSTASH_REDIS_REST_URL,
+      token: process.env.UPSTASH_REDIS_REST_TOKEN,
     });
-
-    redisClient.on("connect", () => {
-      console.log("[Redis] Connected successfully to Upstash");
-    });
-
-    redisClient.on("ready", () => {
-      console.log("[Redis] Ready for commands");
-    });
-
-    redisClient.on("error", (err) => {
-      console.error("[Redis] Connection error:", err.message);
-    });
-
-    redisClient.on("close", () => {
-      console.log("[Redis] Connection closed");
-    });
+    console.log("[Redis] Upstash Redis client initialized");
   }
 
   return redisClient;
 }
 
-export async function connectRedis(): Promise<boolean> {
-  const client = getRedisClient();
-  if (!client) return false;
-
-  try {
-    await client.connect();
-    return true;
-  } catch (error: any) {
-    console.error("[Redis] Failed to connect:", error.message);
-    return false;
-  }
-}
-
 const NONCE_PREFIX = "shopify_nonce:";
 const PENDING_PREFIX = "shopify_pending:";
-const NONCE_TTL = 600;
-const PENDING_TTL = 300;
+const NONCE_TTL = 600; // 10 minutes
+const PENDING_TTL = 300; // 5 minutes
 
 export interface OAuthNonce {
   shop: string;
@@ -84,8 +50,10 @@ export async function setOAuthNonce(nonce: string, data: OAuthNonce): Promise<vo
 export async function getOAuthNonce(nonce: string): Promise<OAuthNonce | null> {
   const client = getRedisClient();
   if (client) {
-    const data = await client.get(`${NONCE_PREFIX}${nonce}`);
-    return data ? JSON.parse(data) : null;
+    const data = await client.get<string>(`${NONCE_PREFIX}${nonce}`);
+    if (data) {
+      return typeof data === 'string' ? JSON.parse(data) : data;
+    }
   }
   return null;
 }
@@ -107,8 +75,10 @@ export async function setPendingConnection(code: string, data: PendingConnection
 export async function getPendingConnection(code: string): Promise<PendingConnection | null> {
   const client = getRedisClient();
   if (client) {
-    const data = await client.get(`${PENDING_PREFIX}${code}`);
-    return data ? JSON.parse(data) : null;
+    const data = await client.get<string>(`${PENDING_PREFIX}${code}`);
+    if (data) {
+      return typeof data === 'string' ? JSON.parse(data) : data;
+    }
   }
   return null;
 }
@@ -121,5 +91,20 @@ export async function deletePendingConnection(code: string): Promise<void> {
 }
 
 export function isRedisAvailable(): boolean {
-  return !!process.env.REDIS_URL && redisClient !== null;
+  return !!(process.env.UPSTASH_REDIS_REST_URL && process.env.UPSTASH_REDIS_REST_TOKEN && redisClient !== null);
+}
+
+// Test Redis connection
+export async function testRedisConnection(): Promise<boolean> {
+  const client = getRedisClient();
+  if (!client) return false;
+  
+  try {
+    await client.ping();
+    console.log("[Redis] Connection test successful");
+    return true;
+  } catch (error: any) {
+    console.error("[Redis] Connection test failed:", error.message);
+    return false;
+  }
 }
