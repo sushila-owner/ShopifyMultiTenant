@@ -25,7 +25,7 @@ import { Sheet, SheetContent, SheetTrigger, SheetClose, SheetTitle, SheetDescrip
 import { useState } from "react";
 import { SiShopify } from "react-icons/si";
 import logoImage from "@assets/F66C5CC9-75FA-449A-AAF8-3CBF0FAC2486_1764749832622.png";
-import { PRICING_PLANS } from "@/lib/pricing";
+import { PRICING_PLANS, TRIAL_DAYS } from "@/lib/pricing";
 
 export default function LandingPage() {
   const { t } = useI18n();
@@ -421,6 +421,9 @@ export default function LandingPage() {
             <p className="text-xl text-muted-foreground max-w-2xl mx-auto">
               {t("pricing.description")}
             </p>
+            <Badge variant="secondary" className="mt-4 text-sm" data-testid="badge-free-trial">
+              {TRIAL_DAYS}-Day Free Trial on All Plans
+            </Badge>
           </div>
           <div className="grid md:grid-cols-2 lg:grid-cols-3 xl:grid-cols-5 gap-6 max-w-7xl mx-auto">
             {PRICING_PLANS.map((plan) => (
@@ -450,13 +453,19 @@ export default function LandingPage() {
                   </div>
                   <Link href="/register">
                     <Button
-                      className={`w-full mb-6 ${plan.badge === "millionaire" ? "bg-amber-500 hover:bg-amber-600 text-amber-950" : ""}`}
+                      className={`w-full ${plan.badge === "millionaire" ? "bg-amber-500 hover:bg-amber-600 text-amber-950" : ""}`}
                       variant={plan.popular ? "default" : "outline"}
                       data-testid={`button-plan-${plan.id}`}
                     >
-                      {plan.price === 0 ? t("pricing.startFree") : t("pricing.getStarted")}
+                      {plan.trialDays > 0 ? `Start ${plan.trialDays}-Day Trial` : t("pricing.startFree")}
                     </Button>
                   </Link>
+                  {plan.trialDays > 0 && (
+                    <p className="text-xs text-muted-foreground text-center mt-2 mb-4">
+                      No credit card required
+                    </p>
+                  )}
+                  {plan.trialDays === 0 && <div className="mb-6" />}
                   <ul className="space-y-3">
                     {plan.featureKeys.map((featureKey) => (
                       <li key={featureKey} className="flex items-center gap-2 text-sm">

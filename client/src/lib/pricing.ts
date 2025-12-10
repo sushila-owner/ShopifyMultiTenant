@@ -14,7 +14,10 @@ export interface PricingPlan {
   productLimit: number;
   orderLimit: number;
   teamLimit: number;
+  trialDays: number;
 }
+
+export const TRIAL_DAYS = 2;
 
 export const PRICING_PLANS: PricingPlan[] = [
   {
@@ -38,7 +41,8 @@ export const PRICING_PLANS: PricingPlan[] = [
     freeForLife: false,
     productLimit: 25,
     orderLimit: 50,
-    teamLimit: 1
+    teamLimit: 1,
+    trialDays: 2
   },
   {
     id: "starter",
@@ -61,7 +65,8 @@ export const PRICING_PLANS: PricingPlan[] = [
     freeForLife: true,
     productLimit: 100,
     orderLimit: 500,
-    teamLimit: 3
+    teamLimit: 3,
+    trialDays: 2
   },
   {
     id: "growth",
@@ -84,7 +89,8 @@ export const PRICING_PLANS: PricingPlan[] = [
     freeForLife: true,
     productLimit: 250,
     orderLimit: 1500,
-    teamLimit: 5
+    teamLimit: 5,
+    trialDays: 2
   },
   {
     id: "professional",
@@ -108,7 +114,8 @@ export const PRICING_PLANS: PricingPlan[] = [
     freeForLife: true,
     productLimit: 1000,
     orderLimit: 5000,
-    teamLimit: 10
+    teamLimit: 10,
+    trialDays: 2
   },
   {
     id: "millionaire",
@@ -133,7 +140,8 @@ export const PRICING_PLANS: PricingPlan[] = [
     freeForLife: true,
     productLimit: -1,
     orderLimit: -1,
-    teamLimit: -1
+    teamLimit: -1,
+    trialDays: 2
   }
 ];
 
@@ -160,7 +168,8 @@ export const FREE_FOR_LIFE_PLAN: PricingPlan = {
   freeForLife: false,
   productLimit: -1,
   orderLimit: -1,
-  teamLimit: -1
+  teamLimit: -1,
+  trialDays: 0
 };
 
 export function formatPrice(price: number, period?: "forever" | "month"): string {

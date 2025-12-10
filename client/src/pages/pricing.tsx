@@ -3,7 +3,7 @@ import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardDescription, CardFooter, CardHeader, CardTitle } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
 import { Check, ArrowLeft } from "lucide-react";
-import { PRICING_PLANS, FREE_FOR_LIFE_THRESHOLD, formatPrice } from "@/lib/pricing";
+import { PRICING_PLANS, FREE_FOR_LIFE_THRESHOLD, formatPrice, TRIAL_DAYS } from "@/lib/pricing";
 
 export default function PricingPage() {
   return (
@@ -27,6 +27,9 @@ export default function PricingPage() {
           <p className="text-xl text-muted-foreground max-w-2xl mx-auto">
             Choose the plan that fits your business. Upgrade or downgrade anytime.
           </p>
+          <Badge variant="secondary" className="mt-4 text-sm" data-testid="badge-free-trial">
+            {TRIAL_DAYS}-Day Free Trial on All Plans
+          </Badge>
         </div>
 
         <div className="grid md:grid-cols-2 lg:grid-cols-3 xl:grid-cols-5 gap-6">
@@ -59,16 +62,21 @@ export default function PricingPage() {
                   ))}
                 </ul>
               </CardContent>
-              <CardFooter>
+              <CardFooter className="flex-col gap-2">
                 <Link href="/register" className="w-full">
                   <Button 
                     className="w-full" 
                     variant={plan.popular ? "default" : "outline"}
                     data-testid={`button-select-${plan.id}`}
                   >
-                    Get Started
+                    {plan.trialDays > 0 ? `Start ${plan.trialDays}-Day Trial` : "Get Started"}
                   </Button>
                 </Link>
+                {plan.trialDays > 0 && (
+                  <p className="text-xs text-muted-foreground text-center">
+                    No credit card required
+                  </p>
+                )}
               </CardFooter>
             </Card>
           ))}
