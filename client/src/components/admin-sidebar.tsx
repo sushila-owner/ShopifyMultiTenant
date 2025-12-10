@@ -26,6 +26,7 @@ import {
   CreditCard,
   Bell,
   FileText,
+  Layers,
 } from "lucide-react";
 import { useAuth } from "@/lib/auth";
 import logoImage from "@assets/F66C5CC9-75FA-449A-AAF8-3CBF0FAC2486_1764749832622.png";
@@ -34,6 +35,7 @@ const mainMenuItems = [
   { title: "Dashboard", url: "/admin", icon: LayoutDashboard },
   { title: "Suppliers", url: "/admin/suppliers", icon: Truck },
   { title: "Products", url: "/admin/products", icon: Package },
+  { title: "Categories", url: "/admin/categories", icon: Layers },
   { title: "Merchants", url: "/admin/merchants", icon: Store },
   { title: "Orders", url: "/admin/orders", icon: ShoppingCart },
 ];
