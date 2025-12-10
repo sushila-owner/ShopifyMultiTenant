@@ -255,7 +255,7 @@ export default function AdminDashboard() {
                 <Truck className="h-12 w-12 mx-auto mb-4 opacity-50" />
                 <p>No suppliers configured</p>
                 <Link href="/admin/suppliers">
-                  <Button variant="link" className="mt-2">
+                  <Button variant="ghost" className="mt-2">
                     Add your first supplier
                   </Button>
                 </Link>
