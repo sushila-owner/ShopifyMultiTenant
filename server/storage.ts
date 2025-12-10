@@ -155,6 +155,13 @@ export interface IStorage {
   getAdminDashboardStats(): Promise<AdminDashboardStats>;
   getMerchantDashboardStats(merchantId: number): Promise<MerchantDashboardStats>;
 
+  // Enhanced Analytics
+  getRevenueChart(merchantId?: number, days?: number): Promise<{ date: string; revenue: number; orders: number; profit: number }[]>;
+  getTopProducts(merchantId?: number, limit?: number): Promise<{ productId: number; title: string; totalSold: number; revenue: number }[]>;
+  getOrderStatusBreakdown(merchantId?: number): Promise<{ status: string; count: number }[]>;
+  getRecentActivity(merchantId?: number, limit?: number): Promise<any[]>;
+  seedSampleOrders(): Promise<void>;
+
   // OTP Verifications
   createOtp(otp: InsertOtp): Promise<OtpVerification>;
   getOtp(identifier: string, type: string): Promise<OtpVerification | undefined>;
@@ -962,6 +969,247 @@ export class DatabaseStorage implements IStorage {
       productLimit: merchant?.productLimit || 50,
       currentProductCount: Number(productStats?.total || 0),
     };
+  }
+
+  // ==================== ENHANCED ANALYTICS ====================
+  async getRevenueChart(merchantId?: number, days: number = 30): Promise<{ date: string; revenue: number; orders: number; profit: number }[]> {
+    const startDate = new Date();
+    startDate.setDate(startDate.getDate() - days);
+    startDate.setHours(0, 0, 0, 0);
+
+    const conditions = [gte(orders.createdAt, startDate)];
+    if (merchantId) {
+      conditions.push(eq(orders.merchantId, merchantId));
+    }
+
+    const result = await db
+      .select({
+        date: sql<string>`date_trunc('day', ${orders.createdAt})::date::text`,
+        revenue: sql<number>`coalesce(sum(${orders.total}), 0)`,
+        orders: count(),
+        profit: sql<number>`coalesce(sum(${orders.totalProfit}), 0)`,
+      })
+      .from(orders)
+      .where(and(...conditions))
+      .groupBy(sql`date_trunc('day', ${orders.createdAt})`)
+      .orderBy(sql`date_trunc('day', ${orders.createdAt})`);
+
+    const chartData: { date: string; revenue: number; orders: number; profit: number }[] = [];
+    for (let i = 0; i < days; i++) {
+      const date = new Date(startDate);
+      date.setDate(startDate.getDate() + i);
+      const dateStr = date.toISOString().split('T')[0];
+      
+      const existing = result.find(r => r.date === dateStr);
+      chartData.push({
+        date: dateStr,
+        revenue: existing ? Number(existing.revenue) : 0,
+        orders: existing ? Number(existing.orders) : 0,
+        profit: existing ? Number(existing.profit) : 0,
+      });
+    }
+
+    return chartData;
+  }
+
+  async getTopProducts(merchantId?: number, limit: number = 10): Promise<{ productId: number; title: string; totalSold: number; revenue: number }[]> {
+    const result = await db.execute(sql`
+      SELECT 
+        p.id as "productId",
+        p.title,
+        COALESCE(SUM((item->>'quantity')::int), 0) as "totalSold",
+        COALESCE(SUM((item->>'price')::decimal * (item->>'quantity')::int), 0) as revenue
+      FROM ${products} p
+      LEFT JOIN ${orders} o ON ${merchantId ? sql`o.merchant_id = ${merchantId}` : sql`1=1`}
+      LEFT JOIN LATERAL jsonb_array_elements(o.items) as item ON true
+      WHERE (item->>'productId')::int = p.id
+      ${merchantId ? sql`AND p.merchant_id = ${merchantId}` : sql``}
+      GROUP BY p.id, p.title
+      ORDER BY "totalSold" DESC
+      LIMIT ${limit}
+    `);
+
+    return (result.rows || []).map((row: any) => ({
+      productId: Number(row.productId),
+      title: String(row.title),
+      totalSold: Number(row.totalSold || 0),
+      revenue: Number(row.revenue || 0),
+    }));
+  }
+
+  async getOrderStatusBreakdown(merchantId?: number): Promise<{ status: string; count: number }[]> {
+    const conditions = merchantId ? [eq(orders.merchantId, merchantId)] : [];
+    
+    const result = await db
+      .select({
+        status: orders.status,
+        count: count(),
+      })
+      .from(orders)
+      .where(and(...conditions))
+      .groupBy(orders.status);
+
+    return result.map(r => ({
+      status: r.status,
+      count: Number(r.count),
+    }));
+  }
+
+  async getRecentActivity(merchantId?: number, limit: number = 20): Promise<any[]> {
+    const activities: any[] = [];
+    
+    const recentOrders = await db
+      .select()
+      .from(orders)
+      .where(merchantId ? eq(orders.merchantId, merchantId) : sql`1=1`)
+      .orderBy(desc(orders.createdAt))
+      .limit(Math.min(limit, 10));
+
+    for (const order of recentOrders) {
+      activities.push({
+        type: 'order',
+        action: `Order #${order.orderNumber} - ${order.status}`,
+        amount: order.total,
+        timestamp: order.createdAt,
+      });
+    }
+
+    const recentSyncs = await db
+      .select()
+      .from(syncLogs)
+      .orderBy(desc(syncLogs.createdAt))
+      .limit(Math.min(limit, 5));
+
+    for (const sync of recentSyncs) {
+      activities.push({
+        type: 'sync',
+        action: `Sync ${sync.status}: ${sync.productsAdded || 0} added, ${sync.productsUpdated || 0} updated`,
+        timestamp: sync.createdAt,
+      });
+    }
+
+    return activities
+      .sort((a, b) => new Date(b.timestamp).getTime() - new Date(a.timestamp).getTime())
+      .slice(0, limit);
+  }
+
+  async seedSampleOrders(): Promise<void> {
+    const existingOrders = await db.select().from(orders).limit(1);
+    if (existingOrders.length > 0) {
+      console.log("Orders already exist, skipping sample seed...");
+      return;
+    }
+
+    const allMerchants = await this.getAllMerchants();
+    if (allMerchants.length === 0) {
+      console.log("No merchants found, skipping sample orders seed...");
+      return;
+    }
+
+    const merchant = allMerchants[0];
+    const globalProducts = await db.select().from(products).where(isNull(products.merchantId)).limit(20);
+    
+    if (globalProducts.length === 0) {
+      console.log("No global products found, skipping sample orders...");
+      return;
+    }
+
+    const sampleCustomers = [
+      { firstName: "John", lastName: "Smith", email: "john@example.com", phone: "+1-555-0101" },
+      { firstName: "Sarah", lastName: "Johnson", email: "sarah@example.com", phone: "+1-555-0102" },
+      { firstName: "Michael", lastName: "Brown", email: "michael@example.com", phone: "+1-555-0103" },
+      { firstName: "Emily", lastName: "Davis", email: "emily@example.com", phone: "+1-555-0104" },
+      { firstName: "David", lastName: "Wilson", email: "david@example.com", phone: "+1-555-0105" },
+    ];
+
+    const createdCustomers: Customer[] = [];
+    for (const c of sampleCustomers) {
+      const customer = await this.createCustomer({
+        merchantId: merchant.id,
+        firstName: c.firstName,
+        lastName: c.lastName,
+        email: c.email,
+        phone: c.phone,
+        addresses: [{
+          firstName: c.firstName,
+          lastName: c.lastName,
+          address1: "123 Main St",
+          city: "New York",
+          province: "NY",
+          zip: "10001",
+          country: "US"
+        }],
+      });
+      createdCustomers.push(customer);
+    }
+
+    const statuses: ('pending' | 'processing' | 'shipped' | 'delivered' | 'cancelled')[] = 
+      ['pending', 'processing', 'shipped', 'delivered'];
+
+    for (let i = 0; i < 30; i++) {
+      const daysAgo = Math.floor(Math.random() * 30);
+      const orderDate = new Date();
+      orderDate.setDate(orderDate.getDate() - daysAgo);
+
+      const numItems = Math.floor(Math.random() * 3) + 1;
+      const orderItems: any[] = [];
+      let subtotalCents = 0;
+
+      for (let j = 0; j < numItems; j++) {
+        const product = globalProducts[Math.floor(Math.random() * globalProducts.length)];
+        const quantity = Math.floor(Math.random() * 3) + 1;
+        const priceCents = Math.round(product.supplierPrice * 1.2);
+        const costCents = product.supplierPrice;
+        
+        orderItems.push({
+          productId: product.id,
+          title: product.title,
+          sku: product.supplierSku,
+          quantity,
+          price: priceCents,
+          cost: costCents,
+        });
+        subtotalCents += priceCents * quantity;
+      }
+
+      const customer = createdCustomers[Math.floor(Math.random() * createdCustomers.length)];
+      const status = statuses[Math.floor(Math.random() * statuses.length)];
+      const costTotalCents = orderItems.reduce((sum: number, item: any) => sum + (item.cost * item.quantity), 0);
+      const profitCents = subtotalCents - costTotalCents;
+      const shippingCents = 999;
+      const taxCents = Math.round(subtotalCents * 0.08);
+      const totalCents = subtotalCents + shippingCents + taxCents;
+
+      const shippingAddr = customer.addresses?.[0] || {
+        firstName: customer.firstName,
+        lastName: customer.lastName,
+        address1: "123 Main St",
+        city: "New York",
+        province: "NY",
+        zip: "10001",
+        country: "US"
+      };
+
+      await db.insert(orders).values({
+        merchantId: merchant.id,
+        customerId: customer.id,
+        customerEmail: customer.email,
+        orderNumber: `ORD-${Date.now()}-${i}`,
+        status,
+        items: orderItems,
+        subtotal: subtotalCents,
+        shipping: shippingCents,
+        tax: taxCents,
+        total: totalCents,
+        totalCost: costTotalCents,
+        totalProfit: profitCents,
+        shippingAddress: shippingAddr,
+        createdAt: orderDate,
+        updatedAt: orderDate,
+      });
+    }
+
+    console.log("Sample orders seeded successfully (30 orders)");
   }
 
   // ==================== SEED DATA ====================

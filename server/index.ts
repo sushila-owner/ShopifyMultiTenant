@@ -3,6 +3,7 @@ import { registerRoutes } from "./routes";
 import { serveStatic } from "./static";
 import { createServer } from "http";
 import { supplierSyncService } from "./services/supplierSync";
+import { analyticsEvents } from "./services/analyticsEvents";
 
 const app = express();
 const httpServer = createServer(app);
@@ -86,6 +87,10 @@ app.use((req, res, next) => {
   // this serves both the API and the client.
   // It is the only port that is not firewalled.
   const port = parseInt(process.env.PORT || "5000", 10);
+  
+  // Initialize real-time analytics WebSocket server
+  analyticsEvents.initialize(httpServer);
+  
   httpServer.listen(
     {
       port,
@@ -98,6 +103,7 @@ app.use((req, res, next) => {
       // Start automated supplier sync service (every 15 minutes)
       supplierSyncService.start();
       log("Supplier sync service started (15-minute interval)");
+      log("Real-time analytics WebSocket server active on /ws/analytics");
     },
   );
 })();

@@ -21,6 +21,7 @@ import { stripeService } from "./stripeService";
 import { getStripePublishableKey, getUncachableStripeClient } from "./stripeClient";
 import { supplierSyncService } from "./services/supplierSync";
 import { orderFulfillmentService } from "./services/orderFulfillment";
+import { analyticsEvents } from "./services/analyticsEvents";
 
 const JWT_SECRET = process.env.SESSION_SECRET;
 if (!JWT_SECRET) {
@@ -82,6 +83,7 @@ export async function registerRoutes(
   // Seed data on startup
   await storage.seedDefaultPlans();
   await storage.seedAdminUser();
+  await storage.seedSampleOrders();
 
   // ==================== AUTH ROUTES ====================
   app.post("/api/auth/register", async (req: Request, res: Response) => {
@@ -496,6 +498,59 @@ export async function registerRoutes(
     try {
       const stats = await storage.getAdminDashboardStats();
       res.json({ success: true, data: stats });
+    } catch (error: any) {
+      res.status(500).json({ success: false, error: error.message });
+    }
+  });
+
+  // Admin Analytics - Revenue Chart
+  app.get("/api/admin/analytics/revenue", authMiddleware, adminOnly, async (req: AuthRequest, res: Response) => {
+    try {
+      const days = parseInt(req.query.days as string) || 30;
+      const chartData = await storage.getRevenueChart(undefined, days);
+      res.json({ success: true, data: chartData });
+    } catch (error: any) {
+      res.status(500).json({ success: false, error: error.message });
+    }
+  });
+
+  // Admin Analytics - Top Products
+  app.get("/api/admin/analytics/top-products", authMiddleware, adminOnly, async (req: AuthRequest, res: Response) => {
+    try {
+      const limit = parseInt(req.query.limit as string) || 10;
+      const topProducts = await storage.getTopProducts(undefined, limit);
+      res.json({ success: true, data: topProducts });
+    } catch (error: any) {
+      res.status(500).json({ success: false, error: error.message });
+    }
+  });
+
+  // Admin Analytics - Order Status Breakdown
+  app.get("/api/admin/analytics/order-status", authMiddleware, adminOnly, async (req: AuthRequest, res: Response) => {
+    try {
+      const breakdown = await storage.getOrderStatusBreakdown();
+      res.json({ success: true, data: breakdown });
+    } catch (error: any) {
+      res.status(500).json({ success: false, error: error.message });
+    }
+  });
+
+  // Admin Analytics - Recent Activity
+  app.get("/api/admin/analytics/activity", authMiddleware, adminOnly, async (req: AuthRequest, res: Response) => {
+    try {
+      const limit = parseInt(req.query.limit as string) || 20;
+      const activity = await storage.getRecentActivity(undefined, limit);
+      res.json({ success: true, data: activity });
+    } catch (error: any) {
+      res.status(500).json({ success: false, error: error.message });
+    }
+  });
+
+  // Real-time analytics status
+  app.get("/api/admin/analytics/realtime-status", authMiddleware, adminOnly, async (req: AuthRequest, res: Response) => {
+    try {
+      const connectedClients = analyticsEvents.getConnectedClientsCount();
+      res.json({ success: true, data: { connectedClients, wsPath: '/ws/analytics' } });
     } catch (error: any) {
       res.status(500).json({ success: false, error: error.message });
     }
@@ -1417,6 +1472,61 @@ export async function registerRoutes(
       }
       const stats = await storage.getMerchantDashboardStats(req.user.merchantId);
       res.json({ success: true, data: stats });
+    } catch (error: any) {
+      res.status(500).json({ success: false, error: error.message });
+    }
+  });
+
+  // Merchant Analytics - Revenue Chart
+  app.get("/api/merchant/analytics/revenue", authMiddleware, merchantOnly, async (req: AuthRequest, res: Response) => {
+    try {
+      if (!req.user?.merchantId) {
+        return res.status(400).json({ success: false, error: "No merchant associated" });
+      }
+      const days = parseInt(req.query.days as string) || 30;
+      const chartData = await storage.getRevenueChart(req.user.merchantId, days);
+      res.json({ success: true, data: chartData });
+    } catch (error: any) {
+      res.status(500).json({ success: false, error: error.message });
+    }
+  });
+
+  // Merchant Analytics - Top Products
+  app.get("/api/merchant/analytics/top-products", authMiddleware, merchantOnly, async (req: AuthRequest, res: Response) => {
+    try {
+      if (!req.user?.merchantId) {
+        return res.status(400).json({ success: false, error: "No merchant associated" });
+      }
+      const limit = parseInt(req.query.limit as string) || 10;
+      const topProducts = await storage.getTopProducts(req.user.merchantId, limit);
+      res.json({ success: true, data: topProducts });
+    } catch (error: any) {
+      res.status(500).json({ success: false, error: error.message });
+    }
+  });
+
+  // Merchant Analytics - Order Status Breakdown
+  app.get("/api/merchant/analytics/order-status", authMiddleware, merchantOnly, async (req: AuthRequest, res: Response) => {
+    try {
+      if (!req.user?.merchantId) {
+        return res.status(400).json({ success: false, error: "No merchant associated" });
+      }
+      const breakdown = await storage.getOrderStatusBreakdown(req.user.merchantId);
+      res.json({ success: true, data: breakdown });
+    } catch (error: any) {
+      res.status(500).json({ success: false, error: error.message });
+    }
+  });
+
+  // Merchant Analytics - Recent Activity
+  app.get("/api/merchant/analytics/activity", authMiddleware, merchantOnly, async (req: AuthRequest, res: Response) => {
+    try {
+      if (!req.user?.merchantId) {
+        return res.status(400).json({ success: false, error: "No merchant associated" });
+      }
+      const limit = parseInt(req.query.limit as string) || 20;
+      const activity = await storage.getRecentActivity(req.user.merchantId, limit);
+      res.json({ success: true, data: activity });
     } catch (error: any) {
       res.status(500).json({ success: false, error: error.message });
     }
