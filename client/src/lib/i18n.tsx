@@ -195,6 +195,8 @@ const translations = {
     "merchant.dashboard.productStatus.active": "Active",
     "merchant.dashboard.productStatus.draft": "Draft",
     "merchant.dashboard.productStatus.archived": "Archived",
+    "merchant.dashboard.orderStatus.unknown": "Unknown",
+    "merchant.dashboard.productStatus.unknown": "Unknown",
     "merchant.dashboard.used": "Used",
   },
   es: {
@@ -367,6 +369,8 @@ const translations = {
     "merchant.dashboard.productStatus.active": "Activo",
     "merchant.dashboard.productStatus.draft": "Borrador",
     "merchant.dashboard.productStatus.archived": "Archivado",
+    "merchant.dashboard.orderStatus.unknown": "Desconocido",
+    "merchant.dashboard.productStatus.unknown": "Desconocido",
     "merchant.dashboard.used": "Usado",
   },
   fr: {
@@ -539,6 +543,8 @@ const translations = {
     "merchant.dashboard.productStatus.active": "Actif",
     "merchant.dashboard.productStatus.draft": "Brouillon",
     "merchant.dashboard.productStatus.archived": "Archivé",
+    "merchant.dashboard.orderStatus.unknown": "Inconnu",
+    "merchant.dashboard.productStatus.unknown": "Inconnu",
     "merchant.dashboard.used": "Utilisé",
   },
   de: {
@@ -711,6 +717,8 @@ const translations = {
     "merchant.dashboard.productStatus.active": "Aktiv",
     "merchant.dashboard.productStatus.draft": "Entwurf",
     "merchant.dashboard.productStatus.archived": "Archiviert",
+    "merchant.dashboard.orderStatus.unknown": "Unbekannt",
+    "merchant.dashboard.productStatus.unknown": "Unbekannt",
     "merchant.dashboard.used": "Verwendet",
   },
   zh: {
@@ -883,6 +891,8 @@ const translations = {
     "merchant.dashboard.productStatus.active": "活跃",
     "merchant.dashboard.productStatus.draft": "草稿",
     "merchant.dashboard.productStatus.archived": "已归档",
+    "merchant.dashboard.orderStatus.unknown": "未知",
+    "merchant.dashboard.productStatus.unknown": "未知",
     "merchant.dashboard.used": "已使用",
   },
   ja: {
@@ -1055,6 +1065,8 @@ const translations = {
     "merchant.dashboard.productStatus.active": "アクティブ",
     "merchant.dashboard.productStatus.draft": "下書き",
     "merchant.dashboard.productStatus.archived": "アーカイブ済み",
+    "merchant.dashboard.orderStatus.unknown": "不明",
+    "merchant.dashboard.productStatus.unknown": "不明",
     "merchant.dashboard.used": "使用済み",
   },
   ar: {
@@ -1227,6 +1239,8 @@ const translations = {
     "merchant.dashboard.productStatus.active": "نشط",
     "merchant.dashboard.productStatus.draft": "مسودة",
     "merchant.dashboard.productStatus.archived": "مؤرشف",
+    "merchant.dashboard.orderStatus.unknown": "غير معروف",
+    "merchant.dashboard.productStatus.unknown": "غير معروف",
     "merchant.dashboard.used": "مستخدم",
   },
   ko: {
@@ -1399,6 +1413,8 @@ const translations = {
     "merchant.dashboard.productStatus.active": "활성",
     "merchant.dashboard.productStatus.draft": "초안",
     "merchant.dashboard.productStatus.archived": "보관됨",
+    "merchant.dashboard.orderStatus.unknown": "알 수 없음",
+    "merchant.dashboard.productStatus.unknown": "알 수 없음",
     "merchant.dashboard.used": "사용됨",
   },
   pt: {
@@ -1571,6 +1587,8 @@ const translations = {
     "merchant.dashboard.productStatus.active": "Ativo",
     "merchant.dashboard.productStatus.draft": "Rascunho",
     "merchant.dashboard.productStatus.archived": "Arquivado",
+    "merchant.dashboard.orderStatus.unknown": "Desconhecido",
+    "merchant.dashboard.productStatus.unknown": "Desconhecido",
     "merchant.dashboard.used": "Usado",
   },
   ru: {
@@ -1743,6 +1761,8 @@ const translations = {
     "merchant.dashboard.productStatus.active": "Активный",
     "merchant.dashboard.productStatus.draft": "Черновик",
     "merchant.dashboard.productStatus.archived": "Архивирован",
+    "merchant.dashboard.orderStatus.unknown": "Неизвестно",
+    "merchant.dashboard.productStatus.unknown": "Неизвестно",
     "merchant.dashboard.used": "Использовано",
   },
   hi: {
@@ -1915,6 +1935,8 @@ const translations = {
     "merchant.dashboard.productStatus.active": "सक्रिय",
     "merchant.dashboard.productStatus.draft": "ड्राफ्ट",
     "merchant.dashboard.productStatus.archived": "संग्रहीत",
+    "merchant.dashboard.orderStatus.unknown": "अज्ञात",
+    "merchant.dashboard.productStatus.unknown": "अज्ञात",
     "merchant.dashboard.used": "उपयोग किया",
   },
   it: {
@@ -2087,6 +2109,8 @@ const translations = {
     "merchant.dashboard.productStatus.active": "Attivo",
     "merchant.dashboard.productStatus.draft": "Bozza",
     "merchant.dashboard.productStatus.archived": "Archiviato",
+    "merchant.dashboard.orderStatus.unknown": "Sconosciuto",
+    "merchant.dashboard.productStatus.unknown": "Sconosciuto",
     "merchant.dashboard.used": "Utilizzato",
   },
 };

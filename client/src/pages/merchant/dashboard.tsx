@@ -30,10 +30,33 @@ import { useCurrency } from "@/lib/currency";
 import { useI18n } from "@/lib/i18n";
 import type { MerchantDashboardStats, Order, Product } from "@shared/schema";
 
+const orderStatusMap: Record<string, string> = {
+  pending: "merchant.dashboard.orderStatus.pending",
+  completed: "merchant.dashboard.orderStatus.completed",
+  processing: "merchant.dashboard.orderStatus.processing",
+  cancelled: "merchant.dashboard.orderStatus.cancelled",
+};
+
+const productStatusMap: Record<string, string> = {
+  active: "merchant.dashboard.productStatus.active",
+  draft: "merchant.dashboard.productStatus.draft",
+  archived: "merchant.dashboard.productStatus.archived",
+};
+
 export default function MerchantDashboard() {
   const { user } = useAuth();
   const { formatPrice } = useCurrency();
   const { t } = useI18n();
+  
+  const translateOrderStatus = (status: string) => {
+    const key = orderStatusMap[status];
+    return key ? t(key as any) : t("merchant.dashboard.orderStatus.unknown" as any);
+  };
+  
+  const translateProductStatus = (status: string) => {
+    const key = productStatusMap[status];
+    return key ? t(key as any) : t("merchant.dashboard.productStatus.unknown" as any);
+  };
 
   const { data: stats, isLoading: statsLoading } = useQuery<MerchantDashboardStats>({
     queryKey: ["/api/merchant/dashboard"],
@@ -259,7 +282,7 @@ export default function MerchantDashboard() {
                         <Badge
                           variant={order.status === "completed" ? "default" : "outline"}
                         >
-                          {t(`merchant.dashboard.orderStatus.${order.status}` as any) || order.status}
+                          {translateOrderStatus(order.status)}
                         </Badge>
                       </TableCell>
                       <TableCell className="text-right font-medium">
@@ -326,7 +349,7 @@ export default function MerchantDashboard() {
                       </div>
                     </div>
                     <Badge variant={product.status === "active" ? "default" : "secondary"}>
-                      {t(`merchant.dashboard.productStatus.${product.status}` as any) || product.status}
+                      {translateProductStatus(product.status)}
                     </Badge>
                   </div>
                 ))}
