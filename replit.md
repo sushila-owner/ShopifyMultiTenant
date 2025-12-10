@@ -32,6 +32,7 @@ Preferred communication style: Simple, everyday language.
 - **Schema**: Defined in `shared/schema.ts` with Zod validation.
 - **Data Models**: Users, Authentication, Product Catalog (suppliers, global/merchant products, variants, images, categories), Order Management (orders, items, fulfillment, customers), Business Logic (subscription tiers, pricing rules, customer tiers).
 - **Multi-Tenancy**: `merchantId` foreign key for data isolation, admin bypasses filters.
+- **PlanetScale Compatibility**: Product queries use explicit column selection to avoid selecting `categoryId` column (not yet in PlanetScale). Helper methods `productSelectColumns` and `addNullCategoryId` in `DatabaseStorage` class handle this.
 
 ### System Design Choices
 - **Subscription System**: 6-tier plans (Free, Starter, Growth, Professional, Millionaire, FREE FOR LIFE) with varying product/order limits and features (AI ads, white-label, VIP support).

@@ -1608,6 +1608,8 @@ export async function registerRoutes(
         sortDirection = "desc"
       } = req.query;
 
+      console.log("[MerchantCatalog] Fetching products with params:", { page, pageSize, search, supplierId, category });
+      
       const paginatedProducts = await storage.getGlobalProductsPaginated({
         page: parseInt(page as string, 10) || 1,
         pageSize: Math.min(parseInt(pageSize as string, 10) || 50, 100), // Max 100 per page
@@ -1621,6 +1623,8 @@ export async function registerRoutes(
         sortDirection: (sortDirection as "asc" | "desc") || "desc"
       });
 
+      console.log("[MerchantCatalog] Fetched products:", { count: paginatedProducts.items.length, total: paginatedProducts.total });
+      
       const suppliers = await storage.getActiveSuppliers();
       res.json({ 
         success: true, 
@@ -1636,6 +1640,7 @@ export async function registerRoutes(
         } 
       });
     } catch (error: any) {
+      console.error("[MerchantCatalog] Error:", error);
       res.status(500).json({ success: false, error: error.message });
     }
   });

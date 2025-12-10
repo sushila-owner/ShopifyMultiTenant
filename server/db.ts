@@ -2,6 +2,9 @@ import { Pool } from 'pg';
 import { drizzle } from 'drizzle-orm/node-postgres';
 import * as schema from "@shared/schema";
 
+// Check if using PlanetScale or local Postgres
+const usePlanetScale = !!process.env.PLANETSCALE_HOST;
+
 const host = process.env.PLANETSCALE_HOST || process.env.PGHOST;
 const port = parseInt(process.env.PLANETSCALE_PORT || process.env.PGPORT || '5432');
 const database = process.env.PLANETSCALE_DATABASE || process.env.PGDATABASE;
@@ -14,15 +17,16 @@ if (!host || !database || !user || !password) {
   );
 }
 
+// Configure SSL based on database type
+const sslConfig = usePlanetScale ? { rejectUnauthorized: true } : { rejectUnauthorized: false };
+
 export const pool = new Pool({
   host,
   port,
   database,
   user,
   password,
-  ssl: {
-    rejectUnauthorized: true,
-  },
+  ssl: sslConfig,
   max: 10,
   idleTimeoutMillis: 30000,
   connectionTimeoutMillis: 10000,

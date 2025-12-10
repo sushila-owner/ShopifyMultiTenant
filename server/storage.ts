@@ -193,6 +193,43 @@ export interface IStorage {
 }
 
 export class DatabaseStorage implements IStorage {
+  // Helper to select products without categoryId column (for PlanetScale compatibility)
+  private productSelectColumns = {
+    id: products.id,
+    merchantId: products.merchantId,
+    supplierId: products.supplierId,
+    title: products.title,
+    description: products.description,
+    category: products.category,
+    tags: products.tags,
+    images: products.images,
+    variants: products.variants,
+    supplierProductId: products.supplierProductId,
+    supplierSku: products.supplierSku,
+    supplierPrice: products.supplierPrice,
+    merchantPrice: products.merchantPrice,
+    pricingRule: products.pricingRule,
+    inventoryQuantity: products.inventoryQuantity,
+    lowStockThreshold: products.lowStockThreshold,
+    trackInventory: products.trackInventory,
+    status: products.status,
+    isGlobal: products.isGlobal,
+    shopifyProductId: products.shopifyProductId,
+    syncStatus: products.syncStatus,
+    lastSyncedAt: products.lastSyncedAt,
+    importedAt: products.importedAt,
+    createdAt: products.createdAt,
+    updatedAt: products.updatedAt,
+  };
+
+  private addNullCategoryId(items: any[]): Product[] {
+    return items.map(item => ({ ...item, categoryId: null })) as Product[];
+  }
+
+  private addNullCategoryIdSingle(item: any): Product {
+    return { ...item, categoryId: null } as Product;
+  }
+
   // ==================== USERS ====================
   async getUser(id: number): Promise<User | undefined> {
     const [user] = await db.select().from(users).where(eq(users.id, id));
@@ -365,8 +402,8 @@ export class DatabaseStorage implements IStorage {
 
   // ==================== PRODUCTS ====================
   async getProduct(id: number): Promise<Product | undefined> {
-    const [product] = await db.select().from(products).where(eq(products.id, id));
-    return product || undefined;
+    const [product] = await db.select(this.productSelectColumns).from(products).where(eq(products.id, id));
+    return product ? this.addNullCategoryIdSingle(product) : undefined;
   }
 
   async createProduct(insertProduct: InsertProduct): Promise<Product> {
@@ -486,9 +523,10 @@ export class DatabaseStorage implements IStorage {
   }
 
   async getGlobalProducts(): Promise<Product[]> {
-    return db.select().from(products)
+    const items = await db.select(this.productSelectColumns).from(products)
       .where(and(eq(products.isGlobal, true), isNull(products.merchantId)))
       .orderBy(desc(products.createdAt));
+    return this.addNullCategoryId(items);
   }
 
   async getGlobalProductsPaginated(params: PaginationParams): Promise<PaginatedResponse<Product>> {
@@ -510,9 +548,10 @@ export class DatabaseStorage implements IStorage {
       conditions.push(eq(products.category, category));
     }
 
-    if (categoryId) {
-      conditions.push(eq(products.categoryId, categoryId));
-    }
+    // categoryId filtering disabled until migration is applied to production database
+    // if (categoryId) {
+    //   conditions.push(eq(products.categoryId, categoryId));
+    // }
 
     if (priceMin !== undefined) {
       conditions.push(gte(products.supplierPrice, priceMin));
@@ -556,9 +595,9 @@ export class DatabaseStorage implements IStorage {
     
     const orderFn = sortDirection === "asc" ? asc : desc;
 
-    // Get paginated items
+    // Get paginated items using the class-level helper (excludes categoryId for PlanetScale compatibility)
     const items = await db
-      .select()
+      .select(this.productSelectColumns)
       .from(products)
       .where(whereClause)
       .orderBy(orderFn(sortColumn))
@@ -566,7 +605,7 @@ export class DatabaseStorage implements IStorage {
       .offset(offset);
 
     return {
-      items,
+      items: this.addNullCategoryId(items),
       total,
       page,
       pageSize,
@@ -575,26 +614,30 @@ export class DatabaseStorage implements IStorage {
   }
 
   async getProductsByMerchant(merchantId: number): Promise<Product[]> {
-    return db.select().from(products)
+    const items = await db.select(this.productSelectColumns).from(products)
       .where(eq(products.merchantId, merchantId))
       .orderBy(desc(products.createdAt));
+    return this.addNullCategoryId(items);
   }
 
   async getProductsBySupplier(supplierId: number): Promise<Product[]> {
-    return db.select().from(products).where(eq(products.supplierId, supplierId));
+    const items = await db.select(this.productSelectColumns).from(products).where(eq(products.supplierId, supplierId));
+    return this.addNullCategoryId(items);
   }
 
   async getProductsBySupplierProductId(supplierId: number, supplierProductId: string): Promise<Product[]> {
-    return db.select().from(products).where(
+    const items = await db.select(this.productSelectColumns).from(products).where(
       and(
         eq(products.supplierId, supplierId),
         eq(products.supplierProductId, supplierProductId)
       )
     );
+    return this.addNullCategoryId(items);
   }
 
   async getProductsByCategory(categoryId: number): Promise<Product[]> {
-    return db.select().from(products).where(eq(products.categoryId, categoryId)).orderBy(desc(products.createdAt));
+    // Category filtering disabled until migration is applied to production database
+    return [];
   }
 
   // ==================== CUSTOMERS ====================
