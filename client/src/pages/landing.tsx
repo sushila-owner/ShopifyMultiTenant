@@ -25,76 +25,7 @@ import { Sheet, SheetContent, SheetTrigger, SheetClose, SheetTitle, SheetDescrip
 import { useState } from "react";
 import { SiShopify } from "react-icons/si";
 import logoImage from "@assets/F66C5CC9-75FA-449A-AAF8-3CBF0FAC2486_1764749832622.png";
-
-type PlanConfig = {
-  id: string;
-  nameKey: string;
-  price: number;
-  period: "forever" | "month";
-  descriptionKey: string;
-  badge: null | "popular" | "millionaire";
-  featureKeys: string[];
-  popular: boolean;
-  freeForLife: boolean;
-};
-
-const planConfigs: PlanConfig[] = [
-  {
-    id: "free",
-    nameKey: "pricing.free",
-    price: 0,
-    period: "forever",
-    descriptionKey: "pricing.freeDescription",
-    badge: null,
-    featureKeys: ["pricing.features.products25", "pricing.features.orders50", "pricing.features.team1", "pricing.features.basicAnalytics", "pricing.features.emailSupport"],
-    popular: false,
-    freeForLife: false,
-  },
-  {
-    id: "starter",
-    nameKey: "pricing.starter",
-    price: 29,
-    period: "month",
-    descriptionKey: "pricing.starterDescription",
-    badge: null,
-    featureKeys: ["pricing.features.products100", "pricing.features.orders500", "pricing.features.team3", "pricing.features.aiAd1", "pricing.features.prioritySupport"],
-    popular: false,
-    freeForLife: true,
-  },
-  {
-    id: "growth",
-    nameKey: "pricing.growth",
-    price: 49,
-    period: "month",
-    descriptionKey: "pricing.growthDescription",
-    badge: null,
-    featureKeys: ["pricing.features.products250", "pricing.features.orders1500", "pricing.features.team5", "pricing.features.aiAd2", "pricing.features.chatSupport"],
-    popular: true,
-    freeForLife: true,
-  },
-  {
-    id: "professional",
-    nameKey: "pricing.professional",
-    price: 99,
-    period: "month",
-    descriptionKey: "pricing.professionalDescription",
-    badge: "popular",
-    featureKeys: ["pricing.features.products1000", "pricing.features.orders5000", "pricing.features.team10", "pricing.features.aiAd3", "pricing.features.videoAds", "pricing.features.apiAccess"],
-    popular: false,
-    freeForLife: true,
-  },
-  {
-    id: "millionaire",
-    nameKey: "pricing.millionaire",
-    price: 249,
-    period: "month",
-    descriptionKey: "pricing.millionaireDescription",
-    badge: "millionaire",
-    featureKeys: ["pricing.features.unlimitedProducts", "pricing.features.unlimitedOrders", "pricing.features.unlimitedTeam", "pricing.features.aiAd5", "pricing.features.whiteLabel", "pricing.features.vipSupport", "pricing.features.dedicatedManager"],
-    popular: false,
-    freeForLife: true,
-  },
-];
+import { PRICING_PLANS } from "@/lib/pricing";
 
 export default function LandingPage() {
   const { t } = useI18n();
@@ -492,7 +423,7 @@ export default function LandingPage() {
             </p>
           </div>
           <div className="grid md:grid-cols-2 lg:grid-cols-3 xl:grid-cols-5 gap-6 max-w-7xl mx-auto">
-            {planConfigs.map((plan) => (
+            {PRICING_PLANS.map((plan) => (
               <Card
                 key={plan.id}
                 className={`relative ${plan.popular ? "border-primary shadow-lg" : ""} ${plan.badge === "millionaire" ? "border-amber-500 shadow-lg" : ""}`}

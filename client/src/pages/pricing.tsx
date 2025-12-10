@@ -3,79 +3,7 @@ import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardDescription, CardFooter, CardHeader, CardTitle } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
 import { Check, ArrowLeft } from "lucide-react";
-
-const plans = [
-  {
-    name: "Free",
-    price: 0,
-    description: "Get started with basic features",
-    features: [
-      "Up to 25 products",
-      "10 orders per month",
-      "Basic analytics",
-      "Email support"
-    ],
-    popular: false
-  },
-  {
-    name: "Starter",
-    price: 29,
-    description: "For growing businesses",
-    features: [
-      "Up to 100 products",
-      "100 orders per month",
-      "Advanced analytics",
-      "Priority email support",
-      "Shopify integration"
-    ],
-    popular: false
-  },
-  {
-    name: "Growth",
-    price: 49,
-    description: "Scale your operations",
-    features: [
-      "Up to 500 products",
-      "500 orders per month",
-      "Full analytics suite",
-      "Priority support",
-      "Multi-currency",
-      "Team members (3)"
-    ],
-    popular: true
-  },
-  {
-    name: "Professional",
-    price: 99,
-    description: "For established businesses",
-    features: [
-      "Up to 2,000 products",
-      "2,000 orders per month",
-      "AI-powered insights",
-      "Dedicated support",
-      "White-label options",
-      "Team members (10)",
-      "API access"
-    ],
-    popular: false
-  },
-  {
-    name: "Millionaire",
-    price: 249,
-    description: "Enterprise-grade features",
-    features: [
-      "Unlimited products",
-      "Unlimited orders",
-      "VIP support",
-      "Custom integrations",
-      "Dedicated account manager",
-      "Unlimited team members",
-      "Full API access",
-      "Custom reporting"
-    ],
-    popular: false
-  }
-];
+import { PRICING_PLANS, FREE_FOR_LIFE_THRESHOLD, formatPrice } from "@/lib/pricing";
 
 export default function PricingPage() {
   return (
@@ -102,11 +30,11 @@ export default function PricingPage() {
         </div>
 
         <div className="grid md:grid-cols-2 lg:grid-cols-3 xl:grid-cols-5 gap-6">
-          {plans.map((plan, index) => (
+          {PRICING_PLANS.map((plan, index) => (
             <Card 
-              key={index} 
+              key={plan.id} 
               className={`relative ${plan.popular ? 'border-primary shadow-lg' : ''}`}
-              data-testid={`card-plan-${plan.name.toLowerCase()}`}
+              data-testid={`card-plan-${plan.id}`}
             >
               {plan.popular && (
                 <Badge className="absolute -top-3 left-1/2 -translate-x-1/2">
@@ -117,8 +45,8 @@ export default function PricingPage() {
                 <CardTitle>{plan.name}</CardTitle>
                 <CardDescription>{plan.description}</CardDescription>
                 <div className="mt-4">
-                  <span className="text-4xl font-bold">${plan.price}</span>
-                  <span className="text-muted-foreground">/month</span>
+                  <span className="text-4xl font-bold">{formatPrice(plan.price)}</span>
+                  <span className="text-muted-foreground">/{plan.period === "forever" ? "forever" : "month"}</span>
                 </div>
               </CardHeader>
               <CardContent>
@@ -136,7 +64,7 @@ export default function PricingPage() {
                   <Button 
                     className="w-full" 
                     variant={plan.popular ? "default" : "outline"}
-                    data-testid={`button-select-${plan.name.toLowerCase()}`}
+                    data-testid={`button-select-${plan.id}`}
                   >
                     Get Started
                   </Button>
