@@ -21,11 +21,14 @@ import {
   Clock,
   Plug,
   AlertCircle,
+  Wifi,
+  WifiOff,
 } from "lucide-react";
 import { SiShopify } from "react-icons/si";
 import { useQuery } from "@tanstack/react-query";
 import { Link } from "wouter";
 import { useAuth } from "@/lib/auth";
+import { useRealtimeAnalytics } from "@/hooks/use-realtime-analytics";
 import type { MerchantDashboardStats, Order, Product } from "@shared/schema";
 
 export default function MerchantDashboard() {
