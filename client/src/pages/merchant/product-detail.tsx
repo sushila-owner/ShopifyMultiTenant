@@ -25,6 +25,8 @@ import {
 } from "@/components/ui/dialog";
 import { useToast } from "@/hooks/use-toast";
 import { queryClient, apiRequest } from "@/lib/queryClient";
+import { useTranslateProduct, useTranslateBatch } from "@/hooks/useTranslation";
+import { useI18n } from "@/lib/i18n";
 import {
   ArrowLeft,
   Package,
@@ -46,6 +48,7 @@ import {
   Shield,
   Clock,
   Zap,
+  Languages,
 } from "lucide-react";
 import type { Product } from "@shared/schema";
 
@@ -62,6 +65,7 @@ const statusColors: Record<string, "default" | "secondary" | "destructive" | "ou
 
 export default function MerchantProductDetailPage() {
   const { toast } = useToast();
+  const { language } = useI18n();
   const [, catalogParams] = useRoute("/dashboard/catalog/:id");
   const [, productsParams] = useRoute("/dashboard/products/:id");
   const productId = catalogParams?.id || productsParams?.id;
@@ -76,6 +80,15 @@ export default function MerchantProductDetailPage() {
     queryKey: [`/api/merchant/products/${productId}`],
     enabled: !!productId,
   });
+
+  const translated = useTranslateProduct(product ? {
+    id: product.id,
+    title: product.title,
+    description: product.description,
+    tags: product.tags as string[] | null,
+  } : null);
+
+  const isTranslating = translated.isLoading && language.code !== 'en';
 
   const importMutation = useMutation({
     mutationFn: async (productIds: number[]) => {
@@ -159,7 +172,8 @@ export default function MerchantProductDetailPage() {
 
   const images = product.images as { url: string; alt?: string; position?: number }[] | null;
   const variants = product.variants as { id: string; title: string; price: number; sku: string; inventoryQuantity: number }[] | null;
-  const tags = product.tags as string[] | null;
+  const originalTags = product.tags as string[] | null;
+  const displayTags = translated.tags || originalTags;
   const profit = calculateProfit(product.supplierPrice);
   const profitPercent = ((profit / product.supplierPrice) * 100).toFixed(0);
   const stock = product.inventoryQuantity || 0;
@@ -350,9 +364,16 @@ export default function MerchantProductDetailPage() {
             <div>
               <div className="flex items-start justify-between gap-4 mb-4">
                 <div className="flex-1">
-                  <h1 className="text-2xl md:text-3xl font-bold leading-tight" data-testid="text-product-title">
-                    {product.title}
-                  </h1>
+                  <div className="flex items-center gap-2">
+                    <h1 className="text-2xl md:text-3xl font-bold leading-tight" data-testid="text-product-title">
+                      {isTranslating ? <Skeleton className="h-8 w-64" /> : translated.title}
+                    </h1>
+                    {language.code !== 'en' && !isTranslating && (
+                      <span title={`Translated to ${language.name}`}>
+                        <Languages className="h-5 w-5 text-muted-foreground" />
+                      </span>
+                    )}
+                  </div>
                   <p className="text-muted-foreground mt-2">
                     SKU: {product.supplierSku || "N/A"}
                   </p>
@@ -472,13 +493,27 @@ export default function MerchantProductDetailPage() {
                 <CardTitle className="flex items-center gap-2">
                   <Info className="h-5 w-5" />
                   Product Description
+                  {language.code !== 'en' && !isTranslating && (
+                    <Badge variant="outline" className="text-xs gap-1 font-normal">
+                      <Languages className="h-3 w-3" />
+                      {language.name}
+                    </Badge>
+                  )}
                 </CardTitle>
               </CardHeader>
               <CardContent>
-                <div 
-                  className="prose prose-sm dark:prose-invert max-w-none"
-                  dangerouslySetInnerHTML={{ __html: product.description }}
-                />
+                {isTranslating ? (
+                  <div className="space-y-2">
+                    <Skeleton className="h-4 w-full" />
+                    <Skeleton className="h-4 w-3/4" />
+                    <Skeleton className="h-4 w-5/6" />
+                  </div>
+                ) : (
+                  <div 
+                    className="prose prose-sm dark:prose-invert max-w-none"
+                    dangerouslySetInnerHTML={{ __html: translated.description || product.description }}
+                  />
+                )}
               </CardContent>
             </Card>
           )}
@@ -513,17 +548,20 @@ export default function MerchantProductDetailPage() {
               </Card>
             )}
 
-            {tags && tags.length > 0 && (
+            {displayTags && displayTags.length > 0 && (
               <Card>
                 <CardHeader>
                   <CardTitle className="flex items-center gap-2 text-base">
                     <Tag className="h-5 w-5" />
                     Tags
+                    {language.code !== 'en' && (
+                      <Languages className="h-4 w-4 text-muted-foreground" />
+                    )}
                   </CardTitle>
                 </CardHeader>
                 <CardContent>
                   <div className="flex flex-wrap gap-2">
-                    {tags.map((tag, idx) => (
+                    {displayTags.map((tag, idx) => (
                       <Badge key={idx} variant="secondary" className="text-xs">
                         {tag}
                       </Badge>

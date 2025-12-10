@@ -57,6 +57,38 @@ Preferred communication style: Simple, everyday language.
 - **Caching**: Simple in-memory cache for performance.
 - **Session Storage (Redis)**: Upstash Redis (REST API) for distributed OAuth session storage. Falls back to in-memory storage when not configured. Auto-detects swapped URL/Token values.
 
+### DeepL Translation Integration
+- **Purpose**: App-wide translation for dynamic content (product titles, descriptions, tags) based on customer's language preference
+- **Service**: `server/deepl.ts` - DeepL API service with in-memory caching (24-hour TTL)
+- **Frontend Hook**: `client/src/hooks/useTranslation.ts` - React hooks for translating text, products, and batch content
+- **Components**: `client/src/components/TranslatedText.tsx` - Ready-to-use translation components
+
+**API Endpoints**:
+- `GET /api/translation/status` - Check if DeepL is configured and usage stats
+- `POST /api/translation/translate` - Translate single text or batch texts
+- `POST /api/translation/product` - Translate product object (title, description, tags)
+- `GET /api/translation/product/:id?lang=xx` - Get translated product by ID
+- `GET /api/translation/languages` - Get supported source/target languages
+
+**Frontend Usage**:
+```tsx
+import { useTranslateProduct, useTranslateText } from "@/hooks/useTranslation";
+import { TranslatedText } from "@/components/TranslatedText";
+
+// Hook for product translation
+const { title, description, tags, isLoading } = useTranslateProduct(product);
+
+// Hook for simple text
+const { text, isLoading } = useTranslateText("Hello world");
+
+// Component for inline translation
+<TranslatedText text={someText} showLoading={true} />
+```
+
+**Supported Languages**: EN, ES, FR, DE, IT, PT, RU, ZH, JA, KO, AR, NL, PL, TR, ID (and 10+ more)
+- **Required Secret**: `DEEPL_API_KEY` (free tier: 500,000 chars/month)
+- **Caching**: In-memory cache prevents duplicate API calls, 24-hour TTL
+
 ### File Structure
 - **Monorepo**: `/client`, `/server`, `/shared`, `/migrations`, `/attached_assets`, `/script`.
 - **Path Aliases**: `@/*`, `@shared/*`, `@assets/*`.
@@ -77,6 +109,7 @@ Preferred communication style: Simple, everyday language.
 - `AWS_ACCESS_KEY_ID`, `AWS_SECRET_ACCESS_KEY`, `AWS_S3_BUCKET`, `AWS_S3_REGION` - Image storage
 - `ANTHROPIC_API_KEY` - Claude AI semantic search
 - `UPSTASH_REDIS_REST_URL`, `UPSTASH_REDIS_REST_TOKEN` - Redis session storage (optional, recommended for production)
+- `DEEPL_API_KEY` - DeepL translation API (optional, free tier: 500,000 chars/month)
 
 ### Performance Optimizations
 - **Batch Sync**: Imports 250 products per batch (10-50x faster than one-by-one)

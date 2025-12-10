@@ -152,10 +152,18 @@ class DeepLService {
     }
 
     try {
+      // Detect if text contains HTML tags and enable full HTML tag handling
+      const containsHtml = /<[^>]+>/g.test(text);
+      const options = containsHtml ? { 
+        tagHandling: 'html' as const,
+        outlineDetection: false, // Prevent sentence splitting in HTML
+      } : undefined;
+      
       const result = await this.client!.translateText(
         text,
         sourceLang ? (SOURCE_LANG_MAP[sourceLang] || null) : null,
-        deeplTarget as deepl.TargetLanguageCode
+        deeplTarget as deepl.TargetLanguageCode,
+        options
       );
 
       const translatedText = result.text;
@@ -216,10 +224,18 @@ class DeepLService {
         const batch = toTranslate.slice(i, i + batchSize);
         const batchTexts = batch.map(item => item.text);
 
+        // Detect if any text contains HTML tags and enable full HTML tag handling
+        const containsHtml = batchTexts.some(text => /<[^>]+>/g.test(text));
+        const options = containsHtml ? { 
+          tagHandling: 'html' as const,
+          outlineDetection: false, // Prevent sentence splitting in HTML
+        } : undefined;
+        
         const batchResults = await this.client!.translateText(
           batchTexts,
           sourceLang ? (SOURCE_LANG_MAP[sourceLang] || null) : null,
-          deeplTarget as deepl.TargetLanguageCode
+          deeplTarget as deepl.TargetLanguageCode,
+          options
         );
 
         // Handle both single and array results
