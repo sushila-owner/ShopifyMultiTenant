@@ -88,9 +88,6 @@ app.use((req, res, next) => {
   // It is the only port that is not firewalled.
   const port = parseInt(process.env.PORT || "5000", 10);
   
-  // Initialize real-time analytics WebSocket server
-  analyticsEvents.initialize(httpServer);
-  
   httpServer.listen(
     {
       port,
@@ -100,10 +97,16 @@ app.use((req, res, next) => {
     () => {
       log(`serving on port ${port}`);
       
+      // Initialize real-time analytics WebSocket server AFTER server starts
+      // Only in production to avoid conflicts with Vite HMR in development
+      if (process.env.NODE_ENV === "production") {
+        analyticsEvents.initialize(httpServer);
+        log("Real-time analytics WebSocket server active on /ws/analytics");
+      }
+      
       // Start automated supplier sync service (every 15 minutes)
       supplierSyncService.start();
       log("Supplier sync service started (15-minute interval)");
-      log("Real-time analytics WebSocket server active on /ws/analytics");
     },
   );
 })();
