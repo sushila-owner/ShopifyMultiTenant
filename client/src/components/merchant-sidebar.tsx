@@ -28,32 +28,34 @@ import {
   Plug,
 } from "lucide-react";
 import { useAuth } from "@/lib/auth";
+import { useI18n } from "@/lib/i18n";
 import { useQuery } from "@tanstack/react-query";
 import logoImage from "@assets/F66C5CC9-75FA-449A-AAF8-3CBF0FAC2486_1764749832622.png";
 import { GlobeSettings } from "@/components/globe-settings";
 
 const mainMenuItems = [
-  { title: "Dashboard", url: "/dashboard", icon: LayoutDashboard },
-  { title: "Product Catalog", url: "/dashboard/catalog", icon: Search },
-  { title: "My Products", url: "/dashboard/products", icon: Package },
-  { title: "Orders", url: "/dashboard/orders", icon: ShoppingCart },
-  { title: "Customers", url: "/dashboard/customers", icon: Users },
+  { titleKey: "merchant.sidebar.dashboard" as const, url: "/dashboard", icon: LayoutDashboard },
+  { titleKey: "merchant.sidebar.catalog" as const, url: "/dashboard/catalog", icon: Search },
+  { titleKey: "merchant.sidebar.products" as const, url: "/dashboard/products", icon: Package },
+  { titleKey: "merchant.sidebar.orders" as const, url: "/dashboard/orders", icon: ShoppingCart },
+  { titleKey: "merchant.sidebar.customers" as const, url: "/dashboard/customers", icon: Users },
 ];
 
 const businessMenuItems = [
-  { title: "Analytics", url: "/dashboard/analytics", icon: BarChart3 },
-  { title: "Integrations", url: "/dashboard/integrations", icon: Plug },
-  { title: "Team", url: "/dashboard/team", icon: UserPlus },
+  { titleKey: "merchant.sidebar.analytics" as const, url: "/dashboard/analytics", icon: BarChart3 },
+  { titleKey: "merchant.sidebar.integrations" as const, url: "/dashboard/integrations", icon: Plug },
+  { titleKey: "merchant.sidebar.team" as const, url: "/dashboard/team", icon: UserPlus },
 ];
 
 const settingsMenuItems = [
-  { title: "Subscription", url: "/dashboard/subscription", icon: CreditCard },
-  { title: "Settings", url: "/dashboard/settings", icon: Settings },
+  { titleKey: "merchant.sidebar.subscription" as const, url: "/dashboard/subscription", icon: CreditCard },
+  { titleKey: "merchant.sidebar.settings" as const, url: "/dashboard/settings", icon: Settings },
 ];
 
 export function MerchantSidebar() {
   const [location] = useLocation();
   const { user, logout } = useAuth();
+  const { t } = useI18n();
 
   const { data: stats } = useQuery<{ currentProductCount: number; productLimit: number }>({
     queryKey: ["/api/merchants/stats"],
@@ -80,19 +82,19 @@ export function MerchantSidebar() {
 
       <SidebarContent>
         <SidebarGroup>
-          <SidebarGroupLabel>Main</SidebarGroupLabel>
+          <SidebarGroupLabel>{t("merchant.sidebar.main")}</SidebarGroupLabel>
           <SidebarGroupContent>
             <SidebarMenu>
               {mainMenuItems.map((item) => (
-                <SidebarMenuItem key={item.title}>
+                <SidebarMenuItem key={item.titleKey}>
                   <SidebarMenuButton
                     asChild
                     isActive={isActive(item.url)}
-                    data-testid={`nav-${item.title.toLowerCase().replace(/\s+/g, "-")}`}
+                    data-testid={`nav-${item.url.split('/').pop()}`}
                   >
                     <Link href={item.url}>
                       <item.icon className="h-4 w-4" />
-                      <span>{item.title}</span>
+                      <span>{t(item.titleKey)}</span>
                     </Link>
                   </SidebarMenuButton>
                 </SidebarMenuItem>
@@ -102,19 +104,19 @@ export function MerchantSidebar() {
         </SidebarGroup>
 
         <SidebarGroup>
-          <SidebarGroupLabel>Business</SidebarGroupLabel>
+          <SidebarGroupLabel>{t("merchant.sidebar.business")}</SidebarGroupLabel>
           <SidebarGroupContent>
             <SidebarMenu>
               {businessMenuItems.map((item) => (
-                <SidebarMenuItem key={item.title}>
+                <SidebarMenuItem key={item.titleKey}>
                   <SidebarMenuButton
                     asChild
                     isActive={isActive(item.url)}
-                    data-testid={`nav-${item.title.toLowerCase()}`}
+                    data-testid={`nav-${item.url.split('/').pop()}`}
                   >
                     <Link href={item.url}>
                       <item.icon className="h-4 w-4" />
-                      <span>{item.title}</span>
+                      <span>{t(item.titleKey)}</span>
                     </Link>
                   </SidebarMenuButton>
                 </SidebarMenuItem>
@@ -124,19 +126,19 @@ export function MerchantSidebar() {
         </SidebarGroup>
 
         <SidebarGroup>
-          <SidebarGroupLabel>Account</SidebarGroupLabel>
+          <SidebarGroupLabel>{t("merchant.sidebar.account")}</SidebarGroupLabel>
           <SidebarGroupContent>
             <SidebarMenu>
               {settingsMenuItems.map((item) => (
-                <SidebarMenuItem key={item.title}>
+                <SidebarMenuItem key={item.titleKey}>
                   <SidebarMenuButton
                     asChild
                     isActive={isActive(item.url)}
-                    data-testid={`nav-${item.title.toLowerCase()}`}
+                    data-testid={`nav-${item.url.split('/').pop()}`}
                   >
                     <Link href={item.url}>
                       <item.icon className="h-4 w-4" />
-                      <span>{item.title}</span>
+                      <span>{t(item.titleKey)}</span>
                     </Link>
                   </SidebarMenuButton>
                 </SidebarMenuItem>
@@ -148,11 +150,11 @@ export function MerchantSidebar() {
         {/* Product Usage Indicator */}
         {stats && (
           <SidebarGroup>
-            <SidebarGroupLabel>Product Usage</SidebarGroupLabel>
+            <SidebarGroupLabel>{t("merchant.sidebar.productUsage")}</SidebarGroupLabel>
             <SidebarGroupContent>
               <div className="px-2 py-2">
                 <div className="flex justify-between text-xs mb-2">
-                  <span className="text-muted-foreground">Products</span>
+                  <span className="text-muted-foreground">{t("merchant.sidebar.products")}</span>
                   <span className="font-medium">
                     {stats.currentProductCount} / {stats.productLimit}
                   </span>
@@ -160,7 +162,7 @@ export function MerchantSidebar() {
                 <Progress value={productUsage} className="h-2" />
                 {productUsage > 80 && (
                   <p className="text-xs text-chart-4 mt-1">
-                    Approaching limit. Consider upgrading.
+                    {t("merchant.sidebar.approachingLimit")}
                   </p>
                 )}
               </div>
@@ -173,7 +175,7 @@ export function MerchantSidebar() {
         <SidebarMenu>
           <SidebarMenuItem>
             <div className="flex items-center justify-between px-2 py-1.5">
-              <span className="text-xs text-muted-foreground">Language & Currency</span>
+              <span className="text-xs text-muted-foreground">{t("merchant.sidebar.languageCurrency")}</span>
               <GlobeSettings />
             </div>
           </SidebarMenuItem>
@@ -198,7 +200,7 @@ export function MerchantSidebar() {
               data-testid="button-logout"
             >
               <LogOut className="h-4 w-4" />
-              <span>Log out</span>
+              <span>{t("merchant.sidebar.logout")}</span>
             </SidebarMenuButton>
           </SidebarMenuItem>
         </SidebarMenu>

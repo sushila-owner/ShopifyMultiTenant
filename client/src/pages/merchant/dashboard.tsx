@@ -26,10 +26,14 @@ import { SiShopify } from "react-icons/si";
 import { useQuery } from "@tanstack/react-query";
 import { Link } from "wouter";
 import { useAuth } from "@/lib/auth";
+import { useCurrency } from "@/lib/currency";
+import { useI18n } from "@/lib/i18n";
 import type { MerchantDashboardStats, Order, Product } from "@shared/schema";
 
 export default function MerchantDashboard() {
   const { user } = useAuth();
+  const { formatPrice } = useCurrency();
+  const { t } = useI18n();
 
   const { data: stats, isLoading: statsLoading } = useQuery<MerchantDashboardStats>({
     queryKey: ["/api/merchant/dashboard"],
@@ -50,22 +54,22 @@ export default function MerchantDashboard() {
     <div className="flex-1 space-y-6 p-6 md:p-8">
       <div className="flex items-center justify-between">
         <div>
-          <h1 className="text-3xl font-bold" data-testid="text-dashboard-title">Dashboard</h1>
+          <h1 className="text-3xl font-bold" data-testid="text-dashboard-title">{t("merchant.dashboard.title")}</h1>
           <p className="text-muted-foreground">
-            Welcome back, {user?.name?.split(" ")[0] || "Merchant"}
+            {t("merchant.dashboard.welcomeBack")}, {user?.name?.split(" ")[0] || t("merchant.dashboard.merchant")}
           </p>
         </div>
         <div className="flex items-center gap-3">
           {isShopifyConnected ? (
             <Badge variant="outline" className="gap-1">
               <SiShopify className="h-3 w-3 text-[#95BF47]" />
-              Shopify Connected
+              {t("merchant.dashboard.shopifyConnected")}
             </Badge>
           ) : (
             <Link href="/dashboard/integrations">
               <Button variant="outline" className="gap-2" data-testid="button-connect-shopify">
                 <Plug className="h-4 w-4" />
-                Connect Shopify
+                {t("merchant.dashboard.connectShopify")}
               </Button>
             </Link>
           )}
@@ -79,14 +83,13 @@ export default function MerchantDashboard() {
             <div className="flex items-center gap-3">
               <AlertCircle className="h-5 w-5 text-chart-4" />
               <div className="flex-1">
-                <p className="font-medium">Approaching product limit</p>
+                <p className="font-medium">{t("merchant.dashboard.approachingProductLimit")}</p>
                 <p className="text-sm text-muted-foreground">
-                  You've used {stats.currentProductCount} of {stats.productLimit} products.
-                  Upgrade your plan for more.
+                  {stats.currentProductCount} / {stats.productLimit} {t("merchant.dashboard.products")}
                 </p>
               </div>
               <Link href="/dashboard/subscription">
-                <Button size="sm" data-testid="button-upgrade-plan">Upgrade</Button>
+                <Button size="sm" data-testid="button-upgrade-plan">{t("merchant.dashboard.upgrade")}</Button>
               </Link>
             </div>
           </CardContent>
@@ -97,7 +100,7 @@ export default function MerchantDashboard() {
       <div className="grid gap-4 md:grid-cols-2 lg:grid-cols-4">
         <Card data-testid="card-stat-revenue">
           <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2 gap-2">
-            <CardTitle className="text-sm font-medium">Total Revenue</CardTitle>
+            <CardTitle className="text-sm font-medium">{t("merchant.dashboard.totalRevenue")}</CardTitle>
             <DollarSign className="h-4 w-4 text-muted-foreground" />
           </CardHeader>
           <CardContent>
@@ -106,11 +109,11 @@ export default function MerchantDashboard() {
             ) : (
               <>
                 <div className="text-2xl font-bold">
-                  ${stats?.totalRevenue.toLocaleString() || 0}
+                  {formatPrice(stats?.totalRevenue || 0)}
                 </div>
                 <div className="flex items-center text-xs text-chart-2">
                   <TrendingUp className="mr-1 h-3 w-3" />
-                  <span>${stats?.revenueToday.toLocaleString() || 0} today</span>
+                  <span>{formatPrice(stats?.revenueToday || 0)} {t("merchant.dashboard.today")}</span>
                 </div>
               </>
             )}
@@ -119,7 +122,7 @@ export default function MerchantDashboard() {
 
         <Card data-testid="card-stat-profit">
           <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2 gap-2">
-            <CardTitle className="text-sm font-medium">Total Profit</CardTitle>
+            <CardTitle className="text-sm font-medium">{t("merchant.dashboard.totalProfit")}</CardTitle>
             <TrendingUp className="h-4 w-4 text-muted-foreground" />
           </CardHeader>
           <CardContent>
@@ -128,11 +131,11 @@ export default function MerchantDashboard() {
             ) : (
               <>
                 <div className="text-2xl font-bold text-chart-2">
-                  ${stats?.totalProfit.toLocaleString() || 0}
+                  {formatPrice(stats?.totalProfit || 0)}
                 </div>
                 <div className="flex items-center text-xs text-chart-2">
                   <TrendingUp className="mr-1 h-3 w-3" />
-                  <span>${stats?.profitToday.toLocaleString() || 0} today</span>
+                  <span>{formatPrice(stats?.profitToday || 0)} {t("merchant.dashboard.today")}</span>
                 </div>
               </>
             )}
@@ -141,7 +144,7 @@ export default function MerchantDashboard() {
 
         <Card data-testid="card-stat-orders">
           <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2 gap-2">
-            <CardTitle className="text-sm font-medium">Orders</CardTitle>
+            <CardTitle className="text-sm font-medium">{t("merchant.dashboard.orders")}</CardTitle>
             <ShoppingCart className="h-4 w-4 text-muted-foreground" />
           </CardHeader>
           <CardContent>
@@ -153,7 +156,7 @@ export default function MerchantDashboard() {
                 <div className="flex items-center gap-2 text-xs">
                   <Badge variant="outline" className="text-chart-4">
                     <Clock className="mr-1 h-3 w-3" />
-                    {stats?.pendingOrders || 0} pending
+                    {stats?.pendingOrders || 0} {t("merchant.dashboard.pending")}
                   </Badge>
                 </div>
               </>
@@ -163,7 +166,7 @@ export default function MerchantDashboard() {
 
         <Card data-testid="card-stat-customers">
           <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2 gap-2">
-            <CardTitle className="text-sm font-medium">Customers</CardTitle>
+            <CardTitle className="text-sm font-medium">{t("merchant.dashboard.customers")}</CardTitle>
             <Users className="h-4 w-4 text-muted-foreground" />
           </CardHeader>
           <CardContent>
@@ -172,7 +175,7 @@ export default function MerchantDashboard() {
             ) : (
               <>
                 <div className="text-2xl font-bold">{stats?.totalCustomers || 0}</div>
-                <div className="text-xs text-muted-foreground">Lifetime customers</div>
+                <div className="text-xs text-muted-foreground">{t("merchant.dashboard.lifetimeCustomers")}</div>
               </>
             )}
           </CardContent>
@@ -183,14 +186,14 @@ export default function MerchantDashboard() {
       <Card>
         <CardHeader className="flex flex-row items-center justify-between gap-2">
           <div>
-            <CardTitle>Product Usage</CardTitle>
+            <CardTitle>{t("merchant.dashboard.productUsage")}</CardTitle>
             <CardDescription>
-              {stats?.currentProductCount || 0} of {stats?.productLimit || 50} products
+              {stats?.currentProductCount || 0} / {stats?.productLimit || 50} {t("merchant.dashboard.products")}
             </CardDescription>
           </div>
           <Link href="/dashboard/catalog">
             <Button variant="outline" size="sm" className="gap-1" data-testid="button-browse-catalog">
-              Browse Catalog
+              {t("merchant.dashboard.browseCatalog")}
               <ArrowRight className="h-4 w-4" />
             </Button>
           </Link>
@@ -198,7 +201,7 @@ export default function MerchantDashboard() {
         <CardContent>
           <Progress value={productUsage} className="h-3" />
           <div className="flex justify-between mt-2 text-xs text-muted-foreground">
-            <span>Used</span>
+            <span>{t("merchant.dashboard.used")}</span>
             <span>{Math.round(productUsage)}%</span>
           </div>
         </CardContent>
@@ -209,12 +212,12 @@ export default function MerchantDashboard() {
         <Card>
           <CardHeader className="flex flex-row items-center justify-between gap-2">
             <div>
-              <CardTitle>Recent Orders</CardTitle>
-              <CardDescription>Latest orders from your store</CardDescription>
+              <CardTitle>{t("merchant.dashboard.recentOrders")}</CardTitle>
+              <CardDescription>{t("merchant.dashboard.latestOrders")}</CardDescription>
             </div>
             <Link href="/dashboard/orders">
               <Button variant="ghost" size="sm" className="gap-1" data-testid="button-view-orders">
-                View all
+                {t("merchant.dashboard.viewAll")}
                 <ArrowRight className="h-4 w-4" />
               </Button>
             </Link>
@@ -236,10 +239,10 @@ export default function MerchantDashboard() {
               <Table>
                 <TableHeader>
                   <TableRow>
-                    <TableHead>Order</TableHead>
-                    <TableHead>Customer</TableHead>
-                    <TableHead>Status</TableHead>
-                    <TableHead className="text-right">Total</TableHead>
+                    <TableHead>{t("merchant.dashboard.order")}</TableHead>
+                    <TableHead>{t("merchant.dashboard.customer")}</TableHead>
+                    <TableHead>{t("merchant.dashboard.status")}</TableHead>
+                    <TableHead className="text-right">{t("merchant.dashboard.total")}</TableHead>
                   </TableRow>
                 </TableHeader>
                 <TableBody>
@@ -256,11 +259,11 @@ export default function MerchantDashboard() {
                         <Badge
                           variant={order.status === "completed" ? "default" : "outline"}
                         >
-                          {order.status}
+                          {t(`merchant.dashboard.orderStatus.${order.status}` as any) || order.status}
                         </Badge>
                       </TableCell>
                       <TableCell className="text-right font-medium">
-                        ${((order.total || 0) / 100).toFixed(2)}
+                        {formatPrice((order.total || 0) / 100)}
                       </TableCell>
                     </TableRow>
                   ))}
@@ -269,8 +272,8 @@ export default function MerchantDashboard() {
             ) : (
               <div className="text-center py-8 text-muted-foreground">
                 <ShoppingCart className="h-12 w-12 mx-auto mb-4 opacity-50" />
-                <p>No orders yet</p>
-                <p className="text-sm">Orders will appear here when you receive them</p>
+                <p>{t("merchant.dashboard.noOrdersYet")}</p>
+                <p className="text-sm">{t("merchant.dashboard.ordersWillAppear")}</p>
               </div>
             )}
           </CardContent>
@@ -280,12 +283,12 @@ export default function MerchantDashboard() {
         <Card>
           <CardHeader className="flex flex-row items-center justify-between gap-2">
             <div>
-              <CardTitle>My Products</CardTitle>
-              <CardDescription>Products in your catalog</CardDescription>
+              <CardTitle>{t("merchant.dashboard.myProducts")}</CardTitle>
+              <CardDescription>{t("merchant.dashboard.productsInCatalog")}</CardDescription>
             </div>
             <Link href="/dashboard/products">
               <Button variant="ghost" size="sm" className="gap-1" data-testid="button-view-products">
-                View all
+                {t("merchant.dashboard.viewAll")}
                 <ArrowRight className="h-4 w-4" />
               </Button>
             </Link>
@@ -318,12 +321,12 @@ export default function MerchantDashboard() {
                       <div>
                         <p className="font-medium line-clamp-1">{product.title}</p>
                         <p className="text-xs text-muted-foreground">
-                          ${product.merchantPrice?.toFixed(2) || product.supplierPrice.toFixed(2)}
+                          {formatPrice(product.merchantPrice || product.supplierPrice)}
                         </p>
                       </div>
                     </div>
                     <Badge variant={product.status === "active" ? "default" : "secondary"}>
-                      {product.status}
+                      {t(`merchant.dashboard.productStatus.${product.status}` as any) || product.status}
                     </Badge>
                   </div>
                 ))}
@@ -331,10 +334,10 @@ export default function MerchantDashboard() {
             ) : (
               <div className="text-center py-8 text-muted-foreground">
                 <Package className="h-12 w-12 mx-auto mb-4 opacity-50" />
-                <p>No products imported</p>
+                <p>{t("merchant.dashboard.noProductsImported")}</p>
                 <Link href="/dashboard/catalog">
                   <Button variant="ghost" className="mt-2">
-                    Browse the catalog
+                    {t("merchant.dashboard.browseCatalog")}
                   </Button>
                 </Link>
               </div>
@@ -346,8 +349,8 @@ export default function MerchantDashboard() {
       {/* Quick Actions */}
       <Card>
         <CardHeader>
-          <CardTitle>Quick Actions</CardTitle>
-          <CardDescription>Common tasks to manage your store</CardDescription>
+          <CardTitle>{t("merchant.dashboard.quickActions")}</CardTitle>
+          <CardDescription>{t("merchant.dashboard.commonTasks")}</CardDescription>
         </CardHeader>
         <CardContent>
           <div className="grid gap-4 md:grid-cols-4">
@@ -355,8 +358,8 @@ export default function MerchantDashboard() {
               <Button variant="outline" className="w-full justify-start gap-2 h-auto py-4" data-testid="button-import-products">
                 <Package className="h-5 w-5 text-primary" />
                 <div className="text-left">
-                  <p className="font-medium">Import Products</p>
-                  <p className="text-xs text-muted-foreground">From catalog</p>
+                  <p className="font-medium">{t("merchant.dashboard.importProducts")}</p>
+                  <p className="text-xs text-muted-foreground">{t("merchant.dashboard.fromCatalog")}</p>
                 </div>
               </Button>
             </Link>
@@ -364,8 +367,8 @@ export default function MerchantDashboard() {
               <Button variant="outline" className="w-full justify-start gap-2 h-auto py-4" data-testid="button-manage-orders">
                 <ShoppingCart className="h-5 w-5 text-chart-2" />
                 <div className="text-left">
-                  <p className="font-medium">Manage Orders</p>
-                  <p className="text-xs text-muted-foreground">View & fulfill</p>
+                  <p className="font-medium">{t("merchant.dashboard.manageOrders")}</p>
+                  <p className="text-xs text-muted-foreground">{t("merchant.dashboard.viewFulfill")}</p>
                 </div>
               </Button>
             </Link>
@@ -373,8 +376,8 @@ export default function MerchantDashboard() {
               <Button variant="outline" className="w-full justify-start gap-2 h-auto py-4" data-testid="button-view-customers">
                 <Users className="h-5 w-5 text-chart-3" />
                 <div className="text-left">
-                  <p className="font-medium">Customers</p>
-                  <p className="text-xs text-muted-foreground">View all</p>
+                  <p className="font-medium">{t("merchant.dashboard.viewCustomers")}</p>
+                  <p className="text-xs text-muted-foreground">{t("merchant.dashboard.viewAll")}</p>
                 </div>
               </Button>
             </Link>
@@ -382,8 +385,8 @@ export default function MerchantDashboard() {
               <Button variant="outline" className="w-full justify-start gap-2 h-auto py-4" data-testid="button-view-analytics">
                 <TrendingUp className="h-5 w-5 text-chart-4" />
                 <div className="text-left">
-                  <p className="font-medium">Analytics</p>
-                  <p className="text-xs text-muted-foreground">View reports</p>
+                  <p className="font-medium">{t("merchant.dashboard.viewAnalytics")}</p>
+                  <p className="text-xs text-muted-foreground">{t("merchant.dashboard.viewReports")}</p>
                 </div>
               </Button>
             </Link>

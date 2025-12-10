@@ -51,11 +51,7 @@ import {
   Languages,
 } from "lucide-react";
 import type { Product } from "@shared/schema";
-
-const formatPrice = (price: number | undefined | null): string => {
-  if (price === undefined || price === null) return "0.00";
-  return price.toFixed(2);
-};
+import { useCurrency } from "@/lib/currency";
 
 const statusColors: Record<string, "default" | "secondary" | "destructive" | "outline"> = {
   active: "default",
@@ -66,6 +62,7 @@ const statusColors: Record<string, "default" | "secondary" | "destructive" | "ou
 export default function MerchantProductDetailPage() {
   const { toast } = useToast();
   const { language } = useI18n();
+  const { formatPrice } = useCurrency();
   const [, catalogParams] = useRoute("/dashboard/catalog/:id");
   const [, productsParams] = useRoute("/dashboard/products/:id");
   const productId = catalogParams?.id || productsParams?.id;
@@ -238,19 +235,19 @@ export default function MerchantProductDetailPage() {
             <div className="p-4 bg-muted/50 rounded-xl space-y-3">
               <div className="flex justify-between text-sm">
                 <span className="text-muted-foreground">Your Cost</span>
-                <span className="font-medium">${formatPrice(product.supplierPrice)}</span>
+                <span className="font-medium">{formatPrice(product.supplierPrice)}</span>
               </div>
               <Separator />
               <div className="flex justify-between text-sm">
                 <span className="text-muted-foreground">Your Selling Price</span>
                 <span className="font-bold text-primary text-lg">
-                  ${formatPrice(calculateMerchantPrice(product.supplierPrice))}
+                  {formatPrice(calculateMerchantPrice(product.supplierPrice))}
                 </span>
               </div>
               <div className="flex justify-between text-sm">
                 <span className="text-muted-foreground">Your Profit</span>
                 <span className="font-medium text-emerald-600">
-                  +${formatPrice(calculateProfit(product.supplierPrice))}
+                  +{formatPrice(calculateProfit(product.supplierPrice))}
                 </span>
               </div>
             </div>
@@ -399,7 +396,7 @@ export default function MerchantProductDetailPage() {
               <CardContent className="p-6">
                 <div className="flex items-baseline gap-3 mb-4">
                   <span className="text-4xl font-bold" data-testid="text-supplier-price">
-                    ${formatPrice(product.supplierPrice)}
+                    {formatPrice(product.supplierPrice)}
                   </span>
                   <span className="text-muted-foreground">your cost</span>
                 </div>
@@ -412,13 +409,13 @@ export default function MerchantProductDetailPage() {
                     </span>
                   </div>
                   <p className="text-2xl font-bold text-emerald-600" data-testid="text-profit">
-                    +${formatPrice(profit)} per sale
+                    +{formatPrice(profit)} per sale
                     <span className="text-base font-normal text-emerald-600/70 ml-2">
                       ({profitPercent}% margin)
                     </span>
                   </p>
                   <p className="text-sm text-muted-foreground mt-1">
-                    Based on {importSettings.pricingValue}% markup • Selling at ${formatPrice(calculateMerchantPrice(product.supplierPrice))}
+                    Based on {importSettings.pricingValue}% markup • Selling at {formatPrice(calculateMerchantPrice(product.supplierPrice))}
                   </p>
                 </div>
 
@@ -540,7 +537,7 @@ export default function MerchantProductDetailPage() {
                             SKU: {variant.sku || "N/A"} • Stock: {variant.inventoryQuantity || 0}
                           </p>
                         </div>
-                        <span className="font-semibold">${formatPrice(variant.price)}</span>
+                        <span className="font-semibold">{formatPrice(variant.price)}</span>
                       </div>
                     ))}
                   </div>

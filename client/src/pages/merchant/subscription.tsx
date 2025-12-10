@@ -28,6 +28,7 @@ import {
   Loader2,
 } from "lucide-react";
 import type { Plan, Subscription } from "@shared/schema";
+import { useCurrency } from "@/lib/currency";
 
 interface SubscriptionData {
   subscription: Subscription | null;
@@ -152,9 +153,10 @@ export default function SubscriptionPage() {
   const lifetimeSales = subscription?.lifetimeSales || 0;
   const progressToFreeForLife = Math.min((lifetimeSales / freeForLifeThreshold) * 100, 100);
   const isFreeForLife = subscription?.status === "free_for_life";
+  const { formatPrice } = useCurrency();
 
   const formatCurrency = (cents: number) => {
-    return `$${(cents / 100).toLocaleString("en-US", { minimumFractionDigits: 0 })}`;
+    return formatPrice(cents / 100);
   };
 
   const getPlanIcon = (planName: string) => {

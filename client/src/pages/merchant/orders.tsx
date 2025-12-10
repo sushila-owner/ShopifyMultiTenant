@@ -49,6 +49,7 @@ import {
   Loader2,
 } from "lucide-react";
 import type { Order } from "@shared/schema";
+import { useCurrency } from "@/lib/currency";
 
 const orderStatusColors: Record<string, "default" | "secondary" | "destructive" | "outline"> = {
   pending: "outline",
@@ -67,6 +68,7 @@ const fulfillmentStatusColors: Record<string, "default" | "secondary" | "destruc
 
 export default function MerchantOrdersPage() {
   const { toast } = useToast();
+  const { formatPrice } = useCurrency();
   const [search, setSearch] = useState("");
   const [statusFilter, setStatusFilter] = useState<string>("all");
   const [selectedOrder, setSelectedOrder] = useState<Order | null>(null);
@@ -150,7 +152,7 @@ export default function MerchantOrdersPage() {
                 <DollarSign className="h-5 w-5 text-chart-2" />
               </div>
               <div>
-                <p className="text-2xl font-bold">${totalRevenue.toLocaleString()}</p>
+                <p className="text-2xl font-bold">{formatPrice(totalRevenue)}</p>
                 <p className="text-xs text-muted-foreground">Revenue</p>
               </div>
             </div>
@@ -163,7 +165,7 @@ export default function MerchantOrdersPage() {
                 <DollarSign className="h-5 w-5 text-chart-3" />
               </div>
               <div>
-                <p className="text-2xl font-bold">${totalProfit.toLocaleString()}</p>
+                <p className="text-2xl font-bold">{formatPrice(totalProfit)}</p>
                 <p className="text-xs text-muted-foreground">Profit</p>
               </div>
             </div>
@@ -261,9 +263,9 @@ export default function MerchantOrdersPage() {
                           </div>
                         </TableCell>
                         <TableCell>{order.items.length} items</TableCell>
-                        <TableCell>${((order.total || 0) / 100).toFixed(2)}</TableCell>
+                        <TableCell>{formatPrice((order.total || 0) / 100)}</TableCell>
                         <TableCell className="text-chart-2 font-medium">
-                          ${((order.totalProfit || 0) / 100).toFixed(2)}
+                          {formatPrice((order.totalProfit || 0) / 100)}
                         </TableCell>
                         <TableCell>
                           <Badge variant={orderStatusColors[order.status]}>{order.status}</Badge>
@@ -320,7 +322,7 @@ export default function MerchantOrdersPage() {
                             <p className="font-medium">{order.orderNumber}</p>
                           </TableCell>
                           <TableCell>{order.customerEmail}</TableCell>
-                          <TableCell>${((order.total || 0) / 100).toFixed(2)}</TableCell>
+                          <TableCell>{formatPrice((order.total || 0) / 100)}</TableCell>
                           <TableCell className="text-right">
                             <Button
                               size="sm"
@@ -363,7 +365,7 @@ export default function MerchantOrdersPage() {
                             <p className="font-medium">{order.orderNumber}</p>
                           </TableCell>
                           <TableCell>{order.customerEmail}</TableCell>
-                          <TableCell>${((order.total || 0) / 100).toFixed(2)}</TableCell>
+                          <TableCell>{formatPrice((order.total || 0) / 100)}</TableCell>
                           <TableCell className="text-right">
                             <Button variant="ghost" size="sm" onClick={() => handleViewDetails(order)}>
                               <Eye className="mr-2 h-3 w-3" />
@@ -463,8 +465,8 @@ export default function MerchantOrdersPage() {
                         </div>
                       </div>
                       <div className="text-right">
-                        <p className="font-medium">${(item.price * item.quantity).toFixed(2)}</p>
-                        <p className="text-xs text-chart-2">${item.profit.toFixed(2)} profit</p>
+                        <p className="font-medium">{formatPrice(item.price * item.quantity)}</p>
+                        <p className="text-xs text-chart-2">{formatPrice(item.profit)} profit</p>
                       </div>
                     </div>
                   ))}
@@ -475,27 +477,27 @@ export default function MerchantOrdersPage() {
                 <div className="space-y-2">
                   <div className="flex justify-between text-sm">
                     <span className="text-muted-foreground">Subtotal</span>
-                    <span>${((selectedOrder.subtotal || 0) / 100).toFixed(2)}</span>
+                    <span>{formatPrice((selectedOrder.subtotal || 0) / 100)}</span>
                   </div>
                   <div className="flex justify-between text-sm">
                     <span className="text-muted-foreground">Shipping</span>
-                    <span>${((selectedOrder.shipping || 0) / 100).toFixed(2)}</span>
+                    <span>{formatPrice((selectedOrder.shipping || 0) / 100)}</span>
                   </div>
                   <div className="flex justify-between text-sm">
                     <span className="text-muted-foreground">Tax</span>
-                    <span>${((selectedOrder.tax || 0) / 100).toFixed(2)}</span>
+                    <span>{formatPrice((selectedOrder.tax || 0) / 100)}</span>
                   </div>
                   <div className="flex justify-between font-medium pt-2 border-t">
                     <span>Total</span>
-                    <span>${((selectedOrder.total || 0) / 100).toFixed(2)}</span>
+                    <span>{formatPrice((selectedOrder.total || 0) / 100)}</span>
                   </div>
                   <div className="flex justify-between text-sm">
                     <span className="text-muted-foreground">Your Cost</span>
-                    <span>${((selectedOrder.totalCost || 0) / 100).toFixed(2)}</span>
+                    <span>{formatPrice((selectedOrder.totalCost || 0) / 100)}</span>
                   </div>
                   <div className="flex justify-between font-medium text-chart-2">
                     <span>Your Profit</span>
-                    <span>${((selectedOrder.totalProfit || 0) / 100).toFixed(2)}</span>
+                    <span>{formatPrice((selectedOrder.totalProfit || 0) / 100)}</span>
                   </div>
                 </div>
               </div>
