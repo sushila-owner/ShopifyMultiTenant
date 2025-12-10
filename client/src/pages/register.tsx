@@ -38,7 +38,7 @@ export default function RegisterPage() {
       if (result.success) {
         toast({
           title: "Account created!",
-          description: "Welcome to Apex Mart Wholesale. Your 14-day trial has started.",
+          description: "Welcome to Apex Mart Wholesale. Your 2-day trial has started.",
         });
         setTimeout(() => {
           setLocation("/dashboard");
@@ -85,7 +85,7 @@ export default function RegisterPage() {
           <CardHeader className="text-center space-y-1">
             <CardTitle className="text-2xl font-bold">Create your account</CardTitle>
             <CardDescription>
-              Start your 14-day free trial. No credit card required.
+              Start your 2-day free trial. No credit card required.
             </CardDescription>
           </CardHeader>
           <CardContent className="space-y-6">
