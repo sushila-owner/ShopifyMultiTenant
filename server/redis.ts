@@ -9,17 +9,32 @@ export function getRedisClient(): Redis | null {
   }
 
   if (!redisClient) {
+    console.log("[Redis] Connecting to Redis...");
     redisClient = new Redis(process.env.REDIS_URL, {
       maxRetriesPerRequest: 3,
-      lazyConnect: true,
+      retryStrategy: (times) => {
+        if (times > 3) {
+          console.error("[Redis] Max retries reached, giving up");
+          return null;
+        }
+        return Math.min(times * 100, 3000);
+      },
     });
 
     redisClient.on("connect", () => {
-      console.log("[Redis] Connected successfully");
+      console.log("[Redis] Connected successfully to Upstash");
+    });
+
+    redisClient.on("ready", () => {
+      console.log("[Redis] Ready for commands");
     });
 
     redisClient.on("error", (err) => {
       console.error("[Redis] Connection error:", err.message);
+    });
+
+    redisClient.on("close", () => {
+      console.log("[Redis] Connection closed");
     });
   }
 
