@@ -89,38 +89,103 @@ export async function registerRoutes(
   // ==================== SHOPIFY OAUTH ROUTES ====================
   // These routes handle public app installation from Shopify App Store
   
-  // In-memory nonce store for OAuth state validation 
-  // Includes merchantId to bind OAuth flow to specific merchant for security
-  const oauthNonces = new Map<string, { 
-    shop: string; 
+  // Import Redis helpers for distributed storage (falls back to in-memory if not configured)
+  const redisModule = await import("./redis");
+  const {
+    getRedisClient,
+    setOAuthNonce: redisSetNonce,
+    getOAuthNonce: redisGetNonce,
+    deleteOAuthNonce: redisDeleteNonce,
+    setPendingConnection: redisSetPending,
+    getPendingConnection: redisGetPending,
+    deletePendingConnection: redisDeletePending,
+    isRedisAvailable,
+  } = redisModule;
+
+  // Types for OAuth storage
+  interface OAuthNonceData {
+    shop: string;
     merchantId: number;
-    timestamp: number; 
-  }>();
-  
-  // Pending connections store - holds tokens temporarily until frontend confirms with auth
-  // Bound to specific merchantId to prevent cross-tenant credential theft
-  const pendingShopifyConnections = new Map<string, {
+    timestamp: number;
+  }
+
+  interface PendingConnectionData {
     domain: string;
     accessToken: string;
     scopes: string[];
     shopName: string;
     merchantId: number;
     timestamp: number;
-  }>();
+  }
+  
+  // Initialize Redis if available
+  getRedisClient();
+  
+  // In-memory fallback stores (used when Redis is not configured)
+  const oauthNonces = new Map<string, OAuthNonceData>();
+  const pendingShopifyConnections = new Map<string, PendingConnectionData>();
 
-  // Cleanup old nonces and pending connections every 5 minutes
+  // Helper functions that use Redis when available, fallback to in-memory
+  async function setNonce(nonce: string, data: OAuthNonceData): Promise<void> {
+    if (isRedisAvailable()) {
+      await redisSetNonce(nonce, data);
+    } else {
+      oauthNonces.set(nonce, data);
+    }
+  }
+
+  async function getNonce(nonce: string): Promise<OAuthNonceData | null> {
+    if (isRedisAvailable()) {
+      return await redisGetNonce(nonce);
+    }
+    return oauthNonces.get(nonce) || null;
+  }
+
+  async function deleteNonce(nonce: string): Promise<void> {
+    if (isRedisAvailable()) {
+      await redisDeleteNonce(nonce);
+    } else {
+      oauthNonces.delete(nonce);
+    }
+  }
+
+  async function setPending(code: string, data: PendingConnectionData): Promise<void> {
+    if (isRedisAvailable()) {
+      await redisSetPending(code, data);
+    } else {
+      pendingShopifyConnections.set(code, data);
+    }
+  }
+
+  async function getPending(code: string): Promise<PendingConnectionData | null> {
+    if (isRedisAvailable()) {
+      return await redisGetPending(code);
+    }
+    return pendingShopifyConnections.get(code) || null;
+  }
+
+  async function deletePending(code: string): Promise<void> {
+    if (isRedisAvailable()) {
+      await redisDeletePending(code);
+    } else {
+      pendingShopifyConnections.delete(code);
+    }
+  }
+
+  // Cleanup old nonces and pending connections every 5 minutes (only for in-memory storage)
   setInterval(() => {
+    if (isRedisAvailable()) return; // Redis handles TTL automatically
     const now = Date.now();
-    for (const [nonce, data] of oauthNonces.entries()) {
-      if (now - data.timestamp > 10 * 60 * 1000) { // 10 minutes expiry
+    oauthNonces.forEach((data, nonce) => {
+      if (now - data.timestamp > 10 * 60 * 1000) {
         oauthNonces.delete(nonce);
       }
-    }
-    for (const [code, data] of pendingShopifyConnections.entries()) {
-      if (now - data.timestamp > 5 * 60 * 1000) { // 5 minutes expiry
+    });
+    pendingShopifyConnections.forEach((data, code) => {
+      if (now - data.timestamp > 5 * 60 * 1000) {
         pendingShopifyConnections.delete(code);
       }
-    }
+    });
   }, 5 * 60 * 1000);
 
   // Get app URL for OAuth redirects
@@ -168,7 +233,7 @@ export async function registerRoutes(
 
       const nonce = generateNonce();
       // Bind the nonce to this specific merchant for security
-      oauthNonces.set(nonce, { shop, merchantId, timestamp: Date.now() });
+      await setNonce(nonce, { shop, merchantId, timestamp: Date.now() });
 
       const installUrl = buildInstallUrl(shop, config, nonce);
       
@@ -215,14 +280,14 @@ export async function registerRoutes(
       }
 
       // Validate state/nonce and get bound merchantId
-      const nonceData = oauthNonces.get(state);
+      const nonceData = await getNonce(state);
       if (!nonceData || nonceData.shop !== shop) {
         console.error("[Shopify OAuth] Invalid state/nonce");
         return res.redirect("/merchant/integrations?error=invalid_state");
       }
       
       const boundMerchantId = nonceData.merchantId;
-      oauthNonces.delete(state);
+      await deleteNonce(state);
 
       // Exchange code for access token
       const tokenResponse = await exchangeCodeForToken(shop, code, config);
@@ -238,7 +303,7 @@ export async function registerRoutes(
       const { generateNonce } = await import("./shopifyOAuth");
       const pendingCode = generateNonce();
       
-      pendingShopifyConnections.set(pendingCode, {
+      await setPending(pendingCode, {
         domain: shop,
         accessToken: access_token,
         scopes: scope.split(","),
@@ -272,7 +337,7 @@ export async function registerRoutes(
       }
 
       // Retrieve the pending connection from server-side store
-      const pendingConnection = pendingShopifyConnections.get(pendingCode);
+      const pendingConnection = await getPending(pendingCode);
       if (!pendingConnection) {
         return res.status(400).json({ success: false, error: "Invalid or expired connection code. Please try connecting again." });
       }
@@ -285,7 +350,7 @@ export async function registerRoutes(
       }
 
       // Remove the pending connection immediately to prevent reuse
-      pendingShopifyConnections.delete(pendingCode);
+      await deletePending(pendingCode);
 
       const merchant = await storage.getMerchant(merchantId);
       if (!merchant) {
