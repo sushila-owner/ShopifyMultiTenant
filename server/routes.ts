@@ -14,6 +14,7 @@ import {
   insertCustomerSchema,
   insertOrderSchema,
   insertStaffInvitationSchema,
+  insertCategorySchema,
   type User,
 } from "@shared/schema";
 import { randomUUID } from "crypto";
@@ -553,6 +554,63 @@ export async function registerRoutes(
       res.json({ success: true, data: { connectedClients, wsPath: '/ws/analytics' } });
     } catch (error: any) {
       res.status(500).json({ success: false, error: error.message });
+    }
+  });
+
+  // Categories
+  app.get("/api/admin/categories", authMiddleware, adminOnly, async (req: AuthRequest, res: Response) => {
+    try {
+      const allCategories = await storage.getAllCategories();
+      res.json({ success: true, data: allCategories });
+    } catch (error: any) {
+      res.status(500).json({ success: false, error: error.message });
+    }
+  });
+
+  app.get("/api/admin/categories/:id", authMiddleware, adminOnly, async (req: AuthRequest, res: Response) => {
+    try {
+      const category = await storage.getCategory(parseInt(req.params.id));
+      if (!category) {
+        return res.status(404).json({ success: false, error: "Category not found" });
+      }
+      res.json({ success: true, data: category });
+    } catch (error: any) {
+      res.status(500).json({ success: false, error: error.message });
+    }
+  });
+
+  app.post("/api/admin/categories", authMiddleware, adminOnly, async (req: AuthRequest, res: Response) => {
+    try {
+      const validatedData = insertCategorySchema.parse(req.body);
+      const existingCategory = await storage.getCategoryBySlug(validatedData.slug);
+      if (existingCategory) {
+        return res.status(400).json({ success: false, error: "Category with this slug already exists" });
+      }
+      const category = await storage.createCategory(validatedData);
+      res.json({ success: true, data: category });
+    } catch (error: any) {
+      res.status(400).json({ success: false, error: error.message });
+    }
+  });
+
+  app.put("/api/admin/categories/:id", authMiddleware, adminOnly, async (req: AuthRequest, res: Response) => {
+    try {
+      const category = await storage.updateCategory(parseInt(req.params.id), req.body);
+      if (!category) {
+        return res.status(404).json({ success: false, error: "Category not found" });
+      }
+      res.json({ success: true, data: category });
+    } catch (error: any) {
+      res.status(400).json({ success: false, error: error.message });
+    }
+  });
+
+  app.delete("/api/admin/categories/:id", authMiddleware, adminOnly, async (req: AuthRequest, res: Response) => {
+    try {
+      await storage.deleteCategory(parseInt(req.params.id));
+      res.json({ success: true });
+    } catch (error: any) {
+      res.status(400).json({ success: false, error: error.message });
     }
   });
 

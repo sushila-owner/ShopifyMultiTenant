@@ -277,11 +277,30 @@ export const supplierOrders = pgTable("supplier_orders", {
   statusIdx: index("supplier_orders_status_idx").on(table.status),
 }));
 
+// ==================== CATEGORIES TABLE ====================
+export const categories = pgTable("categories", {
+  id: serial("id").primaryKey(),
+  name: text("name").notNull(),
+  slug: text("slug").notNull().unique(),
+  description: text("description"),
+  image: text("image"),
+  parentId: integer("parent_id"),
+  sortOrder: integer("sort_order").default(0),
+  isActive: boolean("is_active").default(true),
+  productCount: integer("product_count").default(0),
+  createdAt: timestamp("created_at").defaultNow().notNull(),
+  updatedAt: timestamp("updated_at").defaultNow().notNull(),
+}, (table) => ({
+  slugIdx: index("categories_slug_idx").on(table.slug),
+  parentIdx: index("categories_parent_idx").on(table.parentId),
+}));
+
 // ==================== PRODUCTS TABLE ====================
 export const products = pgTable("products", {
   id: serial("id").primaryKey(),
   merchantId: integer("merchant_id"),
   supplierId: integer("supplier_id").notNull(),
+  categoryId: integer("category_id"),
   title: text("title").notNull(),
   description: text("description"),
   category: text("category"),
@@ -326,6 +345,7 @@ export const products = pgTable("products", {
   priceIdx: index("products_price_idx").on(table.supplierPrice),
   createdIdx: index("products_created_idx").on(table.createdAt),
   categoryIdx: index("products_category_idx").on(table.category),
+  categoryIdIdx: index("products_category_id_idx").on(table.categoryId),
   inventoryIdx: index("products_inventory_idx").on(table.inventoryQuantity),
 }));
 
@@ -712,6 +732,14 @@ export const insertSupplierOrderSchema = createInsertSchema(supplierOrders).omit
 });
 export type InsertSupplierOrder = z.infer<typeof insertSupplierOrderSchema>;
 export type SupplierOrder = typeof supplierOrders.$inferSelect;
+
+export const insertCategorySchema = createInsertSchema(categories).omit({
+  id: true,
+  createdAt: true,
+  updatedAt: true,
+});
+export type InsertCategory = z.infer<typeof insertCategorySchema>;
+export type Category = typeof categories.$inferSelect;
 
 export const insertProductSchema = createInsertSchema(products).omit({
   id: true,

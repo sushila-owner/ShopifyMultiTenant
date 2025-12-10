@@ -1,6 +1,6 @@
 import {
   users, merchants, suppliers, products, customers, orders,
-  plans, subscriptions, staffInvitations, notifications, activityLogs, syncLogs, adCreatives, otpVerifications, supplierOrders,
+  plans, subscriptions, staffInvitations, notifications, activityLogs, syncLogs, adCreatives, otpVerifications, supplierOrders, categories,
   type User, type InsertUser,
   type Merchant, type InsertMerchant,
   type Supplier, type InsertSupplier,
@@ -17,6 +17,7 @@ import {
   type OtpVerification, type InsertOtp,
   type AdminDashboardStats, type MerchantDashboardStats,
   type SupplierOrder, type InsertSupplierOrder,
+  type Category, type InsertCategory,
 } from "@shared/schema";
 import { db } from "./db";
 import { eq, and, desc, asc, sql, gte, lte, ilike, or, isNull, count, inArray } from "drizzle-orm";
@@ -74,6 +75,16 @@ export interface IStorage {
   getSupplierOrdersByMerchant(merchantId: number): Promise<SupplierOrder[]>;
   getPendingSupplierOrders(): Promise<SupplierOrder[]>;
 
+  // Categories
+  getCategory(id: number): Promise<Category | undefined>;
+  getCategoryBySlug(slug: string): Promise<Category | undefined>;
+  createCategory(category: InsertCategory): Promise<Category>;
+  updateCategory(id: number, data: Partial<InsertCategory>): Promise<Category | undefined>;
+  deleteCategory(id: number): Promise<boolean>;
+  getAllCategories(): Promise<Category[]>;
+  getActiveCategories(): Promise<Category[]>;
+  updateCategoryProductCount(categoryId: number): Promise<void>;
+
   // Products
   getProduct(id: number): Promise<Product | undefined>;
   createProduct(product: InsertProduct): Promise<Product>;
@@ -86,6 +97,7 @@ export interface IStorage {
   getProductsByMerchant(merchantId: number): Promise<Product[]>;
   getProductsBySupplier(supplierId: number): Promise<Product[]>;
   getProductsBySupplierProductId(supplierId: number, supplierProductId: string): Promise<Product[]>;
+  getProductsByCategory(categoryId: number): Promise<Product[]>;
 
   // Customers
   getCustomer(id: number): Promise<Customer | undefined>;
@@ -301,6 +313,53 @@ export class DatabaseStorage implements IStorage {
 
   async getPendingSupplierOrders(): Promise<SupplierOrder[]> {
     return db.select().from(supplierOrders).where(eq(supplierOrders.status, "pending")).orderBy(asc(supplierOrders.createdAt));
+  }
+
+  // ==================== CATEGORIES ====================
+  async getCategory(id: number): Promise<Category | undefined> {
+    const [category] = await db.select().from(categories).where(eq(categories.id, id));
+    return category || undefined;
+  }
+
+  async getCategoryBySlug(slug: string): Promise<Category | undefined> {
+    const [category] = await db.select().from(categories).where(eq(categories.slug, slug));
+    return category || undefined;
+  }
+
+  async createCategory(insertCategory: InsertCategory): Promise<Category> {
+    const [category] = await db.insert(categories).values(insertCategory).returning();
+    return category;
+  }
+
+  async updateCategory(id: number, data: Partial<InsertCategory>): Promise<Category | undefined> {
+    const [category] = await db
+      .update(categories)
+      .set({ ...data, updatedAt: new Date() })
+      .where(eq(categories.id, id))
+      .returning();
+    return category || undefined;
+  }
+
+  async deleteCategory(id: number): Promise<boolean> {
+    await db.delete(categories).where(eq(categories.id, id));
+    return true;
+  }
+
+  async getAllCategories(): Promise<Category[]> {
+    return db.select().from(categories).orderBy(asc(categories.sortOrder), asc(categories.name));
+  }
+
+  async getActiveCategories(): Promise<Category[]> {
+    return db.select().from(categories).where(eq(categories.isActive, true)).orderBy(asc(categories.sortOrder), asc(categories.name));
+  }
+
+  async updateCategoryProductCount(categoryId: number): Promise<void> {
+    const [result] = await db
+      .select({ count: count() })
+      .from(products)
+      .where(eq(products.categoryId, categoryId));
+    const productCount = result?.count || 0;
+    await db.update(categories).set({ productCount, updatedAt: new Date() }).where(eq(categories.id, categoryId));
   }
 
   // ==================== PRODUCTS ====================
@@ -527,6 +586,10 @@ export class DatabaseStorage implements IStorage {
         eq(products.supplierProductId, supplierProductId)
       )
     );
+  }
+
+  async getProductsByCategory(categoryId: number): Promise<Product[]> {
+    return db.select().from(products).where(eq(products.categoryId, categoryId)).orderBy(desc(products.createdAt));
   }
 
   // ==================== CUSTOMERS ====================
