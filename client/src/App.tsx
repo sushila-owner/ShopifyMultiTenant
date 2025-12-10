@@ -16,6 +16,14 @@ import NotFound from "@/pages/not-found";
 import LandingPage from "@/pages/landing";
 import LoginPage from "@/pages/login";
 import RegisterPage from "@/pages/register";
+import FeaturesPage from "@/pages/features";
+import PricingPage from "@/pages/pricing";
+import AboutPage from "@/pages/about";
+import BlogPage from "@/pages/blog";
+import CareersPage from "@/pages/careers";
+import PrivacyPage from "@/pages/privacy";
+import TermsPage from "@/pages/terms";
+import SecurityPage from "@/pages/security";
 
 import AdminDashboard from "@/pages/admin/dashboard";
 import AdminSuppliers from "@/pages/admin/suppliers";
@@ -107,6 +115,14 @@ function Router() {
       <Route path="/" component={LandingPage} />
       <Route path="/login" component={LoginPage} />
       <Route path="/register" component={RegisterPage} />
+      <Route path="/features" component={FeaturesPage} />
+      <Route path="/pricing" component={PricingPage} />
+      <Route path="/about" component={AboutPage} />
+      <Route path="/blog" component={BlogPage} />
+      <Route path="/careers" component={CareersPage} />
+      <Route path="/privacy" component={PrivacyPage} />
+      <Route path="/terms" component={TermsPage} />
+      <Route path="/security" component={SecurityPage} />
 
       {/* Admin Routes */}
       <Route path="/admin">

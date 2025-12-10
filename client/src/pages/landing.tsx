@@ -584,25 +584,25 @@ export default function LandingPage() {
             <div>
               <h4 className="font-semibold mb-4">{t("footer.product")}</h4>
               <ul className="space-y-2 text-sm text-muted-foreground">
-                <li><a href="#features" className="hover:text-foreground transition-colors">{t("nav.features")}</a></li>
-                <li><a href="#pricing" className="hover:text-foreground transition-colors">{t("nav.pricing")}</a></li>
+                <li><Link href="/features" className="hover:text-foreground transition-colors">{t("nav.features")}</Link></li>
+                <li><Link href="/pricing" className="hover:text-foreground transition-colors">{t("nav.pricing")}</Link></li>
                 <li><a href="#" className="hover:text-foreground transition-colors">{t("footer.integrations")}</a></li>
               </ul>
             </div>
             <div>
               <h4 className="font-semibold mb-4">{t("footer.company")}</h4>
               <ul className="space-y-2 text-sm text-muted-foreground">
-                <li><a href="#" className="hover:text-foreground transition-colors">{t("footer.about")}</a></li>
-                <li><a href="#" className="hover:text-foreground transition-colors">{t("footer.blog")}</a></li>
-                <li><a href="#" className="hover:text-foreground transition-colors">{t("footer.careers")}</a></li>
+                <li><Link href="/about" className="hover:text-foreground transition-colors">{t("footer.about")}</Link></li>
+                <li><Link href="/blog" className="hover:text-foreground transition-colors">{t("footer.blog")}</Link></li>
+                <li><Link href="/careers" className="hover:text-foreground transition-colors">{t("footer.careers")}</Link></li>
               </ul>
             </div>
             <div>
               <h4 className="font-semibold mb-4">{t("footer.legal")}</h4>
               <ul className="space-y-2 text-sm text-muted-foreground">
-                <li><a href="#" className="hover:text-foreground transition-colors">{t("footer.privacy")}</a></li>
-                <li><a href="#" className="hover:text-foreground transition-colors">{t("footer.terms")}</a></li>
-                <li><a href="#" className="hover:text-foreground transition-colors">{t("footer.security")}</a></li>
+                <li><Link href="/privacy" className="hover:text-foreground transition-colors">{t("footer.privacy")}</Link></li>
+                <li><Link href="/terms" className="hover:text-foreground transition-colors">{t("footer.terms")}</Link></li>
+                <li><Link href="/security" className="hover:text-foreground transition-colors">{t("footer.security")}</Link></li>
               </ul>
             </div>
           </div>
