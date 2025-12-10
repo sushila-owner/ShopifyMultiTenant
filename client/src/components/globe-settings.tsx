@@ -29,7 +29,7 @@ export function GlobeSettings() {
           <span className="text-sm">{language.code.toUpperCase()}</span>
         </Button>
       </PopoverTrigger>
-      <PopoverContent className="w-80 p-0" align="end">
+      <PopoverContent className="w-80 p-0 z-50" align="end" side="top" sideOffset={8}>
         <Tabs defaultValue="language" className="w-full">
           <div className="border-b px-3 py-2">
             <TabsList className="grid w-full grid-cols-2">
@@ -49,8 +49,11 @@ export function GlobeSettings() {
               <div className="p-2 space-y-1">
                 {languages.map((lang) => (
                   <button
+                    type="button"
                     key={lang.code}
-                    onClick={() => {
+                    onClick={(e) => {
+                      e.preventDefault();
+                      e.stopPropagation();
                       setLanguage(lang);
                       setOpen(false);
                     }}
@@ -82,8 +85,11 @@ export function GlobeSettings() {
               <div className="p-2 space-y-1">
                 {currencies.map((curr) => (
                   <button
+                    type="button"
                     key={curr.code}
-                    onClick={() => {
+                    onClick={(e) => {
+                      e.preventDefault();
+                      e.stopPropagation();
                       setCurrency(curr);
                       setOpen(false);
                     }}
