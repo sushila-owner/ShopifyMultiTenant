@@ -3,16 +3,25 @@ import { Redis } from "@upstash/redis";
 let redisClient: Redis | null = null;
 
 export function getRedisClient(): Redis | null {
-  if (!process.env.UPSTASH_REDIS_REST_URL || !process.env.UPSTASH_REDIS_REST_TOKEN) {
+  let url = process.env.UPSTASH_REDIS_REST_URL;
+  let token = process.env.UPSTASH_REDIS_REST_TOKEN;
+
+  if (!url || !token) {
     console.log("[Redis] No Upstash REST credentials configured, using in-memory storage");
     return null;
+  }
+
+  // Auto-detect if values are swapped (URL should start with https://, token should not)
+  if (!url.startsWith("https://") && token.startsWith("https://")) {
+    console.log("[Redis] Detected swapped URL/Token values, auto-correcting...");
+    [url, token] = [token, url];
   }
 
   if (!redisClient) {
     console.log("[Redis] Connecting to Upstash Redis (REST API)...");
     redisClient = new Redis({
-      url: process.env.UPSTASH_REDIS_REST_URL,
-      token: process.env.UPSTASH_REDIS_REST_TOKEN,
+      url,
+      token,
     });
     console.log("[Redis] Upstash Redis client initialized");
   }

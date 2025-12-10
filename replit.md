@@ -55,6 +55,7 @@ Preferred communication style: Simple, everyday language.
 - **Semantic Search**: Integrated Claude AI for natural language product query analysis.
 - **Image Storage**: AWS S3 for secure, tenant-scoped image storage with signed URLs, validation, and encryption.
 - **Caching**: Simple in-memory cache for performance.
+- **Session Storage (Redis)**: Upstash Redis (REST API) for distributed OAuth session storage. Falls back to in-memory storage when not configured. Auto-detects swapped URL/Token values.
 
 ### File Structure
 - **Monorepo**: `/client`, `/server`, `/shared`, `/migrations`, `/attached_assets`, `/script`.
@@ -75,6 +76,7 @@ Preferred communication style: Simple, everyday language.
 - `SHOPIFY_STORE_URL`, `SHOPIFY_ACCESS_TOKEN` - Shopify integration
 - `AWS_ACCESS_KEY_ID`, `AWS_SECRET_ACCESS_KEY`, `AWS_S3_BUCKET`, `AWS_S3_REGION` - Image storage
 - `ANTHROPIC_API_KEY` - Claude AI semantic search
+- `UPSTASH_REDIS_REST_URL`, `UPSTASH_REDIS_REST_TOKEN` - Redis session storage (optional, recommended for production)
 
 ### Performance Optimizations
 - **Batch Sync**: Imports 250 products per batch (10-50x faster than one-by-one)
