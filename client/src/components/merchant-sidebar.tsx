@@ -30,6 +30,7 @@ import {
 import { useAuth } from "@/lib/auth";
 import { useQuery } from "@tanstack/react-query";
 import logoImage from "@assets/F66C5CC9-75FA-449A-AAF8-3CBF0FAC2486_1764749832622.png";
+import { GlobeSettings } from "@/components/globe-settings";
 
 const mainMenuItems = [
   { title: "Dashboard", url: "/dashboard", icon: LayoutDashboard },
@@ -170,6 +171,12 @@ export function MerchantSidebar() {
 
       <SidebarFooter className="border-t border-sidebar-border">
         <SidebarMenu>
+          <SidebarMenuItem>
+            <div className="flex items-center justify-between px-2 py-1.5">
+              <span className="text-xs text-muted-foreground">Language & Currency</span>
+              <GlobeSettings />
+            </div>
+          </SidebarMenuItem>
           <SidebarMenuItem>
             <div className="flex items-center gap-3 px-2 py-2">
               <Avatar className="h-8 w-8">

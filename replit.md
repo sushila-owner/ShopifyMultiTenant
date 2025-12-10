@@ -57,6 +57,14 @@ Preferred communication style: Simple, everyday language.
 - **Caching**: Simple in-memory cache for performance.
 - **Session Storage (Redis)**: Upstash Redis (REST API) for distributed OAuth session storage. Falls back to in-memory storage when not configured. Auto-detects swapped URL/Token values.
 
+### Multi-Currency Support
+- **30 Currencies**: USD, EUR, GBP, CAD, AUD, JPY, CNY, INR, BRL, MXN, KRW, RUB, CHF, SEK, NOK, DKK, PLN, TRY, THB, IDR, MYR, SGD, HKD, NZD, ZAR, AED, SAR, PHP, VND, EGP
+- **Provider**: `client/src/lib/currency.tsx` - CurrencyProvider context with formatPrice and convertPrice
+- **Selector**: GlobeSettings component in sidebar footer (combines language + currency selection)
+- **Persistence**: Selected currency saved to localStorage
+- **Usage**: `const { formatPrice, currency, setCurrency } = useCurrency();`
+- All product prices throughout the app display in the user's selected currency
+
 ### DeepL Translation Integration
 - **Purpose**: App-wide translation for dynamic content (product titles, descriptions, tags) based on customer's language preference
 - **Service**: `server/deepl.ts` - DeepL API service with in-memory caching (24-hour TTL)

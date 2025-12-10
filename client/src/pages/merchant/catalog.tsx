@@ -62,6 +62,7 @@ import {
   Check,
 } from "lucide-react";
 import { Link } from "wouter";
+import { useCurrency } from "@/lib/currency";
 import type { Product, Supplier } from "@shared/schema";
 
 type SortOption = "featured" | "newest" | "price_high" | "price_low" | "stock_high";
@@ -116,6 +117,7 @@ interface MerchantSettings {
 
 export default function CatalogPage() {
   const { toast } = useToast();
+  const { formatPrice } = useCurrency();
   const [selectedSupplier, setSelectedSupplier] = useState<Supplier | null>(null);
   const [searchInput, setSearchInput] = useState("");
   const [debouncedSearch, setDebouncedSearch] = useState("");
@@ -688,7 +690,7 @@ export default function CatalogPage() {
           <div className="space-y-2">
             <div className="flex items-baseline gap-2">
               <span className="text-lg font-bold text-foreground">
-                ${product.supplierPrice.toFixed(2)}
+                {formatPrice(product.supplierPrice)}
               </span>
               <span className="text-xs text-muted-foreground">cost</span>
             </div>
@@ -696,7 +698,7 @@ export default function CatalogPage() {
             <div className="flex items-center gap-2 p-2 rounded-lg bg-emerald-500/10 border border-emerald-500/20">
               <TrendingUp className="h-3.5 w-3.5 text-emerald-600" />
               <span className="text-xs font-medium text-emerald-700 dark:text-emerald-400">
-                +${profit.toFixed(2)} profit ({profitPercent}%)
+                +{formatPrice(profit)} profit ({profitPercent}%)
               </span>
             </div>
 
@@ -783,8 +785,8 @@ export default function CatalogPage() {
 
         <div className="flex flex-col items-end justify-between">
           <div className="text-right">
-            <p className="text-lg font-bold">${product.supplierPrice.toFixed(2)}</p>
-            <p className="text-sm text-emerald-600">+${profit.toFixed(2)} ({profitPercent}%)</p>
+            <p className="text-lg font-bold">{formatPrice(product.supplierPrice)}</p>
+            <p className="text-sm text-emerald-600">+{formatPrice(profit)} ({profitPercent}%)</p>
           </div>
           <div className="flex gap-2">
             <Button
@@ -921,7 +923,7 @@ export default function CatalogPage() {
                 </SelectTrigger>
                 <SelectContent>
                   <SelectItem value="percentage">Percentage Markup (%)</SelectItem>
-                  <SelectItem value="fixed">Fixed Amount ($)</SelectItem>
+                  <SelectItem value="fixed">Fixed Amount</SelectItem>
                 </SelectContent>
               </Select>
             </div>
@@ -946,19 +948,19 @@ export default function CatalogPage() {
               <div className="p-4 bg-muted/50 rounded-xl space-y-3">
                 <div className="flex justify-between text-sm">
                   <span className="text-muted-foreground">Your Cost</span>
-                  <span className="font-medium">${products.find(p => p.id === selectedProducts[0])?.supplierPrice.toFixed(2)}</span>
+                  <span className="font-medium">{formatPrice(products.find(p => p.id === selectedProducts[0])?.supplierPrice || 0)}</span>
                 </div>
                 <Separator />
                 <div className="flex justify-between text-sm">
                   <span className="text-muted-foreground">Your Selling Price</span>
                   <span className="font-bold text-primary text-lg">
-                    ${calculateMerchantPrice(products.find(p => p.id === selectedProducts[0])?.supplierPrice || 0).toFixed(2)}
+                    {formatPrice(calculateMerchantPrice(products.find(p => p.id === selectedProducts[0])?.supplierPrice || 0))}
                   </span>
                 </div>
                 <div className="flex justify-between text-sm">
                   <span className="text-muted-foreground">Your Profit</span>
                   <span className="font-medium text-emerald-600">
-                    +${calculateProfit(products.find(p => p.id === selectedProducts[0])?.supplierPrice || 0).toFixed(2)}
+                    +{formatPrice(calculateProfit(products.find(p => p.id === selectedProducts[0])?.supplierPrice || 0))}
                   </span>
                 </div>
               </div>
@@ -1016,12 +1018,12 @@ export default function CatalogPage() {
                 <div className="space-y-4">
                   <div>
                     <p className="text-sm text-muted-foreground">Cost Price</p>
-                    <p className="text-3xl font-bold">${quickViewProduct.supplierPrice.toFixed(2)}</p>
+                    <p className="text-3xl font-bold">{formatPrice(quickViewProduct.supplierPrice)}</p>
                   </div>
                   <div className="p-3 rounded-lg bg-emerald-500/10 border border-emerald-500/20">
                     <p className="text-sm text-muted-foreground">Potential Profit (20% markup)</p>
                     <p className="text-xl font-bold text-emerald-600">
-                      +${calculateProfit(quickViewProduct.supplierPrice).toFixed(2)} per sale
+                      +{formatPrice(calculateProfit(quickViewProduct.supplierPrice))} per sale
                     </p>
                   </div>
                   <div className="space-y-2">

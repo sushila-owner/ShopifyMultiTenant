@@ -51,6 +51,7 @@ import {
 } from "lucide-react";
 import { SiShopify } from "react-icons/si";
 import { Link } from "wouter";
+import { useCurrency } from "@/lib/currency";
 import type { Product } from "@shared/schema";
 
 const statusColors: Record<string, "default" | "secondary" | "destructive" | "outline"> = {
@@ -61,6 +62,7 @@ const statusColors: Record<string, "default" | "secondary" | "destructive" | "ou
 
 export default function MyProductsPage() {
   const { toast } = useToast();
+  const { formatPrice } = useCurrency();
   const [search, setSearch] = useState("");
   const [statusFilter, setStatusFilter] = useState<string>("all");
   const [selectedProduct, setSelectedProduct] = useState<Product | null>(null);
@@ -281,10 +283,10 @@ export default function MyProductsPage() {
                           </div>
                         </Link>
                       </TableCell>
-                      <TableCell>${product.supplierPrice.toFixed(2)}</TableCell>
-                      <TableCell className="font-medium">${sellPrice.toFixed(2)}</TableCell>
+                      <TableCell>{formatPrice(product.supplierPrice)}</TableCell>
+                      <TableCell className="font-medium">{formatPrice(sellPrice)}</TableCell>
                       <TableCell className="text-chart-2 font-medium">
-                        ${profit.toFixed(2)}
+                        {formatPrice(profit)}
                       </TableCell>
                       <TableCell>
                         <Badge variant={statusColors[product.status || "draft"] || "secondary"}>{product.status || "draft"}</Badge>
@@ -369,7 +371,7 @@ export default function MyProductsPage() {
           <div className="space-y-4 py-4">
             <div className="space-y-2">
               <Label>Supplier Cost</Label>
-              <p className="text-2xl font-bold">${selectedProduct?.supplierPrice.toFixed(2)}</p>
+              <p className="text-2xl font-bold">{formatPrice(selectedProduct?.supplierPrice || 0)}</p>
             </div>
             <div className="space-y-2">
               <Label htmlFor="sellPrice">Selling Price</Label>
@@ -391,7 +393,7 @@ export default function MyProductsPage() {
                 <div className="flex justify-between text-sm">
                   <span className="text-muted-foreground">Profit per sale</span>
                   <span className="font-medium text-chart-2">
-                    ${(Number(editPrice) - selectedProduct.supplierPrice).toFixed(2)}
+                    {formatPrice(Number(editPrice) - selectedProduct.supplierPrice)}
                   </span>
                 </div>
                 <div className="flex justify-between text-sm mt-2">
