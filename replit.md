@@ -97,6 +97,28 @@ const { text, isLoading } = useTranslateText("Hello world");
 - **Required Secret**: `DEEPL_API_KEY` (free tier: 500,000 chars/month)
 - **Caching**: In-memory cache prevents duplicate API calls, 24-hour TTL
 
+### Wallet System (Pre-funded Balance)
+- **Purpose**: Merchants pre-fund their wallet to automatically pay for order fulfillment costs
+- **Database Tables**: `wallet_balances` (current balance per merchant), `wallet_transactions` (audit trail)
+- **Top-up Flow**: Stripe PaymentIntent → Payment confirmation → Balance credited
+- **Order Integration**: When merchant fulfills an order, supplier cost is automatically deducted from wallet
+- **Insufficient Funds**: Returns 402 status with error message and redirect to wallet page
+
+**API Endpoints**:
+- `GET /api/wallet/balance` - Get current wallet balance (auto-creates if not exists)
+- `GET /api/wallet/transactions` - Get transaction history with pagination
+- `POST /api/wallet/top-up` - Create Stripe PaymentIntent for top-up ($5 min, $10,000 max)
+- `POST /api/wallet/confirm` - Confirm payment and credit wallet balance
+
+**Frontend**:
+- Wallet page at `/dashboard/wallet` with balance display, add funds modal, and transaction history
+- Sidebar shows wallet balance badge next to Wallet menu item
+- Stripe Elements integration for payment form
+
+**Transaction Types**: credit (top-up), debit (order payment), refund (order cancellation)
+
+**Localization**: Fully translated across all 12 languages (EN, ES, FR, DE, ZH, JA, AR, KO, PT, RU, HI, IT). Uses locale-aware date formatting with date-fns locales.
+
 ### File Structure
 - **Monorepo**: `/client`, `/server`, `/shared`, `/migrations`, `/attached_assets`, `/script`.
 - **Path Aliases**: `@/*`, `@shared/*`, `@assets/*`.

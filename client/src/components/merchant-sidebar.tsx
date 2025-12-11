@@ -63,6 +63,10 @@ export function MerchantSidebar() {
     queryKey: ["/api/merchants/stats"],
   });
 
+  const { data: walletData } = useQuery<{ data: { balanceCents: number } }>({
+    queryKey: ["/api/wallet/balance"],
+  });
+
   const isActive = (url: string) => {
     if (url === "/dashboard") return location === "/dashboard";
     return location.startsWith(url);
@@ -140,7 +144,16 @@ export function MerchantSidebar() {
                   >
                     <Link href={item.url}>
                       <item.icon className="h-4 w-4" />
-                      <span>{t(item.titleKey)}</span>
+                      <span className="flex-1">{t(item.titleKey)}</span>
+                      {item.url === "/dashboard/wallet" && walletData?.data && (
+                        <Badge 
+                          variant="secondary" 
+                          className="ml-auto text-xs"
+                          data-testid="badge-wallet-balance"
+                        >
+                          ${(walletData.data.balanceCents / 100).toFixed(2)}
+                        </Badge>
+                      )}
                     </Link>
                   </SidebarMenuButton>
                 </SidebarMenuItem>
