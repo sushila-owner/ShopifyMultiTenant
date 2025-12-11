@@ -188,7 +188,7 @@ export default function MerchantProductDetailPage() {
   };
 
   return (
-    <div className="flex-1 bg-background">
+    <div className="flex-1 bg-background overflow-y-auto">
       <Dialog open={isImportDialogOpen} onOpenChange={setIsImportDialogOpen}>
         <DialogContent className="max-w-md">
           <DialogHeader>
@@ -283,8 +283,8 @@ export default function MerchantProductDetailPage() {
         </div>
       </div>
 
-      <div className="max-w-7xl mx-auto px-6 py-8">
-        <div className="grid gap-8 lg:grid-cols-2">
+      <div className="max-w-7xl mx-auto px-4 sm:px-6 py-6 sm:py-8">
+        <div className="grid gap-6 md:gap-8 md:grid-cols-2">
           <div className="space-y-4">
             <div className="relative aspect-square rounded-2xl overflow-hidden bg-muted border">
               {images && images.length > 0 ? (
@@ -359,25 +359,25 @@ export default function MerchantProductDetailPage() {
 
           <div className="space-y-6">
             <div>
-              <div className="flex items-start justify-between gap-4 mb-4">
-                <div className="flex-1">
-                  <div className="flex items-center gap-2">
-                    <h1 className="text-2xl md:text-3xl font-bold leading-tight" data-testid="text-product-title">
+              <div className="flex flex-col sm:flex-row sm:items-start sm:justify-between gap-3 sm:gap-4 mb-4">
+                <div className="flex-1 min-w-0">
+                  <div className="flex items-start gap-2 flex-wrap">
+                    <h1 className="text-xl sm:text-2xl md:text-3xl font-bold leading-tight break-words" data-testid="text-product-title">
                       {isTranslating ? <Skeleton className="h-8 w-64" /> : translated.title}
                     </h1>
                     {language.code !== 'en' && !isTranslating && (
-                      <span title={`Translated to ${language.name}`}>
+                      <span title={`Translated to ${language.name}`} className="flex-shrink-0 mt-1">
                         <Languages className="h-5 w-5 text-muted-foreground" />
                       </span>
                     )}
                   </div>
-                  <p className="text-muted-foreground mt-2">
+                  <p className="text-sm text-muted-foreground mt-2 break-all">
                     SKU: {product.supplierSku || "N/A"}
                   </p>
                 </div>
                 <Badge 
                   variant={statusColors[product.status || "draft"]} 
-                  className="flex-shrink-0"
+                  className="flex-shrink-0 self-start"
                   data-testid="badge-status"
                 >
                   {product.status || "draft"}
@@ -431,7 +431,7 @@ export default function MerchantProductDetailPage() {
               </CardContent>
             </Card>
 
-            <div className="grid grid-cols-2 gap-3">
+            <div className="grid grid-cols-2 gap-2 sm:gap-3">
               <Card>
                 <CardContent className="p-4 flex items-center gap-3">
                   <div className="h-10 w-10 rounded-lg bg-blue-500/10 flex items-center justify-center">
@@ -483,11 +483,11 @@ export default function MerchantProductDetailPage() {
 
         <Separator className="my-10" />
 
-        <div className="grid gap-8 lg:grid-cols-3">
+        <div className="grid gap-6 md:gap-8 md:grid-cols-3">
           {product.description && (
-            <Card className="lg:col-span-2">
+            <Card className="md:col-span-2">
               <CardHeader>
-                <CardTitle className="flex items-center gap-2">
+                <CardTitle className="flex items-center gap-2 flex-wrap">
                   <Info className="h-5 w-5" />
                   Product Description
                   {language.code !== 'en' && !isTranslating && (
@@ -507,7 +507,8 @@ export default function MerchantProductDetailPage() {
                   </div>
                 ) : (
                   <div 
-                    className="prose prose-sm dark:prose-invert max-w-none"
+                    className="prose prose-sm dark:prose-invert max-w-none [&>*]:break-words"
+                    data-testid="text-product-description"
                     dangerouslySetInnerHTML={{ __html: translated.description || product.description }}
                   />
                 )}
