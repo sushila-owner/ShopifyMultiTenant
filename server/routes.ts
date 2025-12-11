@@ -2021,8 +2021,20 @@ export async function registerRoutes(
         return res.status(404).json({ success: false, error: "Merchant not found" });
       }
 
-      // Create or get Stripe customer
+      // Create or get Stripe customer (handle live/test mode mismatch)
       let customerId = merchant.stripeCustomerId;
+      
+      // Verify customer exists in current Stripe mode, create new if not
+      if (customerId) {
+        try {
+          await stripe.customers.retrieve(customerId);
+        } catch (customerError: any) {
+          // Customer doesn't exist in this mode (live vs test mismatch)
+          console.log("[Wallet] Customer not found in current Stripe mode, creating new one");
+          customerId = null;
+        }
+      }
+      
       if (!customerId) {
         const customer = await stripe.customers.create({
           email: merchant.ownerEmail,
