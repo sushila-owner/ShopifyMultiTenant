@@ -48,6 +48,7 @@ import AnalyticsPage from "@/pages/merchant/analytics";
 import IntegrationsPage from "@/pages/merchant/integrations";
 import TeamPage from "@/pages/merchant/team";
 import SubscriptionPage from "@/pages/merchant/subscription";
+import WalletPage from "@/pages/merchant/wallet";
 import SettingsPage from "@/pages/merchant/settings";
 
 function ProtectedRoute({ children, requireAdmin = false }: { children: React.ReactNode; requireAdmin?: boolean }) {
@@ -291,6 +292,13 @@ function Router() {
         <ProtectedRoute>
           <MerchantLayout>
             <SubscriptionPage />
+          </MerchantLayout>
+        </ProtectedRoute>
+      </Route>
+      <Route path="/dashboard/wallet">
+        <ProtectedRoute>
+          <MerchantLayout>
+            <WalletPage />
           </MerchantLayout>
         </ProtectedRoute>
       </Route>

@@ -26,6 +26,7 @@ import {
   CreditCard,
   UserPlus,
   Plug,
+  Wallet,
 } from "lucide-react";
 import { useAuth } from "@/lib/auth";
 import { useI18n } from "@/lib/i18n";
@@ -48,6 +49,7 @@ const businessMenuItems = [
 ];
 
 const settingsMenuItems = [
+  { titleKey: "merchant.sidebar.wallet" as const, url: "/dashboard/wallet", icon: Wallet },
   { titleKey: "merchant.sidebar.subscription" as const, url: "/dashboard/subscription", icon: CreditCard },
   { titleKey: "merchant.sidebar.settings" as const, url: "/dashboard/settings", icon: Settings },
 ];
