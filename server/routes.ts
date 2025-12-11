@@ -2391,6 +2391,30 @@ export async function registerRoutes(
         return res.status(404).json({ success: false, error: "Order not found" });
       }
 
+      // Calculate supplier cost for the order (the cost the merchant pays to suppliers)
+      // This is based on supplier_price (not retail price) of products in the order
+      const supplierCostCents = Math.round((order.totalCost || order.totalAmount || 0) * 100);
+      
+      if (supplierCostCents > 0) {
+        // Debit wallet for order payment
+        const walletResult = await storage.debitWalletForOrder(
+          req.user.merchantId,
+          order.id,
+          supplierCostCents,
+          `Order #${order.shopifyOrderId || order.id} fulfillment`
+        );
+
+        if (!walletResult.success) {
+          return res.status(402).json({ 
+            success: false, 
+            error: walletResult.error,
+            insufficientFunds: true,
+            requiredAmount: supplierCostCents,
+            walletUrl: "/dashboard/wallet"
+          });
+        }
+      }
+
       // Create supplier orders and submit to suppliers for fulfillment
       const fulfillmentResults = await orderFulfillmentService.createSupplierOrderFromMerchantOrder(order);
       
@@ -2398,12 +2422,14 @@ export async function registerRoutes(
       const updatedOrder = await storage.updateOrder(parseInt(req.params.id), {
         fulfillmentStatus: allSuccessful ? "fulfilled" : "partial",
         status: allSuccessful ? "processing" : "pending",
+        walletDeducted: true,
       });
       
       res.json({ 
         success: true, 
         data: updatedOrder,
         fulfillmentResults,
+        walletDeducted: supplierCostCents > 0,
       });
     } catch (error: any) {
       res.status(400).json({ success: false, error: error.message });
