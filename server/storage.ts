@@ -1,6 +1,7 @@
 import {
   users, merchants, suppliers, products, customers, orders,
   plans, subscriptions, staffInvitations, notifications, activityLogs, syncLogs, adCreatives, otpVerifications, supplierOrders, categories,
+  walletBalances, walletTransactions,
   type User, type InsertUser,
   type Merchant, type InsertMerchant,
   type Supplier, type InsertSupplier,
@@ -18,6 +19,8 @@ import {
   type AdminDashboardStats, type MerchantDashboardStats,
   type SupplierOrder, type InsertSupplierOrder,
   type Category, type InsertCategory,
+  type WalletBalance, type InsertWalletBalance,
+  type WalletTransaction, type InsertWalletTransaction,
 } from "@shared/schema";
 import { db } from "./db";
 import { eq, and, desc, asc, sql, gte, lte, ilike, or, isNull, count, inArray } from "drizzle-orm";
@@ -190,6 +193,14 @@ export interface IStorage {
   // Seed data
   seedDefaultPlans(): Promise<void>;
   seedAdminUser(): Promise<User>;
+
+  // Wallet
+  getWalletBalance(merchantId: number): Promise<WalletBalance | undefined>;
+  createWalletBalance(data: InsertWalletBalance): Promise<WalletBalance>;
+  addFundsToWallet(merchantId: number, amountCents: number, stripePaymentIntentId: string, description?: string): Promise<{ balance: WalletBalance; transaction: WalletTransaction }>;
+  debitWalletForOrder(merchantId: number, orderId: number, amountCents: number, description?: string): Promise<{ success: boolean; balance?: WalletBalance; transaction?: WalletTransaction; error?: string }>;
+  refundToWallet(merchantId: number, orderId: number, amountCents: number, description?: string): Promise<{ balance: WalletBalance; transaction: WalletTransaction }>;
+  getWalletTransactions(merchantId: number, limit?: number, offset?: number): Promise<{ transactions: WalletTransaction[]; total: number }>;
 }
 
 export class DatabaseStorage implements IStorage {
@@ -1540,6 +1551,145 @@ export class DatabaseStorage implements IStorage {
   async getUserByGoogleId(googleId: string): Promise<User | undefined> {
     const [user] = await db.select().from(users).where(eq(users.googleId, googleId)).limit(1);
     return user;
+  }
+
+  // ==================== WALLET ====================
+  async getWalletBalance(merchantId: number): Promise<WalletBalance | undefined> {
+    const [balance] = await db.select().from(walletBalances).where(eq(walletBalances.merchantId, merchantId)).limit(1);
+    return balance;
+  }
+
+  async createWalletBalance(data: InsertWalletBalance): Promise<WalletBalance> {
+    const [balance] = await db.insert(walletBalances).values(data).returning();
+    return balance;
+  }
+
+  async addFundsToWallet(
+    merchantId: number, 
+    amountCents: number, 
+    stripePaymentIntentId: string, 
+    description?: string
+  ): Promise<{ balance: WalletBalance; transaction: WalletTransaction }> {
+    // Get or create wallet balance
+    let balance = await this.getWalletBalance(merchantId);
+    if (!balance) {
+      balance = await this.createWalletBalance({ merchantId, balanceCents: 0, pendingCents: 0, currency: "USD" });
+    }
+
+    const newBalanceCents = balance.balanceCents + amountCents;
+
+    // Update balance
+    const [updatedBalance] = await db.update(walletBalances)
+      .set({ balanceCents: newBalanceCents, updatedAt: new Date() })
+      .where(eq(walletBalances.merchantId, merchantId))
+      .returning();
+
+    // Create transaction record
+    const [transaction] = await db.insert(walletTransactions).values({
+      merchantId,
+      type: "credit",
+      amountCents,
+      balanceAfterCents: newBalanceCents,
+      currency: "USD",
+      description: description || "Wallet top-up",
+      stripePaymentIntentId,
+    }).returning();
+
+    return { balance: updatedBalance, transaction };
+  }
+
+  async debitWalletForOrder(
+    merchantId: number, 
+    orderId: number, 
+    amountCents: number, 
+    description?: string
+  ): Promise<{ success: boolean; balance?: WalletBalance; transaction?: WalletTransaction; error?: string }> {
+    // Get wallet balance
+    const balance = await this.getWalletBalance(merchantId);
+    if (!balance) {
+      return { success: false, error: "Wallet not found. Please add funds first." };
+    }
+
+    if (balance.balanceCents < amountCents) {
+      return { 
+        success: false, 
+        error: `Insufficient funds. Available: $${(balance.balanceCents / 100).toFixed(2)}, Required: $${(amountCents / 100).toFixed(2)}` 
+      };
+    }
+
+    const newBalanceCents = balance.balanceCents - amountCents;
+
+    // Update balance
+    const [updatedBalance] = await db.update(walletBalances)
+      .set({ balanceCents: newBalanceCents, updatedAt: new Date() })
+      .where(eq(walletBalances.merchantId, merchantId))
+      .returning();
+
+    // Create transaction record
+    const [transaction] = await db.insert(walletTransactions).values({
+      merchantId,
+      type: "debit",
+      amountCents,
+      balanceAfterCents: newBalanceCents,
+      currency: "USD",
+      description: description || "Order payment",
+      orderId,
+    }).returning();
+
+    return { success: true, balance: updatedBalance, transaction };
+  }
+
+  async refundToWallet(
+    merchantId: number, 
+    orderId: number, 
+    amountCents: number, 
+    description?: string
+  ): Promise<{ balance: WalletBalance; transaction: WalletTransaction }> {
+    // Get or create wallet balance
+    let balance = await this.getWalletBalance(merchantId);
+    if (!balance) {
+      balance = await this.createWalletBalance({ merchantId, balanceCents: 0, pendingCents: 0, currency: "USD" });
+    }
+
+    const newBalanceCents = balance.balanceCents + amountCents;
+
+    // Update balance
+    const [updatedBalance] = await db.update(walletBalances)
+      .set({ balanceCents: newBalanceCents, updatedAt: new Date() })
+      .where(eq(walletBalances.merchantId, merchantId))
+      .returning();
+
+    // Create transaction record
+    const [transaction] = await db.insert(walletTransactions).values({
+      merchantId,
+      type: "refund",
+      amountCents,
+      balanceAfterCents: newBalanceCents,
+      currency: "USD",
+      description: description || "Order refund",
+      orderId,
+    }).returning();
+
+    return { balance: updatedBalance, transaction };
+  }
+
+  async getWalletTransactions(
+    merchantId: number, 
+    limit: number = 50, 
+    offset: number = 0
+  ): Promise<{ transactions: WalletTransaction[]; total: number }> {
+    const transactions = await db.select()
+      .from(walletTransactions)
+      .where(eq(walletTransactions.merchantId, merchantId))
+      .orderBy(desc(walletTransactions.createdAt))
+      .limit(limit)
+      .offset(offset);
+
+    const [countResult] = await db.select({ count: count() })
+      .from(walletTransactions)
+      .where(eq(walletTransactions.merchantId, merchantId));
+
+    return { transactions, total: countResult?.count || 0 };
   }
 }
 

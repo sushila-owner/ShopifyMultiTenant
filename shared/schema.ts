@@ -824,6 +824,89 @@ export const insertOtpSchema = createInsertSchema(otpVerifications).omit({
 export type InsertOtp = z.infer<typeof insertOtpSchema>;
 export type OtpVerification = typeof otpVerifications.$inferSelect;
 
+// ==================== WALLET SYSTEM ====================
+export const walletTransactionTypeEnum = pgEnum("wallet_transaction_type", [
+  "credit",      // Adding funds to wallet
+  "debit",       // Deducting funds for orders
+  "refund",      // Refund from cancelled order
+  "adjustment",  // Manual admin adjustment
+  "hold",        // Temporary hold for pending order
+  "release"      // Release of held funds
+]);
+
+export const walletBalances = pgTable("wallet_balances", {
+  id: serial("id").primaryKey(),
+  merchantId: integer("merchant_id").notNull().unique(),
+  balanceCents: integer("balance_cents").notNull().default(0),
+  pendingCents: integer("pending_cents").notNull().default(0),
+  currency: text("currency").notNull().default("USD"),
+  createdAt: timestamp("created_at").defaultNow().notNull(),
+  updatedAt: timestamp("updated_at").defaultNow().notNull(),
+}, (table) => ({
+  merchantIdx: index("wallet_balances_merchant_idx").on(table.merchantId),
+}));
+
+export const walletTransactions = pgTable("wallet_transactions", {
+  id: serial("id").primaryKey(),
+  merchantId: integer("merchant_id").notNull(),
+  type: walletTransactionTypeEnum("type").notNull(),
+  amountCents: integer("amount_cents").notNull(),
+  balanceAfterCents: integer("balance_after_cents").notNull(),
+  currency: text("currency").notNull().default("USD"),
+  description: text("description"),
+  orderId: integer("order_id"),
+  stripePaymentIntentId: text("stripe_payment_intent_id"),
+  metadata: jsonb("metadata").$type<Record<string, any>>().default({}),
+  createdAt: timestamp("created_at").defaultNow().notNull(),
+}, (table) => ({
+  merchantIdx: index("wallet_transactions_merchant_idx").on(table.merchantId),
+  typeIdx: index("wallet_transactions_type_idx").on(table.type),
+  orderIdx: index("wallet_transactions_order_idx").on(table.orderId),
+  createdAtIdx: index("wallet_transactions_created_idx").on(table.createdAt),
+}));
+
+// Wallet relations
+export const walletBalancesRelations = relations(walletBalances, ({ one }) => ({
+  merchant: one(merchants, {
+    fields: [walletBalances.merchantId],
+    references: [merchants.id],
+  }),
+}));
+
+export const walletTransactionsRelations = relations(walletTransactions, ({ one }) => ({
+  merchant: one(merchants, {
+    fields: [walletTransactions.merchantId],
+    references: [merchants.id],
+  }),
+  order: one(orders, {
+    fields: [walletTransactions.orderId],
+    references: [orders.id],
+  }),
+}));
+
+// Wallet insert schemas
+export const insertWalletBalanceSchema = createInsertSchema(walletBalances).omit({
+  id: true,
+  createdAt: true,
+  updatedAt: true,
+});
+export type InsertWalletBalance = z.infer<typeof insertWalletBalanceSchema>;
+export type WalletBalance = typeof walletBalances.$inferSelect;
+
+export const insertWalletTransactionSchema = createInsertSchema(walletTransactions).omit({
+  id: true,
+  createdAt: true,
+});
+export type InsertWalletTransaction = z.infer<typeof insertWalletTransactionSchema>;
+export type WalletTransaction = typeof walletTransactions.$inferSelect;
+
+// Wallet top-up request schema
+export const walletTopUpSchema = z.object({
+  amountCents: z.number().min(500, "Minimum top-up is $5.00").max(1000000, "Maximum top-up is $10,000.00"),
+  currency: z.string().default("USD"),
+});
+export type WalletTopUpInput = z.infer<typeof walletTopUpSchema>;
+
 // ==================== AUTH SCHEMAS ====================
 export const loginSchema = z.object({
   email: z.string().email("Invalid email address"),
