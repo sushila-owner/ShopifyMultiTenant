@@ -2388,6 +2388,409 @@ export async function registerRoutes(
     }
   });
 
+  // ==================== PUSH PRODUCTS TO SHOPIFY ====================
+  app.post("/api/merchant/products/:id/push-to-shopify", authMiddleware, merchantOnly, async (req: AuthRequest, res: Response) => {
+    try {
+      if (!req.user?.merchantId) {
+        return res.status(400).json({ success: false, error: "No merchant associated" });
+      }
+
+      const productId = parseInt(req.params.id);
+      const product = await storage.getProduct(productId);
+      
+      if (!product || product.merchantId !== req.user.merchantId) {
+        return res.status(404).json({ success: false, error: "Product not found" });
+      }
+
+      if (product.shopifyProductId) {
+        return res.status(400).json({ success: false, error: "Product already synced to Shopify" });
+      }
+
+      const { getShopifyServiceFromMerchant } = await import("./shopify");
+      const shopifyService = await getShopifyServiceFromMerchant(req.user.merchantId);
+      
+      if (!shopifyService) {
+        return res.status(400).json({ success: false, error: "Shopify not connected. Please connect your store first." });
+      }
+
+      const variants = (product.variants as any[]) || [];
+      const images = (product.images as any[]) || [];
+      const tags = (product.tags as string[]) || [];
+
+      const result = await shopifyService.createProduct({
+        title: product.title,
+        description: product.description || "",
+        productType: product.category || "",
+        tags,
+        variants: variants.map(v => ({
+          title: v.title || "Default Title",
+          price: product.merchantPrice || product.supplierPrice || 0,
+          sku: v.sku || product.supplierSku || "",
+          inventoryQuantity: v.inventoryQuantity || product.inventoryQuantity || 0,
+          compareAtPrice: v.compareAtPrice,
+        })),
+        images: images.map(img => ({
+          url: img.url,
+          alt: img.alt || product.title,
+        })),
+      });
+
+      if (!result.success) {
+        return res.status(400).json({ success: false, error: result.error });
+      }
+
+      await storage.updateProduct(productId, {
+        shopifyProductId: result.shopifyProductId,
+        syncStatus: "synced",
+        lastSyncedAt: new Date(),
+      });
+
+      res.json({ success: true, data: { shopifyProductId: result.shopifyProductId } });
+    } catch (error: any) {
+      console.error("[PushToShopify] Error:", error);
+      res.status(500).json({ success: false, error: error.message });
+    }
+  });
+
+  app.post("/api/merchant/products/bulk-push-to-shopify", authMiddleware, merchantOnly, async (req: AuthRequest, res: Response) => {
+    try {
+      if (!req.user?.merchantId) {
+        return res.status(400).json({ success: false, error: "No merchant associated" });
+      }
+
+      const { productIds } = req.body;
+      if (!Array.isArray(productIds) || productIds.length === 0) {
+        return res.status(400).json({ success: false, error: "Product IDs required" });
+      }
+
+      const { getShopifyServiceFromMerchant } = await import("./shopify");
+      const shopifyService = await getShopifyServiceFromMerchant(req.user.merchantId);
+      
+      if (!shopifyService) {
+        return res.status(400).json({ success: false, error: "Shopify not connected" });
+      }
+
+      const results: { productId: number; success: boolean; shopifyProductId?: string; error?: string }[] = [];
+
+      for (const productId of productIds) {
+        const product = await storage.getProduct(productId);
+        
+        if (!product || product.merchantId !== req.user.merchantId) {
+          results.push({ productId, success: false, error: "Not found" });
+          continue;
+        }
+
+        if (product.shopifyProductId) {
+          results.push({ productId, success: true, shopifyProductId: product.shopifyProductId });
+          continue;
+        }
+
+        const variants = (product.variants as any[]) || [];
+        const images = (product.images as any[]) || [];
+        const tags = (product.tags as string[]) || [];
+
+        const result = await shopifyService.createProduct({
+          title: product.title,
+          description: product.description || "",
+          productType: product.category || "",
+          tags,
+          variants: variants.map(v => ({
+            title: v.title || "Default Title",
+            price: product.merchantPrice || product.supplierPrice || 0,
+            sku: v.sku || product.supplierSku || "",
+            inventoryQuantity: v.inventoryQuantity || product.inventoryQuantity || 0,
+          })),
+          images: images.map(img => ({
+            url: img.url,
+            alt: img.alt || product.title,
+          })),
+        });
+
+        if (result.success) {
+          await storage.updateProduct(productId, {
+            shopifyProductId: result.shopifyProductId,
+            syncStatus: "synced",
+            lastSyncedAt: new Date(),
+          });
+          results.push({ productId, success: true, shopifyProductId: result.shopifyProductId });
+        } else {
+          results.push({ productId, success: false, error: result.error });
+        }
+
+        await new Promise(resolve => setTimeout(resolve, 500));
+      }
+
+      const successCount = results.filter(r => r.success).length;
+      res.json({ success: true, data: { results, successCount, totalCount: productIds.length } });
+    } catch (error: any) {
+      res.status(500).json({ success: false, error: error.message });
+    }
+  });
+
+  // ==================== RETURNS MANAGEMENT ====================
+  app.get("/api/merchant/returns", authMiddleware, merchantOnly, async (req: AuthRequest, res: Response) => {
+    try {
+      if (!req.user?.merchantId) {
+        return res.status(400).json({ success: false, error: "No merchant associated" });
+      }
+      const { returnsService } = await import("./services/returnsService");
+      const returns = await returnsService.getReturnsByMerchant(req.user.merchantId);
+      res.json({ success: true, data: returns });
+    } catch (error: any) {
+      res.status(500).json({ success: false, error: error.message });
+    }
+  });
+
+  app.post("/api/merchant/returns", authMiddleware, merchantOnly, async (req: AuthRequest, res: Response) => {
+    try {
+      if (!req.user?.merchantId) {
+        return res.status(400).json({ success: false, error: "No merchant associated" });
+      }
+      const { returnsService } = await import("./services/returnsService");
+      const result = await returnsService.createReturn({
+        ...req.body,
+        merchantId: req.user.merchantId,
+      });
+      if (!result.success) {
+        return res.status(400).json(result);
+      }
+      res.json(result);
+    } catch (error: any) {
+      res.status(500).json({ success: false, error: error.message });
+    }
+  });
+
+  app.post("/api/merchant/returns/:id/approve", authMiddleware, merchantOnly, async (req: AuthRequest, res: Response) => {
+    try {
+      if (!req.user?.merchantId) {
+        return res.status(400).json({ success: false, error: "No merchant associated" });
+      }
+      const { returnsService } = await import("./services/returnsService");
+      const result = await returnsService.approveReturn(parseInt(req.params.id), req.user.merchantId);
+      if (!result.success) {
+        return res.status(400).json(result);
+      }
+      res.json(result);
+    } catch (error: any) {
+      res.status(500).json({ success: false, error: error.message });
+    }
+  });
+
+  app.post("/api/merchant/returns/:id/process-refund", authMiddleware, merchantOnly, async (req: AuthRequest, res: Response) => {
+    try {
+      if (!req.user?.merchantId) {
+        return res.status(400).json({ success: false, error: "No merchant associated" });
+      }
+      const { returnsService } = await import("./services/returnsService");
+      const result = await returnsService.processRefund(parseInt(req.params.id), req.user.merchantId);
+      if (!result.success) {
+        return res.status(400).json(result);
+      }
+      res.json(result);
+    } catch (error: any) {
+      res.status(500).json({ success: false, error: error.message });
+    }
+  });
+
+  app.post("/api/merchant/returns/:id/reject", authMiddleware, merchantOnly, async (req: AuthRequest, res: Response) => {
+    try {
+      if (!req.user?.merchantId) {
+        return res.status(400).json({ success: false, error: "No merchant associated" });
+      }
+      const { returnsService } = await import("./services/returnsService");
+      const result = await returnsService.rejectReturn(parseInt(req.params.id), req.user.merchantId, req.body.reason);
+      if (!result.success) {
+        return res.status(400).json(result);
+      }
+      res.json(result);
+    } catch (error: any) {
+      res.status(500).json({ success: false, error: error.message });
+    }
+  });
+
+  // ==================== SHIPPING CONFIGURATION ====================
+  app.get("/api/merchant/shipping/zones", authMiddleware, merchantOnly, async (req: AuthRequest, res: Response) => {
+    try {
+      if (!req.user?.merchantId) {
+        return res.status(400).json({ success: false, error: "No merchant associated" });
+      }
+      const { shippingService } = await import("./services/shippingService");
+      const zones = await shippingService.getZones(req.user.merchantId);
+      res.json({ success: true, data: zones });
+    } catch (error: any) {
+      res.status(500).json({ success: false, error: error.message });
+    }
+  });
+
+  app.post("/api/merchant/shipping/zones", authMiddleware, merchantOnly, async (req: AuthRequest, res: Response) => {
+    try {
+      if (!req.user?.merchantId) {
+        return res.status(400).json({ success: false, error: "No merchant associated" });
+      }
+      const { shippingService } = await import("./services/shippingService");
+      const zone = await shippingService.createZone(req.user.merchantId, req.body);
+      res.json({ success: true, data: zone });
+    } catch (error: any) {
+      res.status(500).json({ success: false, error: error.message });
+    }
+  });
+
+  app.put("/api/merchant/shipping/zones/:id", authMiddleware, merchantOnly, async (req: AuthRequest, res: Response) => {
+    try {
+      if (!req.user?.merchantId) {
+        return res.status(400).json({ success: false, error: "No merchant associated" });
+      }
+      const { shippingService } = await import("./services/shippingService");
+      const zone = await shippingService.updateZone(parseInt(req.params.id), req.user.merchantId, req.body);
+      if (!zone) {
+        return res.status(404).json({ success: false, error: "Zone not found" });
+      }
+      res.json({ success: true, data: zone });
+    } catch (error: any) {
+      res.status(500).json({ success: false, error: error.message });
+    }
+  });
+
+  app.delete("/api/merchant/shipping/zones/:id", authMiddleware, merchantOnly, async (req: AuthRequest, res: Response) => {
+    try {
+      if (!req.user?.merchantId) {
+        return res.status(400).json({ success: false, error: "No merchant associated" });
+      }
+      const { shippingService } = await import("./services/shippingService");
+      const deleted = await shippingService.deleteZone(parseInt(req.params.id), req.user.merchantId);
+      if (!deleted) {
+        return res.status(400).json({ success: false, error: "Cannot delete zone" });
+      }
+      res.json({ success: true });
+    } catch (error: any) {
+      res.status(500).json({ success: false, error: error.message });
+    }
+  });
+
+  app.post("/api/merchant/shipping/calculate", authMiddleware, merchantOnly, async (req: AuthRequest, res: Response) => {
+    try {
+      if (!req.user?.merchantId) {
+        return res.status(400).json({ success: false, error: "No merchant associated" });
+      }
+      const { shippingService } = await import("./services/shippingService");
+      const rates = await shippingService.calculateShipping(req.user.merchantId, req.body);
+      res.json({ success: true, data: rates });
+    } catch (error: any) {
+      res.status(500).json({ success: false, error: error.message });
+    }
+  });
+
+  // ==================== INVENTORY SYNC ====================
+  app.post("/api/merchant/inventory/sync", authMiddleware, merchantOnly, async (req: AuthRequest, res: Response) => {
+    try {
+      if (!req.user?.merchantId) {
+        return res.status(400).json({ success: false, error: "No merchant associated" });
+      }
+      const { inventorySyncService } = await import("./services/inventorySyncService");
+      const results = await inventorySyncService.syncMerchantProductInventory(req.user.merchantId);
+      res.json({ success: true, data: { results, updatedCount: results.filter(r => r.updated).length } });
+    } catch (error: any) {
+      res.status(500).json({ success: false, error: error.message });
+    }
+  });
+
+  app.get("/api/merchant/inventory/sync-status", authMiddleware, merchantOnly, async (req: AuthRequest, res: Response) => {
+    try {
+      const { inventorySyncService } = await import("./services/inventorySyncService");
+      const status = inventorySyncService.getStatus();
+      res.json({ success: true, data: status });
+    } catch (error: any) {
+      res.status(500).json({ success: false, error: error.message });
+    }
+  });
+
+  // ==================== GDPR COMPLIANCE ====================
+  app.get("/api/merchant/data-export", authMiddleware, merchantOnly, async (req: AuthRequest, res: Response) => {
+    try {
+      if (!req.user?.merchantId) {
+        return res.status(400).json({ success: false, error: "No merchant associated" });
+      }
+      const { gdprService } = await import("./services/gdprService");
+      const result = await gdprService.exportMerchantData(req.user.merchantId);
+      if (!result.success) {
+        return res.status(400).json(result);
+      }
+      res.json(result);
+    } catch (error: any) {
+      res.status(500).json({ success: false, error: error.message });
+    }
+  });
+
+  app.post("/api/merchant/data-deletion", authMiddleware, merchantOnly, async (req: AuthRequest, res: Response) => {
+    try {
+      if (!req.user?.merchantId) {
+        return res.status(400).json({ success: false, error: "No merchant associated" });
+      }
+      const { confirmDelete } = req.body;
+      if (!confirmDelete) {
+        return res.status(400).json({ success: false, error: "Must confirm deletion" });
+      }
+      const { gdprService } = await import("./services/gdprService");
+      const result = await gdprService.deleteMerchantData(req.user.merchantId, true);
+      if (!result.success) {
+        return res.status(400).json(result);
+      }
+      res.json(result);
+    } catch (error: any) {
+      res.status(500).json({ success: false, error: error.message });
+    }
+  });
+
+  app.post("/api/merchant/customers/:id/anonymize", authMiddleware, merchantOnly, async (req: AuthRequest, res: Response) => {
+    try {
+      if (!req.user?.merchantId) {
+        return res.status(400).json({ success: false, error: "No merchant associated" });
+      }
+      const { gdprService } = await import("./services/gdprService");
+      const result = await gdprService.anonymizeCustomer(parseInt(req.params.id), req.user.merchantId);
+      if (!result.success) {
+        return res.status(400).json(result);
+      }
+      res.json(result);
+    } catch (error: any) {
+      res.status(500).json({ success: false, error: error.message });
+    }
+  });
+
+  // Shopify GDPR Webhooks (required for Shopify App Store)
+  app.post("/api/shopify/gdpr/customers/data_request", express.json(), async (req: Request, res: Response) => {
+    try {
+      const { shop_domain, customer } = req.body;
+      const { gdprService } = await import("./services/gdprService");
+      await gdprService.handleShopifyDataRequest(shop_domain, customer?.id);
+      res.status(200).json({ success: true });
+    } catch (error: any) {
+      res.status(200).json({ success: true }); // Always return 200 to Shopify
+    }
+  });
+
+  app.post("/api/shopify/gdpr/customers/redact", express.json(), async (req: Request, res: Response) => {
+    try {
+      const { shop_domain, customer } = req.body;
+      const { gdprService } = await import("./services/gdprService");
+      await gdprService.handleShopifyCustomerRedact(shop_domain, customer?.id);
+      res.status(200).json({ success: true });
+    } catch (error: any) {
+      res.status(200).json({ success: true });
+    }
+  });
+
+  app.post("/api/shopify/gdpr/shop/redact", express.json(), async (req: Request, res: Response) => {
+    try {
+      const { shop_domain } = req.body;
+      const { gdprService } = await import("./services/gdprService");
+      await gdprService.handleShopifyShopRedact(shop_domain);
+      res.status(200).json({ success: true });
+    } catch (error: any) {
+      res.status(200).json({ success: true });
+    }
+  });
+
   // Product Catalog (global products for import) - Server-side pagination for 60k+ products
   app.get("/api/merchant/catalog", authMiddleware, merchantOnly, async (req: AuthRequest, res: Response) => {
     try {

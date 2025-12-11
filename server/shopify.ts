@@ -660,6 +660,216 @@ export class ShopifyService {
     };
   }
 
+  // ============================================
+  // PRODUCT PUBLISHING TO SHOPIFY
+  // ============================================
+
+  /**
+   * Create a product in Shopify store
+   */
+  async createProduct(product: {
+    title: string;
+    description: string;
+    vendor?: string;
+    productType?: string;
+    tags?: string[];
+    variants: {
+      title?: string;
+      price: number;
+      sku?: string;
+      inventoryQuantity?: number;
+      compareAtPrice?: number;
+    }[];
+    images?: { url: string; alt?: string }[];
+  }): Promise<{ success: boolean; shopifyProductId?: string; error?: string }> {
+    try {
+      const url = `https://${this.storeUrl}/admin/api/${this.apiVersion}/products.json`;
+      
+      const shopifyProduct: any = {
+        product: {
+          title: product.title,
+          body_html: product.description || "",
+          vendor: product.vendor || "Apex Mart Wholesale",
+          product_type: product.productType || "",
+          tags: product.tags?.join(", ") || "",
+          status: "active",
+          variants: product.variants.map((v, index) => ({
+            title: v.title || "Default Title",
+            price: v.price.toFixed(2),
+            sku: v.sku || "",
+            inventory_quantity: v.inventoryQuantity || 0,
+            inventory_management: "shopify",
+            compare_at_price: v.compareAtPrice ? v.compareAtPrice.toFixed(2) : null,
+            position: index + 1,
+          })),
+        },
+      };
+
+      // Add images if provided
+      if (product.images && product.images.length > 0) {
+        shopifyProduct.product.images = product.images.map((img, index) => ({
+          src: img.url,
+          alt: img.alt || product.title,
+          position: index + 1,
+        }));
+      }
+
+      const response = await fetch(url, {
+        method: "POST",
+        headers: {
+          "X-Shopify-Access-Token": this.accessToken,
+          "Content-Type": "application/json",
+        },
+        body: JSON.stringify(shopifyProduct),
+      });
+
+      if (!response.ok) {
+        const errorText = await response.text();
+        console.error("[Shopify] Create product failed:", errorText);
+        return { success: false, error: `Shopify API error: ${response.status} - ${errorText}` };
+      }
+
+      const data = await response.json() as { product: ShopifyProduct };
+      console.log(`[Shopify] Created product ${data.product.id}: ${product.title}`);
+      
+      return { success: true, shopifyProductId: data.product.id.toString() };
+    } catch (error: any) {
+      console.error("[Shopify] Create product error:", error);
+      return { success: false, error: error.message };
+    }
+  }
+
+  /**
+   * Update an existing product in Shopify store
+   */
+  async updateProduct(shopifyProductId: string, updates: {
+    title?: string;
+    description?: string;
+    vendor?: string;
+    productType?: string;
+    tags?: string[];
+    variants?: {
+      id?: string;
+      title?: string;
+      price: number;
+      sku?: string;
+      inventoryQuantity?: number;
+      compareAtPrice?: number;
+    }[];
+  }): Promise<{ success: boolean; error?: string }> {
+    try {
+      const url = `https://${this.storeUrl}/admin/api/${this.apiVersion}/products/${shopifyProductId}.json`;
+      
+      const productUpdate: any = {};
+      
+      if (updates.title) productUpdate.title = updates.title;
+      if (updates.description) productUpdate.body_html = updates.description;
+      if (updates.vendor) productUpdate.vendor = updates.vendor;
+      if (updates.productType) productUpdate.product_type = updates.productType;
+      if (updates.tags) productUpdate.tags = updates.tags.join(", ");
+      
+      if (updates.variants) {
+        productUpdate.variants = updates.variants.map((v, index) => ({
+          id: v.id ? parseInt(v.id) : undefined,
+          title: v.title || "Default Title",
+          price: v.price.toFixed(2),
+          sku: v.sku || "",
+          compare_at_price: v.compareAtPrice ? v.compareAtPrice.toFixed(2) : null,
+          position: index + 1,
+        }));
+      }
+
+      const response = await fetch(url, {
+        method: "PUT",
+        headers: {
+          "X-Shopify-Access-Token": this.accessToken,
+          "Content-Type": "application/json",
+        },
+        body: JSON.stringify({ product: productUpdate }),
+      });
+
+      if (!response.ok) {
+        const errorText = await response.text();
+        console.error("[Shopify] Update product failed:", errorText);
+        return { success: false, error: `Shopify API error: ${response.status} - ${errorText}` };
+      }
+
+      console.log(`[Shopify] Updated product ${shopifyProductId}`);
+      return { success: true };
+    } catch (error: any) {
+      console.error("[Shopify] Update product error:", error);
+      return { success: false, error: error.message };
+    }
+  }
+
+  /**
+   * Delete a product from Shopify store
+   */
+  async deleteProduct(shopifyProductId: string): Promise<{ success: boolean; error?: string }> {
+    try {
+      const url = `https://${this.storeUrl}/admin/api/${this.apiVersion}/products/${shopifyProductId}.json`;
+
+      const response = await fetch(url, {
+        method: "DELETE",
+        headers: {
+          "X-Shopify-Access-Token": this.accessToken,
+          "Content-Type": "application/json",
+        },
+      });
+
+      if (!response.ok) {
+        const errorText = await response.text();
+        return { success: false, error: `Shopify API error: ${response.status} - ${errorText}` };
+      }
+
+      console.log(`[Shopify] Deleted product ${shopifyProductId}`);
+      return { success: true };
+    } catch (error: any) {
+      return { success: false, error: error.message };
+    }
+  }
+
+  /**
+   * Update inventory level for a variant
+   */
+  async updateInventory(inventoryItemId: string, quantity: number, locationId?: string): Promise<{ success: boolean; error?: string }> {
+    try {
+      // First, get locations if not provided
+      let locId = locationId;
+      if (!locId) {
+        const locResponse = await this.fetch<{ locations: { id: number }[] }>("/locations.json");
+        if (locResponse.data.locations.length === 0) {
+          return { success: false, error: "No locations found" };
+        }
+        locId = locResponse.data.locations[0].id.toString();
+      }
+
+      const url = `https://${this.storeUrl}/admin/api/${this.apiVersion}/inventory_levels/set.json`;
+
+      const response = await fetch(url, {
+        method: "POST",
+        headers: {
+          "X-Shopify-Access-Token": this.accessToken,
+          "Content-Type": "application/json",
+        },
+        body: JSON.stringify({
+          location_id: parseInt(locId),
+          inventory_item_id: parseInt(inventoryItemId),
+          available: quantity,
+        }),
+      });
+
+      if (!response.ok) {
+        const errorText = await response.text();
+        return { success: false, error: `Shopify API error: ${response.status} - ${errorText}` };
+      }
+
+      return { success: true };
+    } catch (error: any) {
+      return { success: false, error: error.message };
+    }
+  }
+
   /**
    * Create fulfillment with tracking (for drop shipping)
    */
