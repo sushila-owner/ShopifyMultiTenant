@@ -647,7 +647,7 @@ export default function CatalogPage() {
         )}
 
         <Link href={`/dashboard/catalog/${product.id}`}>
-          <div className="aspect-square bg-muted relative overflow-hidden rounded-lg">
+          <div className="aspect-square bg-white relative overflow-hidden rounded-lg flex items-center justify-center">
             {(() => {
               const images = product.images as any[] | undefined;
               const imageUrl = images && images.length > 0 ? images[0]?.url : null;
@@ -656,7 +656,7 @@ export default function CatalogPage() {
                   <img
                     src={imageUrl}
                     alt={product.title}
-                    className="w-full h-full object-cover group-hover:scale-105 transition-transform duration-300"
+                    className="max-w-full max-h-full object-contain group-hover:scale-105 transition-transform duration-300"
                   />
                 );
               }
@@ -740,7 +740,7 @@ export default function CatalogPage() {
         )}
 
         <Link href={`/dashboard/catalog/${product.id}`}>
-          <div className="w-24 h-24 rounded-lg overflow-hidden bg-muted flex-shrink-0">
+          <div className="w-24 h-24 rounded-lg overflow-hidden bg-white flex-shrink-0 flex items-center justify-center">
             {(() => {
               const images = product.images as any[] | undefined;
               const imageUrl = images && images.length > 0 ? images[0]?.url : null;
@@ -749,7 +749,7 @@ export default function CatalogPage() {
                   <img
                     src={imageUrl}
                     alt={product.title}
-                    className="w-full h-full object-cover"
+                    className="max-w-full max-h-full object-contain"
                   />
                 );
               }
@@ -995,7 +995,7 @@ export default function CatalogPage() {
                 <DialogTitle className="line-clamp-1">{quickViewProduct.title}</DialogTitle>
               </DialogHeader>
               <div className="grid md:grid-cols-2 gap-6">
-                <div className="aspect-square rounded-xl overflow-hidden bg-muted">
+                <div className="aspect-square rounded-xl overflow-hidden bg-white flex items-center justify-center">
                   {(() => {
                     const images = quickViewProduct.images as any[] | undefined;
                     const imageUrl = images && images.length > 0 ? images[0]?.url : null;
@@ -1004,7 +1004,7 @@ export default function CatalogPage() {
                         <img
                           src={imageUrl}
                           alt={quickViewProduct.title}
-                          className="w-full h-full object-cover"
+                          className="max-w-full max-h-full object-contain"
                         />
                       );
                     }
