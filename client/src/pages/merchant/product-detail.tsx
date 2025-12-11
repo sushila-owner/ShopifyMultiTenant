@@ -37,7 +37,6 @@ import {
   Plus,
   TrendingUp,
   Boxes,
-  Tag,
   ChevronLeft,
   ChevronRight,
   ShoppingCart,
@@ -169,8 +168,6 @@ export default function MerchantProductDetailPage() {
 
   const images = product.images as { url: string; alt?: string; position?: number }[] | null;
   const variants = product.variants as { id: string; title: string; price: number; sku: string; inventoryQuantity: number }[] | null;
-  const originalTags = product.tags as string[] | null;
-  const displayTags = translated.tags || originalTags;
   const profit = calculateProfit(product.supplierPrice);
   const profitPercent = ((profit / product.supplierPrice) * 100).toFixed(0);
   const stock = product.inventoryQuantity || 0;
@@ -388,7 +385,7 @@ export default function MerchantProductDetailPage() {
 
               {product.category && (
                 <div className="flex items-center gap-2 text-sm text-muted-foreground">
-                  <Tag className="h-4 w-4" />
+                  <Package className="h-4 w-4" />
                   {product.category}
                 </div>
               )}
@@ -542,29 +539,6 @@ export default function MerchantProductDetailPage() {
                         </div>
                         <span className="font-semibold">{formatPrice(variant.price)}</span>
                       </div>
-                    ))}
-                  </div>
-                </CardContent>
-              </Card>
-            )}
-
-            {displayTags && displayTags.length > 0 && (
-              <Card>
-                <CardHeader>
-                  <CardTitle className="flex items-center gap-2 text-base">
-                    <Tag className="h-5 w-5" />
-                    Tags
-                    {language.code !== 'en' && (
-                      <Languages className="h-4 w-4 text-muted-foreground" />
-                    )}
-                  </CardTitle>
-                </CardHeader>
-                <CardContent>
-                  <div className="flex flex-wrap gap-2">
-                    {displayTags.map((tag, idx) => (
-                      <Badge key={idx} variant="secondary" className="text-xs">
-                        {tag}
-                      </Badge>
                     ))}
                   </div>
                 </CardContent>
