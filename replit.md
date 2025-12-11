@@ -40,8 +40,12 @@ Drizzle ORM is used with PostgreSQL, specifically PlanetScale PostgreSQL. The da
 - **Shipping Configuration**: Allows merchants to manage shipping zones and rates with various rate types (flat, weight-based, price-based).
 - **GDPR Compliance**: Includes services for data export, deletion, and customer data anonymization, fulfilling Shopify App Store requirements via webhooks.
 - **Analytics Dashboard**: Real-time analytics showing revenue, profit, orders, and conversion metrics with period filtering (7d, 30d, 90d, 1y). Includes revenue/profit charts, orders by period, top products by sales, and category distribution.
-- **Bulk Import System**: CSV import functionality for orders and products with validation, duplicate detection, batch processing, and downloadable templates.
-- **Webhook Notifications**: Event-driven webhook system supporting subscriptions to order, inventory, product, and wallet events. Includes CRUD management, webhook testing, and event logging.
+- **Automatic Shopify App Store Installation**: When merchants install the app from Shopify App Store, the system automatically:
+  - Creates merchant accounts using Shopify store information
+  - Connects the Shopify store with proper OAuth flow
+  - Registers webhooks for automatic order syncing (orders/create, orders/updated, app/uninstalled)
+  - Auto-logs in the merchant and redirects to dashboard
+  - Entry point: GET `/api/shopify/install?shop=store.myshopify.com`
 
 ### File Structure
 The project uses a monorepo structure with `/client`, `/server`, `/shared`, `/migrations`, `/attached_assets`, and `/script` directories, alongside path aliases like `@/*` and `@shared/*`.

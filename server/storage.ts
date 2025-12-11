@@ -112,6 +112,7 @@ export interface IStorage {
 
   // Orders
   getOrder(id: number): Promise<Order | undefined>;
+  getOrderByShopifyId(shopifyOrderId: string): Promise<Order | undefined>;
   createOrder(order: InsertOrder): Promise<Order>;
   updateOrder(id: number, data: Partial<InsertOrder>): Promise<Order | undefined>;
   getOrdersByMerchant(merchantId: number, limit?: number, offset?: number, status?: string, fulfillmentStatus?: string): Promise<{ orders: Order[]; total: number }>;
@@ -687,6 +688,12 @@ export class DatabaseStorage implements IStorage {
   // ==================== ORDERS ====================
   async getOrder(id: number): Promise<Order | undefined> {
     const [order] = await db.select().from(orders).where(eq(orders.id, id));
+    return order || undefined;
+  }
+
+  async getOrderByShopifyId(shopifyOrderId: string): Promise<Order | undefined> {
+    const [order] = await db.select().from(orders)
+      .where(eq(orders.shopifyOrderId, shopifyOrderId));
     return order || undefined;
   }
 

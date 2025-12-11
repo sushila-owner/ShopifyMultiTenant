@@ -171,3 +171,43 @@ export function validateShopDomain(shop: string): boolean {
   const normalizedShop = shop.includes(".myshopify.com") ? shop : `${shop}.myshopify.com`;
   return shopRegex.test(normalizedShop);
 }
+
+export async function registerWebhooks(shop: string, accessToken: string, appUrl: string): Promise<void> {
+  const shopDomain = shop.includes(".myshopify.com") ? shop : `${shop}.myshopify.com`;
+  
+  const webhooks = [
+    { topic: "orders/create", address: `${appUrl}/api/shopify/webhooks/orders/create` },
+    { topic: "orders/updated", address: `${appUrl}/api/shopify/webhooks/orders/updated` },
+    { topic: "app/uninstalled", address: `${appUrl}/api/shopify/webhooks/app/uninstalled` },
+  ];
+
+  for (const webhook of webhooks) {
+    try {
+      const response = await fetch(`https://${shopDomain}/admin/api/2024-01/webhooks.json`, {
+        method: "POST",
+        headers: {
+          "X-Shopify-Access-Token": accessToken,
+          "Content-Type": "application/json",
+        },
+        body: JSON.stringify({
+          webhook: {
+            topic: webhook.topic,
+            address: webhook.address,
+            format: "json",
+          },
+        }),
+      });
+
+      if (response.ok) {
+        console.log(`[Shopify Webhook] Registered ${webhook.topic} for ${shop}`);
+      } else {
+        const errorText = await response.text();
+        if (!errorText.includes("already been taken")) {
+          console.error(`[Shopify Webhook] Failed to register ${webhook.topic}: ${errorText}`);
+        }
+      }
+    } catch (error) {
+      console.error(`[Shopify Webhook] Error registering ${webhook.topic}:`, error);
+    }
+  }
+}

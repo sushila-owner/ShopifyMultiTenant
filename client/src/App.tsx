@@ -50,8 +50,7 @@ import TeamPage from "@/pages/merchant/team";
 import SubscriptionPage from "@/pages/merchant/subscription";
 import WalletPage from "@/pages/merchant/wallet";
 import SettingsPage from "@/pages/merchant/settings";
-import ImportPage from "@/pages/merchant/import";
-import WebhooksPage from "@/pages/merchant/webhooks";
+import ShopifyConnected from "@/pages/shopify-connected";
 
 function ProtectedRoute({ children, requireAdmin = false }: { children: React.ReactNode; requireAdmin?: boolean }) {
   const { user, isLoading } = useAuth();
@@ -311,20 +310,9 @@ function Router() {
           </MerchantLayout>
         </ProtectedRoute>
       </Route>
-      <Route path="/dashboard/import">
-        <ProtectedRoute>
-          <MerchantLayout>
-            <ImportPage />
-          </MerchantLayout>
-        </ProtectedRoute>
-      </Route>
-      <Route path="/dashboard/webhooks">
-        <ProtectedRoute>
-          <MerchantLayout>
-            <WebhooksPage />
-          </MerchantLayout>
-        </ProtectedRoute>
-      </Route>
+
+      {/* Shopify Auto-Connect Route (no auth required) */}
+      <Route path="/shopify-connected" component={ShopifyConnected} />
 
       {/* Fallback */}
       <Route component={NotFound} />

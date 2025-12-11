@@ -17,7 +17,7 @@ import {
   insertCategorySchema,
   type User,
 } from "@shared/schema";
-import { randomUUID } from "crypto";
+import { randomUUID, randomBytes } from "crypto";
 import { stripeService } from "./stripeService";
 import { getStripePublishableKey, getUncachableStripeClient } from "./stripeClient";
 import { supplierSyncService } from "./services/supplierSync";
@@ -105,7 +105,8 @@ export async function registerRoutes(
   // Types for OAuth storage
   interface OAuthNonceData {
     shop: string;
-    merchantId: number;
+    merchantId: number | null;  // null for automatic App Store installs
+    isAppStoreInstall?: boolean;
     timestamp: number;
   }
 
@@ -114,7 +115,9 @@ export async function registerRoutes(
     accessToken: string;
     scopes: string[];
     shopName: string;
-    merchantId: number;
+    shopEmail?: string;
+    merchantId: number | null;  // null for automatic App Store installs
+    isAppStoreInstall?: boolean;
     timestamp: number;
   }
   
@@ -195,6 +198,145 @@ export async function registerRoutes(
     return `${protocol}://${host}`;
   }
 
+  // PUBLIC: Shopify App Store installation endpoint
+  // This is the entry point when a merchant installs from Shopify App Store
+  // No authentication required - merchant account will be auto-created during OAuth
+  app.get("/api/shopify/install", async (req: Request, res: Response) => {
+    try {
+      const { 
+        isShopifyConfigured, 
+        getShopifyConfig, 
+        validateShopDomain, 
+        generateNonce, 
+        buildInstallUrl 
+      } = await import("./shopifyOAuth");
+
+      if (!isShopifyConfigured()) {
+        return res.status(500).send("Shopify app not configured. Please contact support.");
+      }
+
+      const shop = req.query.shop as string;
+      if (!shop) {
+        return res.status(400).send("Missing shop parameter. Please install from Shopify App Store.");
+      }
+
+      if (!validateShopDomain(shop)) {
+        return res.status(400).send("Invalid Shopify store domain.");
+      }
+
+      const appUrl = getAppUrl(req);
+      const config = getShopifyConfig(appUrl);
+      if (!config) {
+        return res.status(500).send("Failed to configure Shopify app.");
+      }
+
+      const nonce = generateNonce();
+      // Store nonce with null merchantId - will be created during callback
+      await setNonce(nonce, { 
+        shop, 
+        merchantId: null, 
+        isAppStoreInstall: true,
+        timestamp: Date.now() 
+      });
+
+      const installUrl = buildInstallUrl(shop, config, nonce);
+      console.log(`[Shopify] App Store install initiated for shop: ${shop}`);
+      
+      res.redirect(installUrl);
+    } catch (error: any) {
+      console.error("[Shopify] App Store install error:", error);
+      res.status(500).send("Installation failed. Please try again.");
+    }
+  });
+
+  // Exchange single-use auth code for JWT (used after App Store install auto-login)
+  // This prevents token injection attacks by validating the code server-side
+  app.post("/api/shopify/exchange-code", async (req: Request, res: Response) => {
+    try {
+      const { code } = req.body;
+      
+      if (!code || typeof code !== "string") {
+        return res.status(400).json({ success: false, error: "Missing or invalid code" });
+      }
+      
+      // Validate auth code prefix to ensure it's an auth code, not an OAuth nonce
+      if (!code.startsWith("auth_")) {
+        console.error("[Shopify] Invalid auth code format - missing prefix");
+        return res.status(400).json({ success: false, error: "Invalid code format" });
+      }
+      
+      // Use dedicated auth code storage with strict TTL
+      const { getAuthCode, deleteAuthCode, verifyAuthCodeDeleted } = await import("./redis");
+      
+      // Get auth code data - abort if Redis fails when Redis is configured
+      const authResult = await getAuthCode(code);
+      if (!authResult.success) {
+        console.error("[Shopify] Auth code retrieval failed (Redis error):", authResult.error);
+        return res.status(503).json({ success: false, error: "Service temporarily unavailable - please try again" });
+      }
+      
+      if (!authResult.data) {
+        return res.status(400).json({ success: false, error: "Invalid or expired code" });
+      }
+      
+      const authData = authResult.data;
+      
+      // Immediately delete and verify deletion (single-use enforcement)
+      // MUST abort if delete fails when Redis is configured
+      const deleteResult = await deleteAuthCode(code);
+      if (!deleteResult.success) {
+        console.error("[Shopify] Auth code deletion failed (Redis error) - aborting for security:", deleteResult.error);
+        return res.status(503).json({ success: false, error: "Service temporarily unavailable - please try again" });
+      }
+      
+      const verifyResult = await verifyAuthCodeDeleted(code);
+      if (!verifyResult.success) {
+        console.error("[Shopify] Auth code deletion verification failed (Redis error) - aborting:", verifyResult.error);
+        return res.status(503).json({ success: false, error: "Service temporarily unavailable - please try again" });
+      }
+      
+      if (!verifyResult.data) {
+        console.error("[Shopify] Auth code still exists after deletion - potential replay attack");
+        return res.status(500).json({ success: false, error: "Security error - please try again" });
+      }
+      
+      // Check code age (max 5 minutes as additional safeguard)
+      if (Date.now() - authData.timestamp > 5 * 60 * 1000) {
+        console.error("[Shopify] Auth code expired");
+        return res.status(400).json({ success: false, error: "Code expired" });
+      }
+      
+      // Validate required fields - merchantId must be a valid number
+      const { userId, userRole, merchantId } = authData;
+      
+      if (!userId || !userRole || typeof merchantId !== "number" || merchantId <= 0) {
+        console.error("[Shopify] Auth code missing required fields:", { userId, userRole, merchantId });
+        return res.status(400).json({ success: false, error: "Invalid code data" });
+      }
+      
+      // Verify merchant still exists before issuing JWT
+      const merchant = await storage.getMerchant(merchantId);
+      if (!merchant) {
+        console.error("[Shopify] Merchant no longer exists:", merchantId);
+        return res.status(400).json({ success: false, error: "Merchant not found" });
+      }
+      
+      // Generate the JWT
+      const token = jwt.sign(
+        { userId, role: userRole, merchantId },
+        JWT_SECRET!,
+        { expiresIn: "7d" }
+      );
+      
+      console.log(`[Shopify] Auth code exchanged for JWT for merchant ${merchantId}`);
+      
+      return res.json({ success: true, token });
+    } catch (error: any) {
+      console.error("[Shopify] Code exchange error:", error);
+      return res.status(500).json({ success: false, error: "Failed to exchange code" });
+    }
+  });
+
   // Install route - requires authentication to bind OAuth to specific merchant
   // Returns JSON with redirect URL so frontend can handle the redirect
   app.post("/api/shopify/oauth/install", authMiddleware, merchantOnly, async (req: AuthRequest, res: Response) => {
@@ -246,6 +388,7 @@ export async function registerRoutes(
   });
 
   // Callback route - Shopify redirects here after merchant authorization
+  // Handles both manual installs (existing merchant) and App Store installs (auto-create merchant)
   app.get("/api/shopify/oauth/callback", async (req: Request, res: Response) => {
     try {
       const { 
@@ -253,7 +396,8 @@ export async function registerRoutes(
         getShopifyConfig, 
         validateHmac, 
         exchangeCodeForToken,
-        getShopInfo
+        getShopInfo,
+        registerWebhooks
       } = await import("./shopifyOAuth");
 
       if (!isShopifyConfigured()) {
@@ -279,14 +423,15 @@ export async function registerRoutes(
         return res.redirect("/merchant/integrations?error=invalid_hmac");
       }
 
-      // Validate state/nonce and get bound merchantId
+      // Validate state/nonce and get bound merchantId (null for App Store installs)
       const nonceData = await getNonce(state);
       if (!nonceData || nonceData.shop !== shop) {
         console.error("[Shopify OAuth] Invalid state/nonce");
         return res.redirect("/merchant/integrations?error=invalid_state");
       }
       
-      const boundMerchantId = nonceData.merchantId;
+      const isAppStoreInstall = nonceData.isAppStoreInstall === true;
+      let merchantId = nonceData.merchantId;
       await deleteNonce(state);
 
       // Exchange code for access token
@@ -296,10 +441,126 @@ export async function registerRoutes(
       // Get shop info to verify connection
       const shopInfo = await getShopInfo(shop, access_token);
 
-      console.log(`[Shopify OAuth] Successfully connected shop: ${shopInfo.shop.name} (${shop}) for merchant ${boundMerchantId}`);
+      // For App Store installs: auto-create or find existing merchant
+      if (isAppStoreInstall) {
+        console.log(`[Shopify OAuth] App Store install for shop: ${shopInfo.shop.name} (${shop})`);
+        
+        // Check if merchant already exists with this Shopify store
+        const allMerchants = await storage.getAllMerchants();
+        const existingMerchant = allMerchants.find(m => {
+          const store = m.shopifyStore as { domain?: string } | null;
+          return store?.domain === shop || store?.domain?.includes(shop.replace('.myshopify.com', ''));
+        });
 
-      // Generate a secure one-time code to store the pending connection server-side
-      // Bound to the original merchant who initiated OAuth for security
+        if (existingMerchant) {
+          // Merchant exists - update their Shopify connection
+          merchantId = existingMerchant.id;
+          console.log(`[Shopify OAuth] Existing merchant found: ${merchantId}`);
+        } else {
+          // Create new merchant and user automatically
+          const shopEmail = shopInfo.shop.email;
+          const shopName = shopInfo.shop.name;
+          
+          // Check if user with this email already exists
+          const existingUser = await storage.getUserByEmail(shopEmail);
+          
+          if (existingUser && existingUser.merchantId) {
+            merchantId = existingUser.merchantId;
+            console.log(`[Shopify OAuth] User already exists with merchant: ${merchantId}`);
+          } else {
+            // Create user account first if doesn't exist (we need the user id for ownerId)
+            let userId: number;
+            if (!existingUser) {
+              const tempPassword = randomBytes(16).toString("hex");
+              const hashedPassword = await bcrypt.hash(tempPassword, 10);
+              
+              const newUser = await storage.createUser({
+                name: shopName,
+                email: shopEmail,
+                password: hashedPassword,
+                role: "merchant",
+              });
+              userId = newUser.id;
+            } else {
+              userId = existingUser.id;
+            }
+
+            // Create new merchant with correct schema fields
+            const newMerchant = await storage.createMerchant({
+              businessName: shopName,
+              ownerEmail: shopEmail,
+              ownerId: userId,
+            });
+            merchantId = newMerchant.id;
+
+            // Link user to merchant
+            await storage.updateUser(userId, { merchantId: merchantId });
+
+            console.log(`[Shopify OAuth] Created new merchant ${merchantId} for ${shopName}`);
+          }
+        }
+
+        // Clear any cached ShopifyService
+        const { clearMerchantShopifyService } = await import("./shopify");
+        clearMerchantShopifyService(merchantId!);
+
+        // Update merchant with Shopify connection directly
+        await storage.updateMerchant(merchantId!, {
+          shopifyStore: {
+            domain: shop,
+            accessToken: access_token,
+            scopes: scope.split(","),
+            installedAt: new Date().toISOString(),
+            isConnected: true,
+          },
+        });
+
+        // Register webhooks for automatic order sync
+        try {
+          await registerWebhooks(shop, access_token, appUrl);
+        } catch (webhookError) {
+          console.error("[Shopify OAuth] Webhook registration error:", webhookError);
+        }
+
+        console.log(`[Shopify OAuth] Successfully connected shop: ${shopInfo.shop.name} for merchant ${merchantId}`);
+
+        // Verify merchant was actually created/found before generating auth code
+        if (!merchantId) {
+          console.error("[Shopify OAuth] Merchant creation failed - no merchantId available");
+          return res.redirect("/login?error=merchant_creation_failed");
+        }
+
+        // Generate single-use auth code for secure auto-login (not the JWT directly)
+        const users = await storage.getUsersByMerchant(merchantId);
+        const user = users[0];
+        if (user && JWT_SECRET) {
+          // Create single-use code with "auth_" prefix to distinguish from OAuth nonces
+          const { generateNonce } = await import("./shopifyOAuth");
+          const { setAuthCode } = await import("./redis");
+          const authCode = `auth_${generateNonce()}`;
+          
+          // Store auth code with dedicated storage (strict 5-minute TTL)
+          // Only create auth code AFTER merchant creation is confirmed
+          await setAuthCode(authCode, {
+            shop,
+            merchantId: merchantId,
+            userId: user.id,
+            userRole: user.role as string,
+            timestamp: Date.now(),
+          });
+          
+          console.log(`[Shopify OAuth] Auth code created for merchant ${merchantId}`);
+          
+          // Redirect with secure code - not the raw JWT
+          return res.redirect(`/shopify-connected?code=${authCode}&shop=${encodeURIComponent(shopInfo.shop.name)}`);
+        }
+
+        return res.redirect(`/dashboard?shopify_connected=true&shop=${encodeURIComponent(shopInfo.shop.name)}`);
+      }
+
+      // Manual install flow - store pending connection for frontend to finalize
+      console.log(`[Shopify OAuth] Manual install for shop: ${shopInfo.shop.name} (${shop}) for merchant ${merchantId}`);
+
       const { generateNonce } = await import("./shopifyOAuth");
       const pendingCode = generateNonce();
       
@@ -308,9 +569,17 @@ export async function registerRoutes(
         accessToken: access_token,
         scopes: scope.split(","),
         shopName: shopInfo.shop.name,
-        merchantId: boundMerchantId,
+        shopEmail: shopInfo.shop.email,
+        merchantId: merchantId,
         timestamp: Date.now(),
       });
+
+      // Register webhooks for manual installs too
+      try {
+        await registerWebhooks(shop, access_token, appUrl);
+      } catch (webhookError) {
+        console.error("[Shopify OAuth] Webhook registration error:", webhookError);
+      }
 
       // Redirect with only the secure code - no tokens in URL
       res.redirect(`/merchant/integrations?shopify_pending=${pendingCode}`);
@@ -588,6 +857,109 @@ export async function registerRoutes(
     } catch (error: any) {
       console.error("[Shopify Webhook] Error processing order:", error);
       res.status(200).send("OK"); // Return 200 to prevent Shopify retries
+    }
+  });
+
+  // Shopify orders/updated webhook - receives order updates from Shopify
+  app.post("/api/shopify/webhooks/orders/updated", 
+    express.raw({ type: 'application/json' }),
+    async (req: Request, res: Response) => {
+    try {
+      const hmacHeader = req.headers["x-shopify-hmac-sha256"] as string;
+      const shopDomain = req.headers["x-shopify-shop-domain"] as string;
+      const rawBody = req.body.toString("utf8");
+      
+      if (!hmacHeader || !shopDomain) {
+        console.error("[Shopify Webhook] Missing required headers");
+        return res.status(401).send("Unauthorized");
+      }
+      
+      const { verifyWebhookHmac } = await import("./shopifyOAuth");
+      if (!verifyWebhookHmac(rawBody, hmacHeader)) {
+        console.error("[Shopify Webhook] HMAC validation failed");
+        return res.status(401).send("Unauthorized");
+      }
+      
+      const order = JSON.parse(rawBody);
+      console.log(`[Shopify Webhook] Order updated from ${shopDomain}: #${order.name}`);
+      
+      // Find the existing order by Shopify order ID
+      const existingOrder = await storage.getOrderByShopifyId(String(order.id));
+      if (existingOrder) {
+        // Update order status based on Shopify status
+        const updates: any = {
+          paymentStatus: order.financial_status === "paid" ? "paid" : 
+                         order.financial_status === "refunded" ? "refunded" : "pending",
+        };
+        
+        if (order.cancelled_at) {
+          updates.status = "cancelled";
+        } else if (order.fulfillment_status === "fulfilled") {
+          updates.fulfillmentStatus = "fulfilled";
+        }
+        
+        await storage.updateOrder(existingOrder.id, updates);
+        console.log(`[Shopify Webhook] Updated order ${existingOrder.id}`);
+      }
+      
+      res.status(200).send("OK");
+    } catch (error: any) {
+      console.error("[Shopify Webhook] Error updating order:", error);
+      res.status(200).send("OK");
+    }
+  });
+
+  // Shopify app/uninstalled webhook - cleanup when merchant uninstalls the app
+  app.post("/api/shopify/webhooks/app/uninstalled", 
+    express.raw({ type: 'application/json' }),
+    async (req: Request, res: Response) => {
+    try {
+      const hmacHeader = req.headers["x-shopify-hmac-sha256"] as string;
+      const shopDomain = req.headers["x-shopify-shop-domain"] as string;
+      const rawBody = req.body.toString("utf8");
+      
+      if (!hmacHeader || !shopDomain) {
+        console.error("[Shopify Webhook] Missing required headers");
+        return res.status(401).send("Unauthorized");
+      }
+      
+      const { verifyWebhookHmac } = await import("./shopifyOAuth");
+      if (!verifyWebhookHmac(rawBody, hmacHeader)) {
+        console.error("[Shopify Webhook] HMAC validation failed");
+        return res.status(401).send("Unauthorized");
+      }
+      
+      console.log(`[Shopify Webhook] App uninstalled from shop: ${shopDomain}`);
+      
+      // Find merchant by shop domain and disconnect
+      const merchants = await storage.getAllMerchants();
+      const merchant = merchants.find(m => {
+        const store = m.shopifyStore as { domain?: string } | null;
+        return store?.domain === shopDomain || store?.domain?.includes(shopDomain);
+      });
+      
+      if (merchant) {
+        // Clear Shopify connection
+        const { clearMerchantShopifyService } = await import("./shopify");
+        clearMerchantShopifyService(merchant.id);
+        
+        await storage.updateMerchant(merchant.id, {
+          shopifyStore: {
+            domain: undefined,
+            accessToken: undefined,
+            scopes: [],
+            installedAt: undefined,
+            isConnected: false,
+          },
+        });
+        
+        console.log(`[Shopify Webhook] Disconnected merchant ${merchant.id} from ${shopDomain}`);
+      }
+      
+      res.status(200).send("OK");
+    } catch (error: any) {
+      console.error("[Shopify Webhook] Error processing uninstall:", error);
+      res.status(200).send("OK");
     }
   });
 

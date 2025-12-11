@@ -27,8 +27,6 @@ import {
   UserPlus,
   Plug,
   Wallet,
-  Upload,
-  Webhook,
 } from "lucide-react";
 import { useAuth } from "@/lib/auth";
 import { useI18n } from "@/lib/i18n";
@@ -46,8 +44,6 @@ const mainMenuItems = [
 
 const businessMenuItems = [
   { titleKey: "merchant.sidebar.analytics" as const, url: "/dashboard/analytics", icon: BarChart3 },
-  { titleKey: "merchant.sidebar.import" as const, url: "/dashboard/import", icon: Upload },
-  { titleKey: "merchant.sidebar.webhooks" as const, url: "/dashboard/webhooks", icon: Webhook },
   { titleKey: "merchant.sidebar.integrations" as const, url: "/dashboard/integrations", icon: Plug },
   { titleKey: "merchant.sidebar.team" as const, url: "/dashboard/team", icon: UserPlus },
 ];
