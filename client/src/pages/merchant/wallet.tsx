@@ -1,4 +1,4 @@
-import { useState, useEffect } from "react";
+import { useState } from "react";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
@@ -109,20 +109,21 @@ function AddFundsForm({
   const elements = useElements();
   const [isProcessing, setIsProcessing] = useState(false);
   const [isElementReady, setIsElementReady] = useState(false);
+  const [loadError, setLoadError] = useState<string | null>(null);
   const { toast } = useToast();
 
-  // Fallback timeout - show the form after 5 seconds even if onReady doesn't fire
-  // This handles environments where the callback may not work properly
-  useEffect(() => {
-    const timeout = setTimeout(() => {
-      if (!isElementReady && stripe && elements) {
-        console.log("[Stripe] Fallback: enabling payment form after timeout");
-        setIsElementReady(true);
-      }
-    }, 5000);
-    return () => clearTimeout(timeout);
-  }, [stripe, elements, isElementReady]);
   const amountFormatted = `$${(amount / 100).toFixed(2)}`;
+  
+  const handleReady = () => {
+    console.log("[Stripe] PaymentElement ready");
+    setIsElementReady(true);
+  };
+
+  const handleLoadError = (event: { elementType: "payment"; error: { message?: string } }) => {
+    const errorMsg = event.error.message || "Unknown error loading payment form";
+    console.error("[Stripe] PaymentElement load error:", errorMsg);
+    setLoadError(errorMsg);
+  };
 
   const confirmMutation = useMutation({
     mutationFn: async () => {
@@ -183,19 +184,30 @@ function AddFundsForm({
 
   return (
     <form onSubmit={handleSubmit} className="space-y-4">
-      {!isElementReady && (
-        <div className="flex items-center justify-center py-8">
-          <Loader2 className="h-6 w-6 animate-spin text-muted-foreground" />
-          <span className="ml-2 text-sm text-muted-foreground">{t("merchant.wallet.loadingPaymentForm")}</span>
-        </div>
-      )}
-      <div className={isElementReady ? "" : "opacity-0 h-0 overflow-hidden"}>
-        <PaymentElement onReady={() => setIsElementReady(true)} />
+      <div className="relative min-h-[200px]">
+        {!isElementReady && !loadError && (
+          <div className="absolute inset-0 flex items-center justify-center bg-background/80 z-10">
+            <Loader2 className="h-6 w-6 animate-spin text-muted-foreground" />
+            <span className="ml-2 text-sm text-muted-foreground">{t("merchant.wallet.loadingPaymentForm")}</span>
+          </div>
+        )}
+        {loadError && (
+          <div className="absolute inset-0 flex items-center justify-center bg-background z-10">
+            <div className="text-center p-4">
+              <p className="text-destructive font-medium">Payment form failed to load</p>
+              <p className="text-sm text-muted-foreground mt-1">{loadError}</p>
+            </div>
+          </div>
+        )}
+        <PaymentElement 
+          onReady={handleReady} 
+          onLoadError={handleLoadError}
+        />
       </div>
       <Button 
         type="submit" 
         className="w-full" 
-        disabled={!stripe || !isElementReady || isProcessing || confirmMutation.isPending}
+        disabled={!stripe || !isElementReady || isProcessing || confirmMutation.isPending || !!loadError}
         data-testid="button-confirm-payment"
       >
         {isProcessing || confirmMutation.isPending ? (
