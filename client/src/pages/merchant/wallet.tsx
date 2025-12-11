@@ -96,14 +96,12 @@ function AddFundsForm({
   clientSecret, 
   paymentIntentId,
   amount,
-  onSuccess,
-  t
+  onSuccess
 }: { 
   clientSecret: string;
   paymentIntentId: string;
   amount: number;
   onSuccess: () => void;
-  t: (key: string, params?: Record<string, string | number>) => string;
 }) {
   const stripe = useStripe();
   const elements = useElements();
@@ -111,6 +109,7 @@ function AddFundsForm({
   const [isElementReady, setIsElementReady] = useState(false);
   const [loadError, setLoadError] = useState<string | null>(null);
   const { toast } = useToast();
+  const { t } = useI18n();
 
   const amountFormatted = `$${(amount / 100).toFixed(2)}`;
   
@@ -379,7 +378,6 @@ function AddFundsModal({
               paymentIntentId={paymentIntentId!}
               amount={amount}
               onSuccess={handleSuccess}
-              t={t}
             />
           </Elements>
         )}
@@ -391,7 +389,7 @@ function AddFundsModal({
 function TransactionRow({ transaction }: { transaction: WalletTransaction }) {
   const isCredit = transaction.type === "credit" || transaction.type === "refund";
   const { t, language } = useI18n();
-  const locale = dateLocales[language] || enUS;
+  const locale = dateLocales[language.code] || enUS;
   
   const getTransactionDescription = () => {
     switch (transaction.type) {

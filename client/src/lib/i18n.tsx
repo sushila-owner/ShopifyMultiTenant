@@ -2637,7 +2637,7 @@ type SupportedLanguage = keyof TranslationsType;
 interface I18nContextType {
   language: Language;
   setLanguage: (lang: Language) => void;
-  t: (key: TranslationKey) => string;
+  t: (key: TranslationKey, params?: Record<string, string | number>) => string;
   isRTL: boolean;
 }
 
@@ -2665,10 +2665,18 @@ export function I18nProvider({ children }: { children: ReactNode }) {
     setLanguageState(lang);
   };
 
-  const t = (key: TranslationKey): string => {
+  const t = (key: TranslationKey, params?: Record<string, string | number>): string => {
     const langCode = language.code as SupportedLanguage;
     const langTranslations = translations[langCode] || translations.en;
-    return langTranslations[key] || translations.en[key] || key;
+    let result = langTranslations[key] || translations.en[key] || key;
+    
+    if (params) {
+      Object.entries(params).forEach(([paramKey, value]) => {
+        result = result.replace(new RegExp(`\\{${paramKey}\\}`, 'g'), String(value));
+      });
+    }
+    
+    return result;
   };
 
   return (
