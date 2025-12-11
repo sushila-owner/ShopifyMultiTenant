@@ -114,6 +114,7 @@ const { text, isLoading } = useTranslateText("Hello world");
 - Wallet page at `/dashboard/wallet` with balance display, add funds modal, and transaction history
 - Sidebar shows wallet balance badge next to Wallet menu item
 - Stripe Elements integration for payment form
+- **Stripe Fallback**: 5-second timeout fallback enables payment form even if `onReady` callback doesn't fire (handles certain browser environments)
 
 **Transaction Types**: credit (top-up), debit (order payment), refund (order cancellation)
 

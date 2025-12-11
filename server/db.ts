@@ -81,8 +81,19 @@ export async function ensureWalletTables(): Promise<void> {
         description TEXT,
         order_id INTEGER,
         stripe_payment_intent_id VARCHAR(255),
+        metadata JSONB DEFAULT '{}',
         created_at TIMESTAMP DEFAULT NOW()
       )
+    `);
+    
+    // Add metadata column if it doesn't exist (for existing tables)
+    await client.query(`
+      DO $$ 
+      BEGIN 
+        IF NOT EXISTS (SELECT 1 FROM information_schema.columns WHERE table_name='wallet_transactions' AND column_name='metadata') THEN
+          ALTER TABLE wallet_transactions ADD COLUMN metadata JSONB DEFAULT '{}';
+        END IF;
+      END $$;
     `);
     
     // Create indexes if not exist

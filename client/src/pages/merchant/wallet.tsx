@@ -1,4 +1,4 @@
-import { useState } from "react";
+import { useState, useEffect } from "react";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
@@ -43,8 +43,34 @@ const dateLocales: Record<string, Locale> = {
   it: it,
 };
 import { Elements, PaymentElement, useStripe, useElements } from "@stripe/react-stripe-js";
+import type { Stripe } from "@stripe/stripe-js";
 
-const stripePromise = loadStripe(import.meta.env.VITE_STRIPE_PUBLISHABLE_KEY || "");
+// Create a lazy-loaded Stripe promise that fetches key from backend
+const stripePromise: Promise<Stripe | null> = (async () => {
+  try {
+    // First try environment variable
+    const envKey = import.meta.env.VITE_STRIPE_PUBLISHABLE_KEY;
+    if (envKey && typeof envKey === "string" && envKey.startsWith("pk_")) {
+      console.log("[Stripe] Using env key");
+      return await loadStripe(envKey);
+    }
+    
+    // Fallback: fetch from backend
+    console.log("[Stripe] Fetching key from backend...");
+    const response = await fetch("/api/stripe/config");
+    const data = await response.json();
+    if (data.success && data.data?.publishableKey) {
+      console.log("[Stripe] Got key from backend");
+      return await loadStripe(data.data.publishableKey);
+    }
+    
+    console.error("[Stripe] No publishable key available from backend:", data);
+    return null;
+  } catch (error) {
+    console.error("[Stripe] Failed to load:", error);
+    return null;
+  }
+})();
 
 interface WalletData {
   balanceCents: number;
@@ -84,6 +110,18 @@ function AddFundsForm({
   const [isProcessing, setIsProcessing] = useState(false);
   const [isElementReady, setIsElementReady] = useState(false);
   const { toast } = useToast();
+
+  // Fallback timeout - show the form after 5 seconds even if onReady doesn't fire
+  // This handles environments where the callback may not work properly
+  useEffect(() => {
+    const timeout = setTimeout(() => {
+      if (!isElementReady && stripe && elements) {
+        console.log("[Stripe] Fallback: enabling payment form after timeout");
+        setIsElementReady(true);
+      }
+    }, 5000);
+    return () => clearTimeout(timeout);
+  }, [stripe, elements, isElementReady]);
   const amountFormatted = `$${(amount / 100).toFixed(2)}`;
 
   const confirmMutation = useMutation({
