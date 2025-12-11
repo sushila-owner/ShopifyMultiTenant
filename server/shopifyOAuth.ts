@@ -128,6 +128,26 @@ export async function exchangeCodeForToken(
   return response.json();
 }
 
+export function verifyWebhookHmac(rawBody: string, hmacHeader: string): boolean {
+  if (!SHOPIFY_API_SECRET || !hmacHeader) {
+    return false;
+  }
+  
+  const calculatedHmac = crypto
+    .createHmac("sha256", SHOPIFY_API_SECRET)
+    .update(rawBody, "utf8")
+    .digest("base64");
+
+  try {
+    return crypto.timingSafeEqual(
+      Buffer.from(hmacHeader),
+      Buffer.from(calculatedHmac)
+    );
+  } catch {
+    return false;
+  }
+}
+
 export async function getShopInfo(shop: string, accessToken: string): Promise<ShopifyShopInfo> {
   const shopDomain = shop.includes(".myshopify.com") ? shop : `${shop}.myshopify.com`;
   

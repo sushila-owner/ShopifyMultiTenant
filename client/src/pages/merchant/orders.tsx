@@ -1,10 +1,12 @@
 import { useState } from "react";
 import { useQuery, useMutation } from "@tanstack/react-query";
+import { useLocation } from "wouter";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Badge } from "@/components/ui/badge";
 import { Skeleton } from "@/components/ui/skeleton";
+import { Alert, AlertDescription, AlertTitle } from "@/components/ui/alert";
 import {
   Table,
   TableBody,
@@ -47,9 +49,17 @@ import {
   CheckCircle,
   DollarSign,
   Loader2,
+  Wallet,
+  AlertCircle,
 } from "lucide-react";
 import type { Order } from "@shared/schema";
 import { useCurrency } from "@/lib/currency";
+
+interface OrdersResponse {
+  orders: (Order & { canFulfill?: boolean })[];
+  total: number;
+  walletBalance: number;
+}
 
 const orderStatusColors: Record<string, "default" | "secondary" | "destructive" | "outline"> = {
   pending: "outline",
@@ -69,23 +79,47 @@ const fulfillmentStatusColors: Record<string, "default" | "secondary" | "destruc
 export default function MerchantOrdersPage() {
   const { toast } = useToast();
   const { formatPrice } = useCurrency();
+  const [, setLocation] = useLocation();
   const [search, setSearch] = useState("");
   const [statusFilter, setStatusFilter] = useState<string>("all");
   const [selectedOrder, setSelectedOrder] = useState<Order | null>(null);
   const [isDetailsOpen, setIsDetailsOpen] = useState(false);
 
-  const { data: orders, isLoading } = useQuery<Order[]>({
+  const { data: ordersData, isLoading } = useQuery<OrdersResponse>({
     queryKey: ["/api/merchant/orders"],
   });
 
+  const orders = ordersData?.orders;
+  const walletBalance = ordersData?.walletBalance || 0;
+
   const fulfillMutation = useMutation({
-    mutationFn: (id: number) => apiRequest("POST", `/api/merchant/orders/${id}/fulfill`),
-    onSuccess: () => {
-      queryClient.invalidateQueries({ queryKey: ["/api/merchant/orders"] });
-      toast({ title: "Order fulfilled successfully" });
+    mutationFn: async (id: number) => {
+      const res = await apiRequest("POST", `/api/merchant/orders/${id}/fulfill`);
+      return res;
     },
-    onError: () => {
-      toast({ title: "Failed to fulfill order", variant: "destructive" });
+    onSuccess: (data: any) => {
+      queryClient.invalidateQueries({ queryKey: ["/api/merchant/orders"] });
+      queryClient.invalidateQueries({ queryKey: ["/api/wallet/balance"] });
+      toast({ 
+        title: "Order fulfilled successfully",
+        description: data?.data?.message || "Wallet charged and supplier order created",
+      });
+    },
+    onError: (error: any) => {
+      if (error?.insufficientFunds || error?.redirectToWallet) {
+        toast({ 
+          title: "Insufficient wallet balance", 
+          description: "Please add funds to your wallet to fulfill this order.",
+          variant: "destructive" 
+        });
+        setLocation("/dashboard/wallet");
+      } else {
+        toast({ 
+          title: "Failed to fulfill order", 
+          description: error?.error || "Please try again",
+          variant: "destructive" 
+        });
+      }
     },
   });
 
@@ -99,9 +133,11 @@ export default function MerchantOrdersPage() {
 
   const pendingOrders = filteredOrders?.filter((o) => o.status === "pending") || [];
   const processingOrders = filteredOrders?.filter((o) => o.status === "processing") || [];
+  const unfulfilledOrders = orders?.filter((o) => o.fulfillmentStatus === "unfulfilled") || [];
 
   const totalRevenue = orders?.reduce((acc, o) => acc + (o.total || 0), 0) || 0;
   const totalProfit = orders?.reduce((acc, o) => acc + (o.totalProfit || 0), 0) || 0;
+  const pendingFulfillmentCost = unfulfilledOrders.reduce((acc, o) => acc + (o.totalCost || 0), 0);
 
   const handleViewDetails = (order: Order) => {
     setSelectedOrder(order);
@@ -117,13 +153,45 @@ export default function MerchantOrdersPage() {
         </div>
       </div>
 
+      {/* Wallet Balance Alert */}
+      {unfulfilledOrders.length > 0 && (
+        <Alert variant={walletBalance >= pendingFulfillmentCost ? "default" : "destructive"}>
+          <Wallet className="h-4 w-4" />
+          <AlertTitle>Wallet Balance: {formatPrice(walletBalance / 100)}</AlertTitle>
+          <AlertDescription className="flex items-center justify-between">
+            <span>
+              {unfulfilledOrders.length} order{unfulfilledOrders.length > 1 ? "s" : ""} pending fulfillment 
+              (Supplier cost: {formatPrice(pendingFulfillmentCost / 100)})
+            </span>
+            {walletBalance < pendingFulfillmentCost && (
+              <Button size="sm" variant="outline" onClick={() => setLocation("/dashboard/wallet")} data-testid="button-add-funds">
+                Add Funds
+              </Button>
+            )}
+          </AlertDescription>
+        </Alert>
+      )}
+
       {/* Stats */}
-      <div className="grid gap-4 md:grid-cols-4">
+      <div className="grid gap-4 md:grid-cols-5">
         <Card>
           <CardContent className="p-4">
             <div className="flex items-center gap-3">
               <div className="flex h-10 w-10 items-center justify-center rounded-md bg-primary/10">
-                <ShoppingCart className="h-5 w-5 text-primary" />
+                <Wallet className="h-5 w-5 text-primary" />
+              </div>
+              <div>
+                <p className="text-2xl font-bold" data-testid="text-wallet-balance">{formatPrice(walletBalance / 100)}</p>
+                <p className="text-xs text-muted-foreground">Wallet Balance</p>
+              </div>
+            </div>
+          </CardContent>
+        </Card>
+        <Card>
+          <CardContent className="p-4">
+            <div className="flex items-center gap-3">
+              <div className="flex h-10 w-10 items-center justify-center rounded-md bg-chart-4/10">
+                <ShoppingCart className="h-5 w-5 text-chart-4" />
               </div>
               <div>
                 <p className="text-2xl font-bold">{orders?.length || 0}</p>
@@ -135,12 +203,12 @@ export default function MerchantOrdersPage() {
         <Card>
           <CardContent className="p-4">
             <div className="flex items-center gap-3">
-              <div className="flex h-10 w-10 items-center justify-center rounded-md bg-chart-4/10">
-                <Clock className="h-5 w-5 text-chart-4" />
+              <div className="flex h-10 w-10 items-center justify-center rounded-md bg-yellow-500/10">
+                <Clock className="h-5 w-5 text-yellow-500" />
               </div>
               <div>
-                <p className="text-2xl font-bold">{pendingOrders.length}</p>
-                <p className="text-xs text-muted-foreground">Pending</p>
+                <p className="text-2xl font-bold">{unfulfilledOrders.length}</p>
+                <p className="text-xs text-muted-foreground">Unfulfilled</p>
               </div>
             </div>
           </CardContent>
@@ -237,8 +305,8 @@ export default function MerchantOrdersPage() {
                       <TableHead>Customer</TableHead>
                       <TableHead>Items</TableHead>
                       <TableHead>Total</TableHead>
+                      <TableHead>Supplier Cost</TableHead>
                       <TableHead>Profit</TableHead>
-                      <TableHead>Status</TableHead>
                       <TableHead>Fulfillment</TableHead>
                       <TableHead className="text-right">Actions</TableHead>
                     </TableRow>
@@ -264,16 +332,21 @@ export default function MerchantOrdersPage() {
                         </TableCell>
                         <TableCell>{order.items.length} items</TableCell>
                         <TableCell>{formatPrice((order.total || 0) / 100)}</TableCell>
+                        <TableCell className="text-muted-foreground">
+                          {formatPrice((order.totalCost || 0) / 100)}
+                        </TableCell>
                         <TableCell className="text-chart-2 font-medium">
                           {formatPrice((order.totalProfit || 0) / 100)}
                         </TableCell>
                         <TableCell>
-                          <Badge variant={orderStatusColors[order.status]}>{order.status}</Badge>
-                        </TableCell>
-                        <TableCell>
-                          <Badge variant={fulfillmentStatusColors[order.fulfillmentStatus]}>
-                            {order.fulfillmentStatus}
-                          </Badge>
+                          <div className="flex flex-col gap-1">
+                            <Badge variant={fulfillmentStatusColors[order.fulfillmentStatus]}>
+                              {order.fulfillmentStatus}
+                            </Badge>
+                            {order.fulfillmentStatus === "unfulfilled" && (order as any).canFulfill === false && (
+                              <span className="text-xs text-destructive">Insufficient funds</span>
+                            )}
+                          </div>
                         </TableCell>
                         <TableCell className="text-right">
                           <DropdownMenu>
@@ -503,18 +576,48 @@ export default function MerchantOrdersPage() {
               </div>
 
               {selectedOrder.fulfillmentStatus === "unfulfilled" && (
-                <div className="flex justify-end pt-4 border-t">
-                  <Button
-                    onClick={() => {
-                      fulfillMutation.mutate(selectedOrder.id);
-                      setIsDetailsOpen(false);
-                    }}
-                    disabled={fulfillMutation.isPending}
-                  >
-                    {fulfillMutation.isPending && <Loader2 className="mr-2 h-4 w-4 animate-spin" />}
-                    <Truck className="mr-2 h-4 w-4" />
-                    Fulfill Order
-                  </Button>
+                <div className="pt-4 border-t space-y-3">
+                  {(selectedOrder.totalCost || 0) > walletBalance && (
+                    <Alert variant="destructive">
+                      <AlertCircle className="h-4 w-4" />
+                      <AlertTitle>Insufficient wallet balance</AlertTitle>
+                      <AlertDescription>
+                        You need {formatPrice((selectedOrder.totalCost || 0) / 100)} to fulfill this order 
+                        but only have {formatPrice(walletBalance / 100)} in your wallet.
+                      </AlertDescription>
+                    </Alert>
+                  )}
+                  <div className="flex justify-between items-center">
+                    <div className="text-sm text-muted-foreground">
+                      Supplier cost: <span className="font-medium text-foreground">{formatPrice((selectedOrder.totalCost || 0) / 100)}</span>
+                    </div>
+                    {(selectedOrder.totalCost || 0) > walletBalance ? (
+                      <Button
+                        variant="outline"
+                        onClick={() => {
+                          setIsDetailsOpen(false);
+                          setLocation("/dashboard/wallet");
+                        }}
+                        data-testid="button-add-funds-dialog"
+                      >
+                        <Wallet className="mr-2 h-4 w-4" />
+                        Add Funds
+                      </Button>
+                    ) : (
+                      <Button
+                        onClick={() => {
+                          fulfillMutation.mutate(selectedOrder.id);
+                          setIsDetailsOpen(false);
+                        }}
+                        disabled={fulfillMutation.isPending}
+                        data-testid="button-fulfill-order"
+                      >
+                        {fulfillMutation.isPending && <Loader2 className="mr-2 h-4 w-4 animate-spin" />}
+                        <Truck className="mr-2 h-4 w-4" />
+                        Fulfill Order ({formatPrice((selectedOrder.totalCost || 0) / 100)})
+                      </Button>
+                    )}
+                  </div>
                 </div>
               )}
             </div>

@@ -450,6 +450,277 @@ export async function registerRoutes(
     }
   });
 
+  // ==================== SHOPIFY WEBHOOKS ====================
+  
+  // Shopify orders/create webhook - receives new orders from Shopify
+  // Must be registered with Shopify via Admin API after OAuth connection
+  app.post("/api/shopify/webhooks/orders/create", 
+    express.raw({ type: 'application/json' }),
+    async (req: Request, res: Response) => {
+    try {
+      const hmacHeader = req.headers["x-shopify-hmac-sha256"] as string;
+      const shopDomain = req.headers["x-shopify-shop-domain"] as string;
+      const rawBody = req.body.toString("utf8");
+      
+      if (!hmacHeader || !shopDomain) {
+        console.error("[Shopify Webhook] Missing required headers");
+        return res.status(401).send("Unauthorized");
+      }
+      
+      const { verifyWebhookHmac } = await import("./shopifyOAuth");
+      if (!verifyWebhookHmac(rawBody, hmacHeader)) {
+        console.error("[Shopify Webhook] HMAC validation failed");
+        return res.status(401).send("Unauthorized");
+      }
+      
+      const order = JSON.parse(rawBody);
+      console.log(`[Shopify Webhook] Order received from ${shopDomain}: #${order.name}`);
+      
+      // Find merchant by shop domain
+      const merchants = await storage.getAllMerchants();
+      const merchant = merchants.find(m => {
+        const store = m.shopifyStore as { domain?: string } | null;
+        return store?.domain === shopDomain || store?.domain?.includes(shopDomain);
+      });
+      
+      if (!merchant) {
+        console.error(`[Shopify Webhook] No merchant found for shop: ${shopDomain}`);
+        return res.status(200).send("OK"); // Return 200 to prevent Shopify retries
+      }
+      
+      // Map Shopify order to our format
+      const lineItems = order.line_items || [];
+      const shippingAddr = order.shipping_address || {};
+      
+      // Look up our products by Shopify product ID
+      const items: any[] = [];
+      let totalCost = 0;
+      let totalProfit = 0;
+      
+      for (const item of lineItems) {
+        // Find matching merchant product by shopifyProductId
+        const product = await storage.getMerchantProductByShopifyId(merchant.id, String(item.product_id));
+        if (product) {
+          const itemCost = (product.supplierPrice || 0) * item.quantity;
+          const itemRevenue = parseFloat(item.price) * 100 * item.quantity;
+          const itemProfit = itemRevenue - itemCost;
+          
+          items.push({
+            productId: product.id,
+            variantId: String(item.variant_id),
+            supplierId: product.supplierId,
+            title: item.title,
+            variantTitle: item.variant_title,
+            sku: item.sku,
+            quantity: item.quantity,
+            price: Math.round(parseFloat(item.price) * 100),
+            cost: product.supplierPrice || 0,
+            profit: Math.round(itemProfit / item.quantity),
+            fulfillmentStatus: "pending",
+          });
+          
+          totalCost += itemCost;
+          totalProfit += itemProfit;
+        }
+      }
+      
+      if (items.length === 0) {
+        console.log(`[Shopify Webhook] No matching products found for order ${order.name}`);
+        return res.status(200).send("OK");
+      }
+      
+      // Create order in our database
+      const subtotal = Math.round(parseFloat(order.subtotal_price) * 100);
+      const tax = Math.round(parseFloat(order.total_tax || "0") * 100);
+      const shipping = Math.round(parseFloat(order.total_shipping_price_set?.shop_money?.amount || "0") * 100);
+      const discount = Math.round(parseFloat(order.total_discounts || "0") * 100);
+      const total = Math.round(parseFloat(order.total_price) * 100);
+      
+      const newOrder = await storage.createOrder({
+        merchantId: merchant.id,
+        orderNumber: order.name,
+        shopifyOrderId: String(order.id),
+        customerEmail: order.email || "unknown@customer.com",
+        shippingAddress: {
+          firstName: shippingAddr.first_name || "",
+          lastName: shippingAddr.last_name || "",
+          address1: shippingAddr.address1 || "",
+          address2: shippingAddr.address2 || "",
+          city: shippingAddr.city || "",
+          province: shippingAddr.province || "",
+          country: shippingAddr.country || "",
+          zip: shippingAddr.zip || "",
+          phone: shippingAddr.phone || "",
+        },
+        items,
+        subtotal,
+        tax,
+        shipping,
+        discount,
+        total,
+        totalCost,
+        totalProfit: Math.round(totalProfit),
+        status: "pending",
+        paymentStatus: order.financial_status === "paid" ? "paid" : "pending",
+        fulfillmentStatus: "unfulfilled",
+        timeline: [{
+          status: "created",
+          message: `Order received from Shopify`,
+          createdAt: new Date().toISOString(),
+        }],
+      });
+      
+      console.log(`[Shopify Webhook] Created order ${newOrder.id} for merchant ${merchant.id}`);
+      
+      // Check if merchant has auto-fulfillment enabled and sufficient wallet balance
+      const merchantSettings = merchant.settings as { autoFulfillment?: boolean } | null;
+      if (merchantSettings?.autoFulfillment) {
+        const canFulfill = await orderFulfillmentService.canFulfillOrder(newOrder);
+        if (canFulfill.canFulfill) {
+          console.log(`[Shopify Webhook] Auto-fulfilling order ${newOrder.id}`);
+          await orderFulfillmentService.fulfillOrderWithWallet(newOrder);
+        } else {
+          console.log(`[Shopify Webhook] Cannot auto-fulfill: ${canFulfill.reason}`);
+        }
+      }
+      
+      res.status(200).send("OK");
+    } catch (error: any) {
+      console.error("[Shopify Webhook] Error processing order:", error);
+      res.status(200).send("OK"); // Return 200 to prevent Shopify retries
+    }
+  });
+
+  // ==================== MERCHANT ORDERS ROUTES ====================
+  
+  // Get merchant orders
+  app.get("/api/merchant/orders", authMiddleware, merchantOnly, async (req: AuthRequest, res: Response) => {
+    try {
+      const merchantId = req.user?.merchantId;
+      if (!merchantId) {
+        return res.status(400).json({ success: false, error: "No merchant account found" });
+      }
+      
+      const { status, fulfillmentStatus, limit = "50", offset = "0" } = req.query;
+      
+      const orders = await storage.getOrdersByMerchant(
+        merchantId,
+        parseInt(limit as string),
+        parseInt(offset as string),
+        status as string | undefined,
+        fulfillmentStatus as string | undefined
+      );
+      
+      // Get wallet balance for each order's fulfillability
+      const balance = await storage.getWalletBalance(merchantId);
+      const walletBalance = balance?.balanceCents || 0;
+      
+      const ordersWithFulfillability = orders.orders.map(order => ({
+        ...order,
+        canFulfill: (order.totalCost || 0) <= walletBalance && order.fulfillmentStatus === "unfulfilled",
+      }));
+      
+      res.json({ 
+        success: true, 
+        data: {
+          orders: ordersWithFulfillability,
+          total: orders.total,
+          walletBalance,
+        }
+      });
+    } catch (error: any) {
+      res.status(500).json({ success: false, error: error.message });
+    }
+  });
+
+  // Get single order
+  app.get("/api/merchant/orders/:id", authMiddleware, merchantOnly, async (req: AuthRequest, res: Response) => {
+    try {
+      const merchantId = req.user?.merchantId;
+      if (!merchantId) {
+        return res.status(400).json({ success: false, error: "No merchant account found" });
+      }
+      
+      const orderId = parseInt(req.params.id);
+      const order = await storage.getOrder(orderId);
+      
+      if (!order || order.merchantId !== merchantId) {
+        return res.status(404).json({ success: false, error: "Order not found" });
+      }
+      
+      // Get supplier orders
+      const supplierOrders = await storage.getSupplierOrdersByOrder(orderId);
+      
+      // Check if can fulfill
+      const canFulfill = await orderFulfillmentService.canFulfillOrder(order);
+      
+      res.json({ 
+        success: true, 
+        data: { 
+          order,
+          supplierOrders,
+          canFulfill: canFulfill.canFulfill,
+          fulfillReason: canFulfill.reason,
+        }
+      });
+    } catch (error: any) {
+      res.status(500).json({ success: false, error: error.message });
+    }
+  });
+
+  // Fulfill order (deduct from wallet and submit to supplier)
+  app.post("/api/merchant/orders/:id/fulfill", authMiddleware, merchantOnly, async (req: AuthRequest, res: Response) => {
+    try {
+      const merchantId = req.user?.merchantId;
+      if (!merchantId) {
+        return res.status(400).json({ success: false, error: "No merchant account found" });
+      }
+      
+      const orderId = parseInt(req.params.id);
+      const order = await storage.getOrder(orderId);
+      
+      if (!order || order.merchantId !== merchantId) {
+        return res.status(404).json({ success: false, error: "Order not found" });
+      }
+      
+      if (order.fulfillmentStatus !== "unfulfilled") {
+        return res.status(400).json({ success: false, error: "Order already being fulfilled" });
+      }
+      
+      // Check wallet balance
+      const canFulfill = await orderFulfillmentService.canFulfillOrder(order);
+      if (!canFulfill.canFulfill) {
+        return res.status(402).json({ 
+          success: false, 
+          error: canFulfill.reason,
+          insufficientFunds: true,
+          redirectToWallet: true,
+        });
+      }
+      
+      // Fulfill order with wallet payment
+      const result = await orderFulfillmentService.fulfillOrderWithWallet(order);
+      
+      if (!result.success) {
+        return res.status(400).json({ 
+          success: false, 
+          error: result.error || "Fulfillment failed",
+          results: result.results,
+        });
+      }
+      
+      res.json({ 
+        success: true, 
+        data: { 
+          message: `Order fulfilled. $${((order.totalCost || 0) / 100).toFixed(2)} deducted from wallet.`,
+          results: result.results,
+        }
+      });
+    } catch (error: any) {
+      res.status(500).json({ success: false, error: error.message });
+    }
+  });
+
   // ==================== AUTH ROUTES ====================
   app.post("/api/auth/register", async (req: Request, res: Response) => {
     try {

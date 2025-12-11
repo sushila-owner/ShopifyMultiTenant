@@ -1,12 +1,21 @@
 import { storage } from "../storage";
 import { createSupplierAdapter } from "../supplierAdapters";
-import type { Order, SupplierOrder, Product, Customer } from "@shared/schema";
+import type { Order, SupplierOrder, Product, Customer, Merchant } from "@shared/schema";
 import type { OrderCreateRequest, TrackingInfo } from "../supplierAdapters/types";
 
 interface FulfillmentResult {
   success: boolean;
   supplierOrderId?: string;
+  walletTransactionId?: number;
   error?: string;
+  insufficientFunds?: boolean;
+}
+
+interface WalletPaymentResult {
+  success: boolean;
+  transactionId?: number;
+  error?: string;
+  insufficientFunds?: boolean;
 }
 
 class OrderFulfillmentService {
@@ -180,13 +189,29 @@ class OrderFulfillmentService {
           status: this.mapTrackingStatusToOrderStatus(tracking.status),
         });
 
-        // Update merchant order tracking if we have tracking info
+        // Update merchant order fulfillment status if we have tracking info
         if (supplierOrder.orderId && tracking.trackingNumber) {
-          await storage.updateOrder(supplierOrder.orderId, {
-            trackingNumber: tracking.trackingNumber,
-            trackingUrl: tracking.trackingUrl,
-            fulfillmentStatus: this.mapTrackingStatusToFulfillmentStatus(tracking.status) as any,
-          });
+          const order = await storage.getOrder(supplierOrder.orderId);
+          if (order) {
+            const items = (order.items as any[]) || [];
+            const updatedItems = items.map((item: any) => {
+              if (item.supplierId === supplierOrder.supplierId) {
+                return {
+                  ...item,
+                  fulfillmentStatus: this.mapTrackingStatusToFulfillmentStatus(tracking.status),
+                  trackingNumber: tracking.trackingNumber,
+                  trackingUrl: tracking.trackingUrl,
+                  carrier: tracking.carrier,
+                };
+              }
+              return item;
+            });
+            
+            await storage.updateOrder(supplierOrder.orderId, {
+              items: updatedItems,
+              fulfillmentStatus: this.mapTrackingStatusToFulfillmentStatus(tracking.status) as any,
+            });
+          }
         }
       }
 
@@ -241,6 +266,118 @@ class OrderFulfillmentService {
         await this.updateTrackingInfo(order.id);
       }
     }
+  }
+
+  async deductWalletForOrder(merchantId: number, orderId: number, amountCents: number): Promise<WalletPaymentResult> {
+    try {
+      const result = await storage.debitWalletForOrder(
+        merchantId,
+        orderId,
+        amountCents,
+        `Order fulfillment - Order #${orderId}`
+      );
+      
+      if (!result.success) {
+        return {
+          success: false,
+          insufficientFunds: true,
+          error: result.error || "Insufficient wallet balance",
+        };
+      }
+      
+      console.log(`[OrderFulfillment] Deducted $${(amountCents / 100).toFixed(2)} from wallet for order ${orderId}`);
+      
+      return {
+        success: true,
+        transactionId: result.transaction?.id,
+      };
+    } catch (error: any) {
+      console.error(`[OrderFulfillment] Wallet deduction failed for order ${orderId}:`, error);
+      return {
+        success: false,
+        error: error.message,
+      };
+    }
+  }
+
+  async fulfillOrderWithWallet(order: Order): Promise<{ success: boolean; results: FulfillmentResult[]; error?: string }> {
+    console.log(`[OrderFulfillment] Starting fulfillment with wallet payment for order ${order.id}`);
+    
+    const totalCost = order.totalCost;
+    if (!totalCost || totalCost <= 0) {
+      return { success: false, results: [], error: "Order has no supplier cost" };
+    }
+    
+    const walletResult = await this.deductWalletForOrder(order.merchantId, order.id, totalCost);
+    
+    if (!walletResult.success) {
+      if (walletResult.insufficientFunds) {
+        await storage.updateOrder(order.id, {
+          internalNotes: `Awaiting wallet top-up. Required: $${(totalCost / 100).toFixed(2)}`,
+        });
+      }
+      return { 
+        success: false, 
+        results: [{ 
+          success: false, 
+          error: walletResult.error,
+          insufficientFunds: walletResult.insufficientFunds,
+        }], 
+        error: walletResult.error 
+      };
+    }
+    
+    const fulfillmentResults = await this.createSupplierOrderFromMerchantOrder(order);
+    
+    const allSuccessful = fulfillmentResults.every(r => r.success);
+    
+    if (allSuccessful) {
+      await storage.updateOrder(order.id, {
+        status: "processing",
+        fulfillmentStatus: "partial",
+        timeline: [
+          ...(order.timeline as any[] || []),
+          {
+            status: "processing",
+            message: `Supplier orders created. Wallet charged $${(totalCost / 100).toFixed(2)}`,
+            createdAt: new Date().toISOString(),
+          },
+        ],
+      });
+    } else {
+      await storage.refundToWallet(
+        order.merchantId,
+        order.id,
+        totalCost,
+        `Refund for failed fulfillment - Order #${order.id}`
+      );
+      
+      console.log(`[OrderFulfillment] Refunded $${(totalCost / 100).toFixed(2)} due to fulfillment failure`);
+    }
+    
+    return { 
+      success: allSuccessful, 
+      results: fulfillmentResults.map(r => ({ ...r, walletTransactionId: walletResult.transactionId })),
+    };
+  }
+
+  async canFulfillOrder(order: Order): Promise<{ canFulfill: boolean; reason?: string }> {
+    const balance = await storage.getWalletBalance(order.merchantId);
+    const currentBalance = balance?.balanceCents || 0;
+    const requiredAmount = order.totalCost || 0;
+    
+    if (requiredAmount <= 0) {
+      return { canFulfill: false, reason: "Order has no supplier cost" };
+    }
+    
+    if (currentBalance < requiredAmount) {
+      return { 
+        canFulfill: false, 
+        reason: `Insufficient wallet balance. Need $${(requiredAmount / 100).toFixed(2)}, have $${(currentBalance / 100).toFixed(2)}` 
+      };
+    }
+    
+    return { canFulfill: true };
   }
 }
 

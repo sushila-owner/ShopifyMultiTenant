@@ -114,9 +114,10 @@ export interface IStorage {
   getOrder(id: number): Promise<Order | undefined>;
   createOrder(order: InsertOrder): Promise<Order>;
   updateOrder(id: number, data: Partial<InsertOrder>): Promise<Order | undefined>;
-  getOrdersByMerchant(merchantId: number): Promise<Order[]>;
+  getOrdersByMerchant(merchantId: number, limit?: number, offset?: number, status?: string, fulfillmentStatus?: string): Promise<{ orders: Order[]; total: number }>;
   getOrdersByCustomer(customerId: number): Promise<Order[]>;
   getRecentOrders(merchantId: number, limit: number): Promise<Order[]>;
+  getMerchantProductByShopifyId(merchantId: number, shopifyProductId: string): Promise<Product | undefined>;
 
   // Plans
   getPlan(id: number): Promise<Plan | undefined>;
@@ -703,10 +704,45 @@ export class DatabaseStorage implements IStorage {
     return order || undefined;
   }
 
-  async getOrdersByMerchant(merchantId: number): Promise<Order[]> {
-    return db.select().from(orders)
-      .where(eq(orders.merchantId, merchantId))
-      .orderBy(desc(orders.createdAt));
+  async getOrdersByMerchant(
+    merchantId: number,
+    limit: number = 50,
+    offset: number = 0,
+    status?: string,
+    fulfillmentStatus?: string
+  ): Promise<{ orders: Order[]; total: number }> {
+    const conditions = [eq(orders.merchantId, merchantId)];
+    
+    if (status) {
+      conditions.push(eq(orders.status, status as any));
+    }
+    if (fulfillmentStatus) {
+      conditions.push(eq(orders.fulfillmentStatus, fulfillmentStatus as any));
+    }
+    
+    const whereClause = conditions.length > 1 ? and(...conditions) : conditions[0];
+    
+    const orderList = await db.select().from(orders)
+      .where(whereClause)
+      .orderBy(desc(orders.createdAt))
+      .limit(limit)
+      .offset(offset);
+    
+    const [countResult] = await db.select({ count: count() })
+      .from(orders)
+      .where(whereClause);
+    
+    return { orders: orderList, total: countResult?.count || 0 };
+  }
+
+  async getMerchantProductByShopifyId(merchantId: number, shopifyProductId: string): Promise<Product | undefined> {
+    const [product] = await db.select().from(products)
+      .where(and(
+        eq(products.merchantId, merchantId),
+        eq(products.shopifyProductId, shopifyProductId)
+      ))
+      .limit(1);
+    return product || undefined;
   }
 
   async getOrdersByCustomer(customerId: number): Promise<Order[]> {
