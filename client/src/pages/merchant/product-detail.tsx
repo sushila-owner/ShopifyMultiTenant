@@ -284,53 +284,55 @@ export default function MerchantProductDetailPage() {
       </div>
 
       <div className="max-w-7xl mx-auto px-4 sm:px-6 py-6 sm:py-8">
-        <div className="grid gap-6 md:gap-8 md:grid-cols-2">
-          <div className="space-y-4">
-            <div className="relative aspect-square rounded-2xl overflow-hidden bg-muted border">
-              {images && images.length > 0 ? (
-                <>
-                  <img
-                    src={images[selectedImageIndex].url}
-                    alt={images[selectedImageIndex].alt || product.title}
-                    className="h-full w-full object-contain p-4"
-                    data-testid="img-product-main"
-                  />
-                  {images.length > 1 && (
+        <div className="grid grid-cols-1 gap-6 md:gap-8 md:grid-cols-2">
+          <div className="space-y-4 min-w-0 w-full">
+            <div className="relative w-full max-w-full rounded-2xl bg-white border overflow-hidden">
+              <div className="w-full" style={{ aspectRatio: '1 / 1' }}>
+                <div className="absolute inset-0 flex items-center justify-center p-2">
+                  {images && images.length > 0 ? (
                     <>
-                      <button
-                        onClick={prevImage}
-                        className="absolute left-3 top-1/2 -translate-y-1/2 h-10 w-10 rounded-full bg-background/90 backdrop-blur-sm shadow-lg flex items-center justify-center hover:bg-background transition-colors"
-                      >
-                        <ChevronLeft className="h-5 w-5" />
-                      </button>
-                      <button
-                        onClick={nextImage}
-                        className="absolute right-3 top-1/2 -translate-y-1/2 h-10 w-10 rounded-full bg-background/90 backdrop-blur-sm shadow-lg flex items-center justify-center hover:bg-background transition-colors"
-                      >
-                        <ChevronRight className="h-5 w-5" />
-                      </button>
-                      <div className="absolute bottom-4 left-1/2 -translate-x-1/2 flex gap-2">
-                        {images.map((_, idx) => (
-                          <button
-                            key={idx}
-                            onClick={() => setSelectedImageIndex(idx)}
-                            className={`h-2 w-2 rounded-full transition-all ${
-                              idx === selectedImageIndex ? "bg-primary w-6" : "bg-background/60"
-                            }`}
-                          />
-                        ))}
-                      </div>
-                    </>
-                  )}
-                </>
-              ) : (
-                <div className="h-full w-full flex items-center justify-center">
+                      <img
+                        src={images[selectedImageIndex].url}
+                        alt={images[selectedImageIndex].alt || product.title}
+                        className="max-w-full max-h-full object-contain"
+                        data-testid="img-product-main"
+                      />
+                    {images.length > 1 && (
+                      <>
+                        <button
+                          onClick={prevImage}
+                          className="absolute left-3 top-1/2 -translate-y-1/2 h-10 w-10 rounded-full bg-background/90 backdrop-blur-sm shadow-lg flex items-center justify-center hover:bg-background transition-colors z-10"
+                        >
+                          <ChevronLeft className="h-5 w-5" />
+                        </button>
+                        <button
+                          onClick={nextImage}
+                          className="absolute right-3 top-1/2 -translate-y-1/2 h-10 w-10 rounded-full bg-background/90 backdrop-blur-sm shadow-lg flex items-center justify-center hover:bg-background transition-colors z-10"
+                        >
+                          <ChevronRight className="h-5 w-5" />
+                        </button>
+                        <div className="absolute bottom-4 left-1/2 -translate-x-1/2 flex gap-2 z-10">
+                          {images.map((_, idx) => (
+                            <button
+                              key={idx}
+                              onClick={() => setSelectedImageIndex(idx)}
+                              className={`h-2 w-2 rounded-full transition-all ${
+                                idx === selectedImageIndex ? "bg-primary w-6" : "bg-background/60"
+                              }`}
+                            />
+                          ))}
+                        </div>
+                      </>
+                    )}
+                  </>
+                ) : (
                   <div className="text-center text-muted-foreground">
                     <ImageOff className="h-20 w-20 mx-auto mb-4 opacity-30" />
                     <p>No images available</p>
                   </div>
-                </div>
-              )}
+                )}
+              </div>
+              </div>
             </div>
 
             {images && images.length > 1 && (
