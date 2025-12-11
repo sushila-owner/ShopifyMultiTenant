@@ -1956,6 +1956,143 @@ export async function registerRoutes(
     }
   });
 
+  // ==================== WALLET ROUTES ====================
+  // Get wallet balance
+  app.get("/api/wallet/balance", authMiddleware, merchantOnly, async (req: AuthRequest, res: Response) => {
+    try {
+      if (!req.user?.merchantId) {
+        return res.status(400).json({ success: false, error: "No merchant associated" });
+      }
+      let balance = await storage.getWalletBalance(req.user.merchantId);
+      if (!balance) {
+        // Create wallet if it doesn't exist
+        balance = await storage.createWalletBalance({ 
+          merchantId: req.user.merchantId, 
+          balanceCents: 0, 
+          pendingCents: 0, 
+          currency: "USD" 
+        });
+      }
+      res.json({ success: true, data: balance });
+    } catch (error: any) {
+      res.status(500).json({ success: false, error: error.message });
+    }
+  });
+
+  // Get wallet transactions
+  app.get("/api/wallet/transactions", authMiddleware, merchantOnly, async (req: AuthRequest, res: Response) => {
+    try {
+      if (!req.user?.merchantId) {
+        return res.status(400).json({ success: false, error: "No merchant associated" });
+      }
+      const limit = parseInt(req.query.limit as string) || 50;
+      const offset = parseInt(req.query.offset as string) || 0;
+      const result = await storage.getWalletTransactions(req.user.merchantId, limit, offset);
+      res.json({ success: true, data: result });
+    } catch (error: any) {
+      res.status(500).json({ success: false, error: error.message });
+    }
+  });
+
+  // Create Stripe PaymentIntent for wallet top-up
+  app.post("/api/wallet/top-up", authMiddleware, merchantOnly, async (req: AuthRequest, res: Response) => {
+    try {
+      if (!req.user?.merchantId) {
+        return res.status(400).json({ success: false, error: "No merchant associated" });
+      }
+
+      const { amountCents } = req.body;
+      if (!amountCents || amountCents < 500) {
+        return res.status(400).json({ success: false, error: "Minimum top-up is $5.00" });
+      }
+      if (amountCents > 1000000) {
+        return res.status(400).json({ success: false, error: "Maximum top-up is $10,000.00" });
+      }
+
+      // Get merchant for Stripe customer
+      const merchant = await storage.getMerchant(req.user.merchantId);
+      if (!merchant) {
+        return res.status(404).json({ success: false, error: "Merchant not found" });
+      }
+
+      // Create or get Stripe customer
+      let customerId = merchant.stripeCustomerId;
+      if (!customerId) {
+        const customer = await stripe.customers.create({
+          email: merchant.ownerEmail,
+          name: merchant.businessName,
+          metadata: { merchantId: String(merchant.id) }
+        });
+        customerId = customer.id;
+        await storage.updateMerchant(merchant.id, { stripeCustomerId: customerId });
+      }
+
+      // Create PaymentIntent
+      const paymentIntent = await stripe.paymentIntents.create({
+        amount: amountCents,
+        currency: "usd",
+        customer: customerId,
+        metadata: { 
+          merchantId: String(req.user.merchantId),
+          type: "wallet_topup"
+        },
+      });
+
+      res.json({ 
+        success: true, 
+        data: { 
+          clientSecret: paymentIntent.client_secret,
+          paymentIntentId: paymentIntent.id,
+          amount: amountCents
+        } 
+      });
+    } catch (error: any) {
+      console.error("[Wallet] Top-up error:", error);
+      res.status(500).json({ success: false, error: error.message });
+    }
+  });
+
+  // Confirm wallet top-up (called after successful Stripe payment)
+  app.post("/api/wallet/confirm", authMiddleware, merchantOnly, async (req: AuthRequest, res: Response) => {
+    try {
+      if (!req.user?.merchantId) {
+        return res.status(400).json({ success: false, error: "No merchant associated" });
+      }
+
+      const { paymentIntentId } = req.body;
+      if (!paymentIntentId) {
+        return res.status(400).json({ success: false, error: "Payment intent ID required" });
+      }
+
+      // Verify payment intent
+      const paymentIntent = await stripe.paymentIntents.retrieve(paymentIntentId);
+      if (paymentIntent.status !== "succeeded") {
+        return res.status(400).json({ success: false, error: "Payment not completed" });
+      }
+
+      // Check if this payment was already processed
+      const { transactions } = await storage.getWalletTransactions(req.user.merchantId, 100, 0);
+      const alreadyProcessed = transactions.some(t => t.stripePaymentIntentId === paymentIntentId);
+      if (alreadyProcessed) {
+        const balance = await storage.getWalletBalance(req.user.merchantId);
+        return res.json({ success: true, data: { balance, message: "Already processed" } });
+      }
+
+      // Add funds to wallet
+      const result = await storage.addFundsToWallet(
+        req.user.merchantId,
+        paymentIntent.amount,
+        paymentIntentId,
+        `Wallet top-up via Stripe`
+      );
+
+      res.json({ success: true, data: result });
+    } catch (error: any) {
+      console.error("[Wallet] Confirm error:", error);
+      res.status(500).json({ success: false, error: error.message });
+    }
+  });
+
   // Product Catalog (global products for import) - Server-side pagination for 60k+ products
   app.get("/api/merchant/catalog", authMiddleware, merchantOnly, async (req: AuthRequest, res: Response) => {
     try {
