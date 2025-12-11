@@ -238,6 +238,9 @@ const translations = {
     "merchant.wallet.walletTopup": "Wallet top-up",
     "merchant.wallet.orderPayment": "Order payment",
     "merchant.wallet.orderRefund": "Order refund",
+    "merchant.wallet.pleaseWait": "Please Wait",
+    "merchant.wallet.paymentFormLoading": "Payment form is still loading",
+    "merchant.wallet.loadingPaymentForm": "Loading payment form...",
   },
   es: {
     "settings.language": "Idioma",
@@ -452,6 +455,9 @@ const translations = {
     "merchant.wallet.walletTopup": "Recarga de billetera",
     "merchant.wallet.orderPayment": "Pago de pedido",
     "merchant.wallet.orderRefund": "Reembolso de pedido",
+    "merchant.wallet.pleaseWait": "Por Favor Espere",
+    "merchant.wallet.paymentFormLoading": "El formulario de pago aún se está cargando",
+    "merchant.wallet.loadingPaymentForm": "Cargando formulario de pago...",
   },
   fr: {
     "settings.language": "Langue",
@@ -666,6 +672,9 @@ const translations = {
     "merchant.wallet.walletTopup": "Rechargement du portefeuille",
     "merchant.wallet.orderPayment": "Paiement de commande",
     "merchant.wallet.orderRefund": "Remboursement de commande",
+    "merchant.wallet.pleaseWait": "Veuillez Patienter",
+    "merchant.wallet.paymentFormLoading": "Le formulaire de paiement est en cours de chargement",
+    "merchant.wallet.loadingPaymentForm": "Chargement du formulaire de paiement...",
   },
   de: {
     "settings.language": "Sprache",
@@ -880,6 +889,9 @@ const translations = {
     "merchant.wallet.walletTopup": "Wallet-Aufladung",
     "merchant.wallet.orderPayment": "Bestellzahlung",
     "merchant.wallet.orderRefund": "Bestellerstattung",
+    "merchant.wallet.pleaseWait": "Bitte Warten",
+    "merchant.wallet.paymentFormLoading": "Zahlungsformular wird noch geladen",
+    "merchant.wallet.loadingPaymentForm": "Zahlungsformular wird geladen...",
   },
   zh: {
     "settings.language": "语言",
@@ -1094,6 +1106,9 @@ const translations = {
     "merchant.wallet.walletTopup": "钱包充值",
     "merchant.wallet.orderPayment": "订单付款",
     "merchant.wallet.orderRefund": "订单退款",
+    "merchant.wallet.pleaseWait": "请稍候",
+    "merchant.wallet.paymentFormLoading": "支付表单仍在加载中",
+    "merchant.wallet.loadingPaymentForm": "正在加载支付表单...",
   },
   ja: {
     "settings.language": "言語",
@@ -1308,6 +1323,9 @@ const translations = {
     "merchant.wallet.walletTopup": "ウォレットチャージ",
     "merchant.wallet.orderPayment": "注文支払い",
     "merchant.wallet.orderRefund": "注文返金",
+    "merchant.wallet.pleaseWait": "お待ちください",
+    "merchant.wallet.paymentFormLoading": "支払いフォームがまだ読み込み中です",
+    "merchant.wallet.loadingPaymentForm": "支払いフォームを読み込んでいます...",
   },
   ar: {
     "settings.language": "اللغة",
@@ -1522,6 +1540,9 @@ const translations = {
     "merchant.wallet.walletTopup": "شحن المحفظة",
     "merchant.wallet.orderPayment": "دفع الطلب",
     "merchant.wallet.orderRefund": "استرداد الطلب",
+    "merchant.wallet.pleaseWait": "يرجى الانتظار",
+    "merchant.wallet.paymentFormLoading": "نموذج الدفع لا يزال قيد التحميل",
+    "merchant.wallet.loadingPaymentForm": "جاري تحميل نموذج الدفع...",
   },
   ko: {
     "settings.language": "언어",
@@ -1736,6 +1757,9 @@ const translations = {
     "merchant.wallet.walletTopup": "지갑 충전",
     "merchant.wallet.orderPayment": "주문 결제",
     "merchant.wallet.orderRefund": "주문 환불",
+    "merchant.wallet.pleaseWait": "잠시 기다려 주세요",
+    "merchant.wallet.paymentFormLoading": "결제 양식이 아직 로드 중입니다",
+    "merchant.wallet.loadingPaymentForm": "결제 양식 로드 중...",
   },
   pt: {
     "settings.language": "Idioma",
@@ -1950,6 +1974,9 @@ const translations = {
     "merchant.wallet.walletTopup": "Recarga da carteira",
     "merchant.wallet.orderPayment": "Pagamento do pedido",
     "merchant.wallet.orderRefund": "Reembolso do pedido",
+    "merchant.wallet.pleaseWait": "Por Favor Aguarde",
+    "merchant.wallet.paymentFormLoading": "O formulário de pagamento ainda está carregando",
+    "merchant.wallet.loadingPaymentForm": "Carregando formulário de pagamento...",
   },
   ru: {
     "settings.language": "Язык",
@@ -2164,6 +2191,9 @@ const translations = {
     "merchant.wallet.walletTopup": "Пополнение кошелька",
     "merchant.wallet.orderPayment": "Оплата заказа",
     "merchant.wallet.orderRefund": "Возврат за заказ",
+    "merchant.wallet.pleaseWait": "Пожалуйста, Подождите",
+    "merchant.wallet.paymentFormLoading": "Форма оплаты всё ещё загружается",
+    "merchant.wallet.loadingPaymentForm": "Загрузка формы оплаты...",
   },
   hi: {
     "settings.language": "भाषा",
@@ -2378,6 +2408,9 @@ const translations = {
     "merchant.wallet.walletTopup": "वॉलेट रिचार्ज",
     "merchant.wallet.orderPayment": "ऑर्डर भुगतान",
     "merchant.wallet.orderRefund": "ऑर्डर रिफंड",
+    "merchant.wallet.pleaseWait": "कृपया प्रतीक्षा करें",
+    "merchant.wallet.paymentFormLoading": "भुगतान फॉर्म अभी भी लोड हो रहा है",
+    "merchant.wallet.loadingPaymentForm": "भुगतान फॉर्म लोड हो रहा है...",
   },
   it: {
     "settings.language": "Lingua",
@@ -2592,6 +2625,9 @@ const translations = {
     "merchant.wallet.walletTopup": "Ricarica portafoglio",
     "merchant.wallet.orderPayment": "Pagamento ordine",
     "merchant.wallet.orderRefund": "Rimborso ordine",
+    "merchant.wallet.pleaseWait": "Attendere Prego",
+    "merchant.wallet.paymentFormLoading": "Il modulo di pagamento è ancora in caricamento",
+    "merchant.wallet.loadingPaymentForm": "Caricamento modulo di pagamento...",
   },
 };
 

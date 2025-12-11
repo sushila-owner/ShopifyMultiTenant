@@ -24,7 +24,7 @@ import {
 import { useCurrency } from "@/lib/currency";
 import { useI18n } from "@/lib/i18n";
 import type { WalletBalance, WalletTransaction } from "@shared/schema";
-import { format } from "date-fns";
+import { format, type Locale } from "date-fns";
 import { enUS, es, fr, de, zhCN, ja, ar, ko, pt, ru, hi, it } from "date-fns/locale";
 import { loadStripe } from "@stripe/stripe-js";
 
@@ -82,6 +82,7 @@ function AddFundsForm({
   const stripe = useStripe();
   const elements = useElements();
   const [isProcessing, setIsProcessing] = useState(false);
+  const [isElementReady, setIsElementReady] = useState(false);
   const { toast } = useToast();
   const amountFormatted = `$${(amount / 100).toFixed(2)}`;
 
@@ -111,7 +112,12 @@ function AddFundsForm({
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
 
-    if (!stripe || !elements) {
+    if (!stripe || !elements || !isElementReady) {
+      toast({
+        title: t("merchant.wallet.pleaseWait"),
+        description: t("merchant.wallet.paymentFormLoading"),
+        variant: "destructive",
+      });
       return;
     }
 
@@ -139,11 +145,19 @@ function AddFundsForm({
 
   return (
     <form onSubmit={handleSubmit} className="space-y-4">
-      <PaymentElement />
+      {!isElementReady && (
+        <div className="flex items-center justify-center py-8">
+          <Loader2 className="h-6 w-6 animate-spin text-muted-foreground" />
+          <span className="ml-2 text-sm text-muted-foreground">{t("merchant.wallet.loadingPaymentForm")}</span>
+        </div>
+      )}
+      <div className={isElementReady ? "" : "opacity-0 h-0 overflow-hidden"}>
+        <PaymentElement onReady={() => setIsElementReady(true)} />
+      </div>
       <Button 
         type="submit" 
         className="w-full" 
-        disabled={!stripe || isProcessing || confirmMutation.isPending}
+        disabled={!stripe || !isElementReady || isProcessing || confirmMutation.isPending}
         data-testid="button-confirm-payment"
       >
         {isProcessing || confirmMutation.isPending ? (
