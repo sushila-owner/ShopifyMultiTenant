@@ -4010,6 +4010,332 @@ export async function registerRoutes(
     }
   });
 
+  // ==================== ANALYTICS ROUTES ====================
+  const { analyticsService } = await import("./services/analyticsService");
+
+  app.get("/api/merchant/analytics", authMiddleware, merchantOnly, async (req: AuthRequest, res: Response) => {
+    try {
+      if (!req.user?.merchantId) {
+        return res.status(400).json({ success: false, error: "No merchant associated" });
+      }
+
+      const period = (req.query.period as string) || "30d";
+      const analytics = await analyticsService.getMerchantAnalytics(req.user.merchantId, period);
+      res.json({ success: true, data: analytics });
+    } catch (error: any) {
+      res.status(500).json({ success: false, error: error.message });
+    }
+  });
+
+  // ==================== WEBHOOK ROUTES ====================
+  const { webhookService } = await import("./services/webhookService");
+
+  app.get("/api/merchant/webhooks", authMiddleware, merchantOnly, async (req: AuthRequest, res: Response) => {
+    try {
+      if (!req.user?.merchantId) {
+        return res.status(400).json({ success: false, error: "No merchant associated" });
+      }
+
+      const subscriptions = await webhookService.getSubscriptions(req.user.merchantId);
+      res.json({ success: true, data: subscriptions });
+    } catch (error: any) {
+      res.status(500).json({ success: false, error: error.message });
+    }
+  });
+
+  app.post("/api/merchant/webhooks", authMiddleware, merchantOnly, async (req: AuthRequest, res: Response) => {
+    try {
+      if (!req.user?.merchantId) {
+        return res.status(400).json({ success: false, error: "No merchant associated" });
+      }
+
+      const { url, events } = req.body;
+      if (!url || !events || !Array.isArray(events)) {
+        return res.status(400).json({ success: false, error: "URL and events array required" });
+      }
+
+      const subscription = await webhookService.createSubscription(req.user.merchantId, { url, events });
+      res.json({ success: true, data: subscription });
+    } catch (error: any) {
+      res.status(400).json({ success: false, error: error.message });
+    }
+  });
+
+  app.put("/api/merchant/webhooks/:id", authMiddleware, merchantOnly, async (req: AuthRequest, res: Response) => {
+    try {
+      if (!req.user?.merchantId) {
+        return res.status(400).json({ success: false, error: "No merchant associated" });
+      }
+
+      const id = parseInt(req.params.id);
+      const subscription = await webhookService.updateSubscription(id, req.user.merchantId, req.body);
+      if (!subscription) {
+        return res.status(404).json({ success: false, error: "Webhook not found" });
+      }
+      res.json({ success: true, data: subscription });
+    } catch (error: any) {
+      res.status(400).json({ success: false, error: error.message });
+    }
+  });
+
+  app.delete("/api/merchant/webhooks/:id", authMiddleware, merchantOnly, async (req: AuthRequest, res: Response) => {
+    try {
+      if (!req.user?.merchantId) {
+        return res.status(400).json({ success: false, error: "No merchant associated" });
+      }
+
+      const id = parseInt(req.params.id);
+      const deleted = await webhookService.deleteSubscription(id, req.user.merchantId);
+      if (!deleted) {
+        return res.status(404).json({ success: false, error: "Webhook not found" });
+      }
+      res.json({ success: true });
+    } catch (error: any) {
+      res.status(400).json({ success: false, error: error.message });
+    }
+  });
+
+  app.post("/api/merchant/webhooks/:id/test", authMiddleware, merchantOnly, async (req: AuthRequest, res: Response) => {
+    try {
+      if (!req.user?.merchantId) {
+        return res.status(400).json({ success: false, error: "No merchant associated" });
+      }
+
+      const id = parseInt(req.params.id);
+      const result = await webhookService.testWebhook(id, req.user.merchantId);
+      res.json({ success: result.success, message: result.message });
+    } catch (error: any) {
+      res.status(400).json({ success: false, error: error.message });
+    }
+  });
+
+  app.get("/api/merchant/webhooks/events", authMiddleware, merchantOnly, async (req: AuthRequest, res: Response) => {
+    try {
+      if (!req.user?.merchantId) {
+        return res.status(400).json({ success: false, error: "No merchant associated" });
+      }
+
+      const events = await webhookService.getEventLog(req.user.merchantId);
+      res.json({ success: true, data: events });
+    } catch (error: any) {
+      res.status(500).json({ success: false, error: error.message });
+    }
+  });
+
+  // ==================== BULK IMPORT ROUTES ====================
+  const { bulkImportService } = await import("./services/bulkImportService");
+
+  app.post("/api/merchant/import/orders", authMiddleware, merchantOnly, async (req: AuthRequest, res: Response) => {
+    try {
+      if (!req.user?.merchantId) {
+        return res.status(400).json({ success: false, error: "No merchant associated" });
+      }
+
+      const { csv } = req.body;
+      if (!csv) {
+        return res.status(400).json({ success: false, error: "CSV content required" });
+      }
+
+      const result = await bulkImportService.importOrders(req.user.merchantId, csv);
+      res.json({ success: result.success, data: result });
+    } catch (error: any) {
+      res.status(400).json({ success: false, error: error.message });
+    }
+  });
+
+  app.post("/api/merchant/import/products", authMiddleware, merchantOnly, async (req: AuthRequest, res: Response) => {
+    try {
+      if (!req.user?.merchantId) {
+        return res.status(400).json({ success: false, error: "No merchant associated" });
+      }
+
+      const { csv } = req.body;
+      if (!csv) {
+        return res.status(400).json({ success: false, error: "CSV content required" });
+      }
+
+      const result = await bulkImportService.importProducts(req.user.merchantId, csv);
+      res.json({ success: result.success, data: result });
+    } catch (error: any) {
+      res.status(400).json({ success: false, error: error.message });
+    }
+  });
+
+  app.get("/api/merchant/import/template/:type", authMiddleware, merchantOnly, async (req: AuthRequest, res: Response) => {
+    try {
+      const type = req.params.type as "orders" | "products";
+      if (type !== "orders" && type !== "products") {
+        return res.status(400).json({ success: false, error: "Invalid template type" });
+      }
+
+      const template = bulkImportService.getCSVTemplate(type);
+      res.setHeader("Content-Type", "text/csv");
+      res.setHeader("Content-Disposition", `attachment; filename=${type}-template.csv`);
+      res.send(template);
+    } catch (error: any) {
+      res.status(400).json({ success: false, error: error.message });
+    }
+  });
+
+  // ==================== TEAM/STAFF ROUTES ====================
+  app.get("/api/team", authMiddleware, merchantOnly, async (req: AuthRequest, res: Response) => {
+    try {
+      if (!req.user?.merchantId) {
+        return res.status(400).json({ success: false, error: "No merchant associated" });
+      }
+
+      const users = await storage.getUsersByMerchant(req.user.merchantId);
+      const safeUsers = users.map(u => {
+        const { password, ...rest } = u;
+        return rest;
+      });
+      res.json({ success: true, data: safeUsers });
+    } catch (error: any) {
+      res.status(500).json({ success: false, error: error.message });
+    }
+  });
+
+  app.get("/api/team/invitations", authMiddleware, merchantOnly, async (req: AuthRequest, res: Response) => {
+    try {
+      if (!req.user?.merchantId) {
+        return res.status(400).json({ success: false, error: "No merchant associated" });
+      }
+
+      const invitations = await storage.getInvitationsByMerchant(req.user.merchantId);
+      res.json({ success: true, data: invitations });
+    } catch (error: any) {
+      res.status(500).json({ success: false, error: error.message });
+    }
+  });
+
+  app.post("/api/team/invite", authMiddleware, merchantOnly, async (req: AuthRequest, res: Response) => {
+    try {
+      if (!req.user?.merchantId) {
+        return res.status(400).json({ success: false, error: "No merchant associated" });
+      }
+
+      const { email, name, permissions } = req.body;
+      if (!email || !name || !permissions) {
+        return res.status(400).json({ success: false, error: "Email, name, and permissions required" });
+      }
+
+      const existingUser = await storage.getUserByEmail(email);
+      if (existingUser) {
+        return res.status(400).json({ success: false, error: "User with this email already exists" });
+      }
+
+      const token = randomUUID();
+      const expiresAt = new Date();
+      expiresAt.setDate(expiresAt.getDate() + 7);
+
+      const invitation = await storage.createStaffInvitation({
+        merchantId: req.user.merchantId,
+        email,
+        name,
+        permissions,
+        token,
+        expiresAt,
+        status: "pending",
+        invitedBy: req.user.id,
+      });
+
+      console.log(`[Team] Invitation sent to ${email} for merchant ${req.user.merchantId}`);
+      res.json({ success: true, data: invitation });
+    } catch (error: any) {
+      res.status(400).json({ success: false, error: error.message });
+    }
+  });
+
+  app.delete("/api/team/:id", authMiddleware, merchantOnly, async (req: AuthRequest, res: Response) => {
+    try {
+      if (!req.user?.merchantId) {
+        return res.status(400).json({ success: false, error: "No merchant associated" });
+      }
+
+      const userId = parseInt(req.params.id);
+      const user = await storage.getUser(userId);
+      
+      if (!user || user.merchantId !== req.user.merchantId) {
+        return res.status(404).json({ success: false, error: "Team member not found" });
+      }
+
+      if (user.role !== "staff") {
+        return res.status(400).json({ success: false, error: "Cannot remove non-staff members" });
+      }
+
+      await storage.updateUser(userId, { isActive: false });
+      res.json({ success: true });
+    } catch (error: any) {
+      res.status(400).json({ success: false, error: error.message });
+    }
+  });
+
+  app.delete("/api/team/invitations/:id", authMiddleware, merchantOnly, async (req: AuthRequest, res: Response) => {
+    try {
+      if (!req.user?.merchantId) {
+        return res.status(400).json({ success: false, error: "No merchant associated" });
+      }
+
+      const invitationId = parseInt(req.params.id);
+      const invitation = await storage.getStaffInvitation(invitationId);
+      
+      if (!invitation || invitation.merchantId !== req.user.merchantId) {
+        return res.status(404).json({ success: false, error: "Invitation not found" });
+      }
+
+      await storage.updateStaffInvitation(invitationId, { status: "expired" });
+      res.json({ success: true });
+    } catch (error: any) {
+      res.status(400).json({ success: false, error: error.message });
+    }
+  });
+
+  app.post("/api/team/accept/:token", async (req: Request, res: Response) => {
+    try {
+      const { token } = req.params;
+      const { password } = req.body;
+
+      if (!password) {
+        return res.status(400).json({ success: false, error: "Password required" });
+      }
+
+      const invitation = await storage.getStaffInvitationByToken(token);
+      if (!invitation) {
+        return res.status(404).json({ success: false, error: "Invitation not found" });
+      }
+
+      if (invitation.status !== "pending") {
+        return res.status(400).json({ success: false, error: "Invitation already used or expired" });
+      }
+
+      if (new Date() > new Date(invitation.expiresAt!)) {
+        await storage.updateStaffInvitation(invitation.id, { status: "expired" });
+        return res.status(400).json({ success: false, error: "Invitation expired" });
+      }
+
+      const hashedPassword = await bcrypt.hash(password, 10);
+
+      const user = await storage.createUser({
+        email: invitation.email,
+        password: hashedPassword,
+        name: invitation.name,
+        role: "staff",
+        merchantId: invitation.merchantId,
+        permissions: invitation.permissions || [],
+        isActive: true,
+      });
+
+      await storage.updateStaffInvitation(invitation.id, { status: "accepted" });
+
+      const jwtToken = generateToken(user);
+      const { password: _, ...userWithoutPassword } = user;
+
+      res.json({ success: true, data: { user: userWithoutPassword, token: jwtToken } });
+    } catch (error: any) {
+      res.status(400).json({ success: false, error: error.message });
+    }
+  });
+
   // ==================== TRANSLATION (DEEPL) ROUTES ====================
   const { deeplService } = await import("./deepl");
 

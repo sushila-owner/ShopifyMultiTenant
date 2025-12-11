@@ -50,6 +50,8 @@ import TeamPage from "@/pages/merchant/team";
 import SubscriptionPage from "@/pages/merchant/subscription";
 import WalletPage from "@/pages/merchant/wallet";
 import SettingsPage from "@/pages/merchant/settings";
+import ImportPage from "@/pages/merchant/import";
+import WebhooksPage from "@/pages/merchant/webhooks";
 
 function ProtectedRoute({ children, requireAdmin = false }: { children: React.ReactNode; requireAdmin?: boolean }) {
   const { user, isLoading } = useAuth();
@@ -306,6 +308,20 @@ function Router() {
         <ProtectedRoute>
           <MerchantLayout>
             <SettingsPage />
+          </MerchantLayout>
+        </ProtectedRoute>
+      </Route>
+      <Route path="/dashboard/import">
+        <ProtectedRoute>
+          <MerchantLayout>
+            <ImportPage />
+          </MerchantLayout>
+        </ProtectedRoute>
+      </Route>
+      <Route path="/dashboard/webhooks">
+        <ProtectedRoute>
+          <MerchantLayout>
+            <WebhooksPage />
           </MerchantLayout>
         </ProtectedRoute>
       </Route>

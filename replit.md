@@ -39,6 +39,9 @@ Drizzle ORM is used with PostgreSQL, specifically PlanetScale PostgreSQL. The da
 - **Returns & Refunds Management**: Manages the Return Merchandise Authorization (RMA) workflow, including request creation, approval/rejection, and processing refunds to the merchant's wallet.
 - **Shipping Configuration**: Allows merchants to manage shipping zones and rates with various rate types (flat, weight-based, price-based).
 - **GDPR Compliance**: Includes services for data export, deletion, and customer data anonymization, fulfilling Shopify App Store requirements via webhooks.
+- **Analytics Dashboard**: Real-time analytics showing revenue, profit, orders, and conversion metrics with period filtering (7d, 30d, 90d, 1y). Includes revenue/profit charts, orders by period, top products by sales, and category distribution.
+- **Bulk Import System**: CSV import functionality for orders and products with validation, duplicate detection, batch processing, and downloadable templates.
+- **Webhook Notifications**: Event-driven webhook system supporting subscriptions to order, inventory, product, and wallet events. Includes CRUD management, webhook testing, and event logging.
 
 ### File Structure
 The project uses a monorepo structure with `/client`, `/server`, `/shared`, `/migrations`, `/attached_assets`, and `/script` directories, alongside path aliases like `@/*` and `@shared/*`.
