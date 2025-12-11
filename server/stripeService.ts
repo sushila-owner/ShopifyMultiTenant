@@ -15,7 +15,7 @@ export class StripeService {
     });
   }
 
-  // Create checkout session for subscription
+  // Create checkout session for subscription with 2-day free trial
   async createCheckoutSession(
     customerId: string, 
     priceId: string, 
@@ -33,9 +33,33 @@ export class StripeService {
       cancel_url: cancelUrl,
       metadata: { merchantId: merchantId.toString() },
       subscription_data: {
+        trial_period_days: 2,
         metadata: { merchantId: merchantId.toString() },
       },
     });
+  }
+  
+  // Verify customer exists in current Stripe mode
+  async verifyOrCreateCustomer(
+    existingCustomerId: string | null, 
+    email: string, 
+    merchantId: number, 
+    businessName: string
+  ) {
+    const stripe = await getUncachableStripeClient();
+    
+    if (existingCustomerId) {
+      try {
+        await stripe.customers.retrieve(existingCustomerId);
+        return existingCustomerId;
+      } catch (error: any) {
+        console.log("[Stripe] Customer not found in current mode, creating new one");
+      }
+    }
+    
+    const customer = await this.createCustomer(email, merchantId, businessName);
+    await this.updateMerchantStripeInfo(merchantId, { stripeCustomerId: customer.id });
+    return customer.id;
   }
 
   // Create customer portal session for managing subscription

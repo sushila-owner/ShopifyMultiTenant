@@ -1,4 +1,4 @@
-import type { Express, Request, Response, NextFunction } from "express";
+import express, { type Express, Request, Response, NextFunction } from "express";
 import { createServer, type Server } from "http";
 import { storage } from "./storage";
 import bcrypt from "bcryptjs";
@@ -3133,17 +3133,13 @@ export async function registerRoutes(
         return res.status(404).json({ success: false, error: "Merchant not found" });
       }
 
-      // Create or get Stripe customer
-      let customerId = merchant.stripeCustomerId;
-      if (!customerId) {
-        const customer = await stripeService.createCustomer(
-          req.user!.email!,
-          merchant.id,
-          merchant.businessName
-        );
-        customerId = customer.id;
-        await stripeService.updateMerchantStripeInfo(merchant.id, { stripeCustomerId: customerId });
-      }
+      // Create or verify Stripe customer (handles live/test mode mismatch)
+      const customerId = await stripeService.verifyOrCreateCustomer(
+        merchant.stripeCustomerId,
+        req.user!.email!,
+        merchant.id,
+        merchant.businessName
+      );
 
       // Get base URL
       const protocol = req.headers['x-forwarded-proto'] || req.protocol;
@@ -3230,6 +3226,113 @@ export async function registerRoutes(
     } catch (error: any) {
       console.error("Subscription fetch error:", error);
       res.status(500).json({ success: false, error: error.message });
+    }
+  });
+
+  // Stripe webhook endpoint for subscription updates
+  app.post("/api/stripe/webhook", express.raw({ type: 'application/json' }), async (req: Request, res: Response) => {
+    const stripe = await getUncachableStripeClient();
+    let event;
+
+    try {
+      // Parse raw body as JSON - in production, use webhook signature verification
+      if (typeof req.body === 'string') {
+        event = JSON.parse(req.body);
+      } else if (Buffer.isBuffer(req.body)) {
+        event = JSON.parse(req.body.toString());
+      } else {
+        event = req.body;
+      }
+    } catch (err: any) {
+      console.error("[Webhook] Parse error:", err.message);
+      return res.status(400).send(`Webhook Error: ${err.message}`);
+    }
+
+    console.log("[Webhook] Received event:", event.type);
+
+    try {
+      switch (event.type) {
+        case 'checkout.session.completed': {
+          const session = event.data.object;
+          const merchantId = parseInt(session.metadata?.merchantId);
+          const subscriptionId = session.subscription;
+          
+          if (merchantId && subscriptionId) {
+            // Get subscription details from Stripe
+            const stripeSubscription = await stripe.subscriptions.retrieve(subscriptionId as string);
+            const priceId = stripeSubscription.items.data[0]?.price.id;
+            
+            // Get plan from price metadata
+            const price = await stripe.prices.retrieve(priceId);
+            const product = await stripe.products.retrieve(price.product as string);
+            const planSlug = product.metadata.planSlug;
+            
+            // Find plan in our database
+            const dbPlan = await storage.getPlanBySlug(planSlug);
+            
+            // Update merchant with subscription info
+            await stripeService.updateMerchantStripeInfo(merchantId, {
+              stripeSubscriptionId: subscriptionId as string,
+            });
+            
+            // Update subscription status
+            const status = stripeSubscription.status === 'trialing' ? 'trial' : 'active';
+            await storage.updateMerchant(merchantId, {
+              subscriptionStatus: status as any,
+              subscriptionPlanId: dbPlan?.id,
+              productLimit: dbPlan?.productLimit || 25,
+            });
+            
+            // Update or create subscription record
+            const existingSubscription = await storage.getSubscriptionByMerchant(merchantId);
+            if (existingSubscription) {
+              await storage.updateSubscription(existingSubscription.id, {
+                planId: dbPlan?.id || existingSubscription.planId,
+                status: status as any,
+              });
+            } else if (dbPlan) {
+              const now = new Date();
+              const periodEnd = new Date();
+              periodEnd.setMonth(periodEnd.getMonth() + 1);
+              await storage.createSubscription({
+                merchantId,
+                planId: dbPlan.id,
+                status: status as any,
+                currentPeriodStart: now,
+                currentPeriodEnd: periodEnd,
+              });
+            }
+            
+            console.log(`[Webhook] Subscription ${subscriptionId} activated for merchant ${merchantId}`);
+          }
+          break;
+        }
+        
+        case 'customer.subscription.updated':
+        case 'customer.subscription.deleted': {
+          const subscription = event.data.object;
+          await stripeService.handleSubscriptionUpdate(subscription.id, subscription.status);
+          console.log(`[Webhook] Subscription ${subscription.id} status updated to ${subscription.status}`);
+          break;
+        }
+        
+        case 'invoice.payment_failed': {
+          const invoice = event.data.object;
+          if (invoice.subscription) {
+            await stripeService.handleSubscriptionUpdate(invoice.subscription as string, 'past_due');
+            console.log(`[Webhook] Invoice payment failed for subscription ${invoice.subscription}`);
+          }
+          break;
+        }
+        
+        default:
+          console.log(`[Webhook] Unhandled event type: ${event.type}`);
+      }
+      
+      res.json({ received: true });
+    } catch (error: any) {
+      console.error("[Webhook] Handler error:", error);
+      res.status(500).json({ error: error.message });
     }
   });
 
