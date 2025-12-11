@@ -2009,6 +2009,12 @@ export async function registerRoutes(
         return res.status(400).json({ success: false, error: "Maximum top-up is $10,000.00" });
       }
 
+      // Get Stripe client
+      const stripe = await getUncachableStripeClient();
+      if (!stripe) {
+        return res.status(500).json({ success: false, error: "Payment service unavailable" });
+      }
+
       // Get merchant for Stripe customer
       const merchant = await storage.getMerchant(req.user.merchantId);
       if (!merchant) {
@@ -2062,6 +2068,12 @@ export async function registerRoutes(
       const { paymentIntentId } = req.body;
       if (!paymentIntentId) {
         return res.status(400).json({ success: false, error: "Payment intent ID required" });
+      }
+
+      // Get Stripe client
+      const stripe = await getUncachableStripeClient();
+      if (!stripe) {
+        return res.status(500).json({ success: false, error: "Payment service unavailable" });
       }
 
       // Verify payment intent
