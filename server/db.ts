@@ -50,3 +50,51 @@ export async function testConnection(): Promise<boolean> {
     return false;
   }
 }
+
+// Ensure wallet tables exist (for PlanetScale compatibility)
+export async function ensureWalletTables(): Promise<void> {
+  try {
+    const client = await pool.connect();
+    
+    // Create wallet_balances table if not exists
+    await client.query(`
+      CREATE TABLE IF NOT EXISTS wallet_balances (
+        id SERIAL PRIMARY KEY,
+        merchant_id INTEGER NOT NULL UNIQUE,
+        balance_cents INTEGER NOT NULL DEFAULT 0,
+        pending_cents INTEGER NOT NULL DEFAULT 0,
+        currency VARCHAR(3) NOT NULL DEFAULT 'USD',
+        created_at TIMESTAMP DEFAULT NOW(),
+        updated_at TIMESTAMP DEFAULT NOW()
+      )
+    `);
+    
+    // Create wallet_transactions table if not exists
+    await client.query(`
+      CREATE TABLE IF NOT EXISTS wallet_transactions (
+        id SERIAL PRIMARY KEY,
+        merchant_id INTEGER NOT NULL,
+        type VARCHAR(20) NOT NULL,
+        amount_cents INTEGER NOT NULL,
+        balance_after_cents INTEGER NOT NULL,
+        currency VARCHAR(3) NOT NULL DEFAULT 'USD',
+        description TEXT,
+        order_id INTEGER,
+        stripe_payment_intent_id VARCHAR(255),
+        created_at TIMESTAMP DEFAULT NOW()
+      )
+    `);
+    
+    // Create indexes if not exist
+    await client.query(`
+      CREATE INDEX IF NOT EXISTS idx_wallet_balances_merchant ON wallet_balances(merchant_id);
+      CREATE INDEX IF NOT EXISTS idx_wallet_transactions_merchant ON wallet_transactions(merchant_id);
+      CREATE INDEX IF NOT EXISTS idx_wallet_transactions_created ON wallet_transactions(created_at);
+    `);
+    
+    client.release();
+    console.log('[DB] Wallet tables ensured');
+  } catch (error) {
+    console.error('[DB] Error ensuring wallet tables:', error);
+  }
+}

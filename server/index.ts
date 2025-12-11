@@ -4,6 +4,7 @@ import { serveStatic } from "./static";
 import { createServer } from "http";
 import { supplierSyncService } from "./services/supplierSync";
 import { analyticsEvents } from "./services/analyticsEvents";
+import { ensureWalletTables } from "./db";
 
 const app = express();
 const httpServer = createServer(app);
@@ -62,6 +63,9 @@ app.use((req, res, next) => {
 });
 
 (async () => {
+  // Ensure wallet tables exist in database (for PlanetScale compatibility)
+  await ensureWalletTables();
+  
   await registerRoutes(httpServer, app);
 
   app.use((err: any, _req: Request, res: Response, _next: NextFunction) => {
