@@ -262,7 +262,7 @@ export class GigaB2BAdapter extends BaseAdapter {
   }
 
   async fetchProductList(page = 1, pageSize = 1000): Promise<{
-    skus: string[];
+    products: Array<{ sku: string; productName?: string }>;
     total: number;
     hasMore: boolean;
   }> {
@@ -273,7 +273,10 @@ export class GigaB2BAdapter extends BaseAdapter {
     );
 
     return {
-      skus: response.data.records.map(r => r.sku),
+      products: response.data.records.map(r => ({ 
+        sku: r.sku, 
+        productName: r.productName 
+      })),
       total: response.data.pageInfo.totalNum,
       hasMore: page < response.data.pageInfo.totalPage,
     };
@@ -341,7 +344,7 @@ export class GigaB2BAdapter extends BaseAdapter {
     try {
       const listResponse = await this.fetchProductList(page, pageSize);
       
-      if (listResponse.skus.length === 0) {
+      if (listResponse.products.length === 0) {
         return {
           items: [],
           total: listResponse.total,
@@ -351,15 +354,32 @@ export class GigaB2BAdapter extends BaseAdapter {
         };
       }
 
+      // Create a map of productNames from the list response
+      const productNamesMap = new Map<string, string>();
+      for (const p of listResponse.products) {
+        if (p.productName) {
+          productNamesMap.set(p.sku, p.productName);
+        }
+      }
+
+      const skus = listResponse.products.map(p => p.sku);
+
       // Fetch both price data and product details in parallel
       const [priceData, detailsMap] = await Promise.all([
-        this.fetchProductPrices(listResponse.skus),
-        this.fetchProductDetails(listResponse.skus)
+        this.fetchProductPrices(skus),
+        this.fetchProductDetails(skus)
       ]);
       
       const normalizedProducts: NormalizedProduct[] = priceData
         .filter(p => p.skuAvailable)
-        .map((p) => this.normalizeProduct(p, detailsMap.get(p.sku)));
+        .map((p) => {
+          // Merge product name from list response into details
+          const details = detailsMap.get(p.sku);
+          const productNameFromList = productNamesMap.get(p.sku);
+          const mergedDetails = details ? { ...details, productName: details.productName || productNameFromList } : 
+            productNameFromList ? { sku: p.sku, productName: productNameFromList } : undefined;
+          return this.normalizeProduct(p, mergedDetails);
+        });
 
       return {
         items: normalizedProducts,
