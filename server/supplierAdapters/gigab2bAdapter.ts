@@ -102,26 +102,30 @@ interface GigaB2BProductDetailResponse {
   data: Array<{
     sku: string;
     productName?: string;
-    productTitle?: string;
-    title?: string;
-    name?: string;
     description?: string;
-    productDesc?: string;
+    characteristics?: string;
     category?: string;
-    categoryName?: string;
-    brand?: string;
-    images?: string[];
+    categoryCode?: string;
     imageUrls?: string[];
-    mainImage?: string;
-    thumbImage?: string;
-    specifications?: Record<string, any>;
+    mainImageUrl?: string;
+    videoUrls?: string[];
+    fileUrls?: string[];
     attributes?: Record<string, any>;
-    weight?: number;
-    dimensions?: {
-      length?: number;
-      width?: number;
-      height?: number;
+    sellerInfo?: {
+      sellerStore?: string;
+      sellerType?: string;
+      sellerCode?: string;
     };
+    weight?: number;
+    weightKg?: number;
+    lengthCm?: number;
+    widthCm?: number;
+    heightCm?: number;
+    upc?: string;
+    mpn?: string;
+    placeOfOrigin?: string;
+    whiteLabel?: boolean;
+    newArrivalFlag?: boolean;
   }>;
   requestId: string;
   msg: string;
@@ -317,12 +321,17 @@ export class GigaB2BAdapter extends BaseAdapter {
         
         // Try the product detail endpoint
         const response = await this.gigab2bRequest<GigaB2BProductDetailResponse>(
-          "/b2b-overseas-api/v1/buyer/product/detail/v1",
+          "/b2b-overseas-api/v1/buyer/product/detailInfo/v1",
           "POST",
           { skus: batch }
         );
         
         if (response.data && Array.isArray(response.data)) {
+          console.log(`[GigaB2B] DetailInfo returned ${response.data.length} products`);
+          if (response.data.length > 0) {
+            const sample = response.data[0];
+            console.log(`[GigaB2B] Sample detail fields: ${Object.keys(sample).join(', ')}`);
+          }
           for (const detail of response.data) {
             detailsMap.set(detail.sku, detail);
           }
@@ -516,36 +525,30 @@ export class GigaB2BAdapter extends BaseAdapter {
     details?: GigaB2BProductDetailResponse["data"][0]
   ): NormalizedProduct {
     const basePrice = product.discountedPrice || product.exclusivePrice || product.price;
-    const sellerName = product.sellerInfo?.sellerStore || "GigaB2B";
+    const sellerName = details?.sellerInfo?.sellerStore || product.sellerInfo?.sellerStore || "GigaB2B";
     
     // Extract product name from details if available
-    const productName = details?.productName || details?.productTitle || details?.title || details?.name;
-    const title = productName ? productName : `${sellerName} - ${product.sku}`;
+    const title = details?.productName || `${sellerName} - ${product.sku}`;
     
-    // Extract description from details if available
-    const description = details?.description || details?.productDesc || 
+    // Extract description from details if available (combine description and characteristics)
+    const description = details?.description || details?.characteristics || 
       `Product SKU: ${product.sku}\nSeller: ${sellerName}\nCurrency: ${product.currency}`;
     
     // Extract category from details if available
-    const category = details?.category || details?.categoryName || "GigaB2B Products";
+    const category = details?.category || "GigaB2B Products";
     
-    // Extract images from details - try multiple possible field names
-    let imageUrls: string[] = [];
+    // Extract images from details - use imageUrls array and mainImageUrl
+    let imageUrlsList: string[] = [];
     if (details) {
-      if (details.images && Array.isArray(details.images)) {
-        imageUrls = details.images;
-      } else if (details.imageUrls && Array.isArray(details.imageUrls)) {
-        imageUrls = details.imageUrls;
-      } else if (details.mainImage) {
-        imageUrls = [details.mainImage];
-        if (details.thumbImage) {
-          imageUrls.push(details.thumbImage);
-        }
+      if (details.imageUrls && Array.isArray(details.imageUrls) && details.imageUrls.length > 0) {
+        imageUrlsList = details.imageUrls;
+      } else if (details.mainImageUrl) {
+        imageUrlsList = [details.mainImageUrl];
       }
     }
     
     // Convert to the expected format with url, alt, and position
-    const images = imageUrls.map((url, index) => ({
+    const images = imageUrlsList.map((url, index) => ({
       url,
       alt: title,
       position: index + 1
@@ -553,8 +556,11 @@ export class GigaB2BAdapter extends BaseAdapter {
     
     // Build tags
     const tags = ["gigab2b", sellerName.toLowerCase().replace(/\s+/g, "-")];
-    if (details?.brand) {
-      tags.push(details.brand.toLowerCase().replace(/\s+/g, "-"));
+    if (details?.placeOfOrigin) {
+      tags.push(details.placeOfOrigin.toLowerCase().replace(/\s+/g, "-"));
+    }
+    if (details?.newArrivalFlag) {
+      tags.push("new-arrival");
     }
     
     return {
