@@ -131,14 +131,19 @@ export class GigaB2BAdapter extends BaseAdapter {
   }
 
   private generateSignature(uri: string, timestamp: number, nonce: string): string {
-    // Per GigaB2B Open API 2.0 documentation:
-    // String 1: clientId&uri&timestamp&nonce
-    // Secret Key: clientId&clientSecret&nonce
-    // Sign: Base64(HMAC-SHA256(String1, SecretKey))
+    // Per GigaB2B Open API 2.0 documentation (Java example):
+    // 1. Create message: clientId&uri&timestamp&nonce
+    // 2. Create key: clientId&clientSecret&nonce
+    // 3. HMAC-SHA256, then convert to hex string
+    // 4. Base64 encode the hex string
     const message = `${this.clientId}&${uri}&${timestamp}&${nonce}`;
     const secretKey = `${this.clientId}&${this.clientSecret}&${nonce}`;
     
-    const signature = crypto.createHmac("sha256", secretKey).update(message).digest("base64");
+    // Step 3: HMAC-SHA256 and convert to hex string
+    const hmacHex = crypto.createHmac("sha256", secretKey).update(message).digest("hex");
+    
+    // Step 4: Base64 encode the hex string
+    const signature = Buffer.from(hmacHex, "utf8").toString("base64");
     
     // Debug: show signature components (not secrets)
     console.log(`[GigaB2B] Signature message: ${this.clientId.substring(0,4)}...&${uri}&${timestamp}&${nonce}`);
