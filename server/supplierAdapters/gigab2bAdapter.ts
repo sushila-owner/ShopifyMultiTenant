@@ -107,15 +107,17 @@ export class GigaB2BAdapter extends BaseAdapter {
     this.baseUrl = credentials.baseUrl || "https://openapi.gigab2b.com";
     
     // Use environment variables as fallback for security (don't store secrets in DB)
-    const envClientId = process.env.GIGAB2B_CLIENT_ID || "";
-    const envClientSecret = process.env.GIGAB2B_CLIENT_SECRET || "";
+    const envClientId = (process.env.GIGAB2B_CLIENT_ID || "").trim();
+    const envClientSecret = (process.env.GIGAB2B_CLIENT_SECRET || "").trim();
     
     // Check if credentials are placeholders that indicate env vars should be used
-    const dbClientId = credentials.clientId || credentials.apiKey || "";
-    const dbClientSecret = credentials.clientSecret || credentials.apiSecret || "";
+    const dbClientId = (credentials.clientId || credentials.apiKey || "").trim();
+    const dbClientSecret = (credentials.clientSecret || credentials.apiSecret || "").trim();
     
     this.clientId = (dbClientId === "FROM_ENV" || !dbClientId) ? envClientId : dbClientId;
     this.clientSecret = (dbClientSecret === "FROM_ENV" || !dbClientSecret) ? envClientSecret : dbClientSecret;
+    
+    console.log(`[GigaB2B] Initialized with base URL: ${this.baseUrl}`);
   }
 
   private generateNonce(): string {
@@ -139,6 +141,11 @@ export class GigaB2BAdapter extends BaseAdapter {
     const sign = this.generateSignature(endpoint, timestamp, nonce);
 
     const url = `${this.baseUrl}${endpoint}`;
+    
+    // Debug logging
+    console.log(`[GigaB2B] Request to ${endpoint}`);
+    console.log(`[GigaB2B] Client ID: ${this.clientId ? this.clientId.substring(0, 4) + "..." : "MISSING"}`);
+    console.log(`[GigaB2B] Timestamp: ${timestamp}, Nonce: ${nonce}`);
     
     const headers: Record<string, string> = {
       "Content-Type": "application/json",
