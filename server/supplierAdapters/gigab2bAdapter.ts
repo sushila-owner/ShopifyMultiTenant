@@ -121,14 +121,29 @@ export class GigaB2BAdapter extends BaseAdapter {
   }
 
   private generateNonce(): string {
-    return Math.random().toString(36).substring(2, 12);
+    // Generate exactly 10 alphanumeric characters as required by GigaB2B
+    const chars = "abcdefghijklmnopqrstuvwxyz0123456789";
+    let result = "";
+    for (let i = 0; i < 10; i++) {
+      result += chars.charAt(Math.floor(Math.random() * chars.length));
+    }
+    return result;
   }
 
   private generateSignature(uri: string, timestamp: number, nonce: string): string {
+    // Per GigaB2B Open API 2.0 documentation:
+    // String 1: clientId&uri&timestamp&nonce
+    // Secret Key: clientId&clientSecret&nonce
+    // Sign: Base64(HMAC-SHA256(String1, SecretKey))
     const message = `${this.clientId}&${uri}&${timestamp}&${nonce}`;
     const secretKey = `${this.clientId}&${this.clientSecret}&${nonce}`;
     
-    return crypto.createHmac("sha256", secretKey).update(message).digest("base64");
+    const signature = crypto.createHmac("sha256", secretKey).update(message).digest("base64");
+    
+    // Debug: show signature components (not secrets)
+    console.log(`[GigaB2B] Signature message: ${this.clientId.substring(0,4)}...&${uri}&${timestamp}&${nonce}`);
+    
+    return signature;
   }
 
   private async gigab2bRequest<T>(
