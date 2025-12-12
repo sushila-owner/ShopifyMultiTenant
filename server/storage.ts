@@ -195,6 +195,7 @@ export interface IStorage {
   // Seed data
   seedDefaultPlans(): Promise<void>;
   seedAdminUser(): Promise<User>;
+  seedGigaB2BSupplier(): Promise<void>;
 
   // Wallet
   getWalletBalance(merchantId: number): Promise<WalletBalance | undefined>;
@@ -1537,6 +1538,36 @@ export class DatabaseStorage implements IStorage {
       isEmailVerified: true,
       permissions: ["all"],
     });
+  }
+
+  async seedGigaB2BSupplier(): Promise<void> {
+    // Check if GigaB2B supplier already exists
+    const existingSuppliers = await db.select().from(suppliers).where(eq(suppliers.type, "gigab2b")).limit(1);
+    if (existingSuppliers.length > 0) {
+      console.log("GigaB2B supplier already exists, skipping...");
+      return;
+    }
+
+    // Get admin user to set as creator
+    const admin = await this.getUserByEmail("admin@apexmart.com");
+    const createdBy = admin?.id || 1;
+
+    await this.createSupplier({
+      name: "GigaB2B Wholesale",
+      type: "gigab2b",
+      description: "Wholesale products from GigaB2B supplier network - 60,000+ products",
+      isActive: true,
+      createdBy,
+      apiCredentials: { clientId: "FROM_ENV", clientSecret: "FROM_ENV" },
+      capabilities: {
+        readProducts: true,
+        readInventory: true,
+        createOrders: true,
+        readOrders: true,
+        getTracking: true,
+      },
+    });
+    console.log("GigaB2B supplier seeded successfully");
   }
 
   // OTP Verifications

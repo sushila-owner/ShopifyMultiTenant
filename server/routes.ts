@@ -84,6 +84,7 @@ export async function registerRoutes(
   // Seed data on startup
   await storage.seedDefaultPlans();
   await storage.seedAdminUser();
+  await storage.seedGigaB2BSupplier();
   await storage.seedSampleOrders();
 
   // ==================== SHOPIFY OAUTH ROUTES ====================
