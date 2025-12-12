@@ -67,3 +67,13 @@ Deployment is configured for Heroku with a `Procfile` and an optimized build pro
     - PlanetScale PostgreSQL (database).
     - Upstash Redis (session storage).
     - DeepL API (translation services).
+    - GigaB2B Open API 2.0 (wholesale supplier integration).
+
+### GigaB2B Supplier Integration
+The platform integrates with GigaB2B as a wholesale supplier using their Open API 2.0 with HMAC-SHA256 signature authentication. Key features:
+- **Product Sync**: Fetches product SKUs and pricing from GigaB2B catalog (`/b2b-overseas-api/v1/buyer/product/skus/v1` and `/price/v1`)
+- **Drop Shipping Order Sync**: Pushes orders to GigaB2B for fulfillment (`/b2b-overseas-api/v1/buyer/order/dropShip-sync/v1`)
+- **Tracking Query**: Retrieves tracking information for shipped orders (`/b2b-overseas-api/v1/buyer/order/track-no/v1`)
+- **Authentication**: Uses HMAC-SHA256 with signature format: `clientId&uri&timestamp&nonce` signed with key `clientId&clientSecret&nonce`
+- **Environment Variables**: Requires `GIGAB2B_CLIENT_ID` and `GIGAB2B_CLIENT_SECRET`
+- **Files**: `server/gigab2b.ts` (service), `server/supplierAdapters/gigab2bAdapter.ts` (adapter pattern)
