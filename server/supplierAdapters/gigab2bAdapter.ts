@@ -96,6 +96,37 @@ interface GigaB2BOrderSyncResponse {
   subMsg?: string;
 }
 
+interface GigaB2BProductDetailResponse {
+  success: boolean;
+  code: string;
+  data: Array<{
+    sku: string;
+    productName?: string;
+    productTitle?: string;
+    title?: string;
+    name?: string;
+    description?: string;
+    productDesc?: string;
+    category?: string;
+    categoryName?: string;
+    brand?: string;
+    images?: string[];
+    imageUrls?: string[];
+    mainImage?: string;
+    thumbImage?: string;
+    specifications?: Record<string, any>;
+    attributes?: Record<string, any>;
+    weight?: number;
+    dimensions?: {
+      length?: number;
+      width?: number;
+      height?: number;
+    };
+  }>;
+  requestId: string;
+  msg: string;
+}
+
 export class GigaB2BAdapter extends BaseAdapter {
   readonly type = "gigab2b" as const;
   private baseUrl: string;
@@ -271,6 +302,41 @@ export class GigaB2BAdapter extends BaseAdapter {
     return results;
   }
 
+  async fetchProductDetails(skus: string[]): Promise<Map<string, GigaB2BProductDetailResponse["data"][0]>> {
+    const detailsMap = new Map<string, GigaB2BProductDetailResponse["data"][0]>();
+    if (skus.length === 0) return detailsMap;
+    
+    try {
+      const batchSize = 50;
+      
+      for (let i = 0; i < skus.length; i += batchSize) {
+        const batch = skus.slice(i, i + batchSize);
+        
+        // Try the product detail endpoint
+        const response = await this.gigab2bRequest<GigaB2BProductDetailResponse>(
+          "/b2b-overseas-api/v1/buyer/product/detail/v1",
+          "POST",
+          { skus: batch }
+        );
+        
+        if (response.data && Array.isArray(response.data)) {
+          for (const detail of response.data) {
+            detailsMap.set(detail.sku, detail);
+          }
+        }
+        
+        if (i + batchSize < skus.length) {
+          await new Promise(resolve => setTimeout(resolve, 1100));
+        }
+      }
+    } catch (error: any) {
+      console.log(`[GigaB2B] Product detail endpoint not available or failed: ${error.message}`);
+      // If the detail endpoint isn't available, we'll use basic info from price API
+    }
+    
+    return detailsMap;
+  }
+
   async fetchProducts(page = 1, pageSize = 100): Promise<PaginatedResult<NormalizedProduct>> {
     try {
       const listResponse = await this.fetchProductList(page, pageSize);
@@ -285,11 +351,15 @@ export class GigaB2BAdapter extends BaseAdapter {
         };
       }
 
-      const priceData = await this.fetchProductPrices(listResponse.skus);
+      // Fetch both price data and product details in parallel
+      const [priceData, detailsMap] = await Promise.all([
+        this.fetchProductPrices(listResponse.skus),
+        this.fetchProductDetails(listResponse.skus)
+      ]);
       
       const normalizedProducts: NormalizedProduct[] = priceData
         .filter(p => p.skuAvailable)
-        .map((p) => this.normalizeProduct(p));
+        .map((p) => this.normalizeProduct(p, detailsMap.get(p.sku)));
 
       return {
         items: normalizedProducts,
@@ -421,17 +491,59 @@ export class GigaB2BAdapter extends BaseAdapter {
     }
   }
 
-  private normalizeProduct(product: GigaB2BPriceResponse["data"][0]): NormalizedProduct {
+  private normalizeProduct(
+    product: GigaB2BPriceResponse["data"][0], 
+    details?: GigaB2BProductDetailResponse["data"][0]
+  ): NormalizedProduct {
     const basePrice = product.discountedPrice || product.exclusivePrice || product.price;
     const sellerName = product.sellerInfo?.sellerStore || "GigaB2B";
     
+    // Extract product name from details if available
+    const productName = details?.productName || details?.productTitle || details?.title || details?.name;
+    const title = productName ? productName : `${sellerName} - ${product.sku}`;
+    
+    // Extract description from details if available
+    const description = details?.description || details?.productDesc || 
+      `Product SKU: ${product.sku}\nSeller: ${sellerName}\nCurrency: ${product.currency}`;
+    
+    // Extract category from details if available
+    const category = details?.category || details?.categoryName || "GigaB2B Products";
+    
+    // Extract images from details - try multiple possible field names
+    let imageUrls: string[] = [];
+    if (details) {
+      if (details.images && Array.isArray(details.images)) {
+        imageUrls = details.images;
+      } else if (details.imageUrls && Array.isArray(details.imageUrls)) {
+        imageUrls = details.imageUrls;
+      } else if (details.mainImage) {
+        imageUrls = [details.mainImage];
+        if (details.thumbImage) {
+          imageUrls.push(details.thumbImage);
+        }
+      }
+    }
+    
+    // Convert to the expected format with url, alt, and position
+    const images = imageUrls.map((url, index) => ({
+      url,
+      alt: title,
+      position: index + 1
+    }));
+    
+    // Build tags
+    const tags = ["gigab2b", sellerName.toLowerCase().replace(/\s+/g, "-")];
+    if (details?.brand) {
+      tags.push(details.brand.toLowerCase().replace(/\s+/g, "-"));
+    }
+    
     return {
       supplierProductId: product.sku,
-      title: `${sellerName} - ${product.sku}`,
-      description: `Product SKU: ${product.sku}\nSeller: ${sellerName}\nCurrency: ${product.currency}`,
-      category: "GigaB2B Products",
-      tags: ["gigab2b", sellerName.toLowerCase().replace(/\s+/g, "-")],
-      images: [],
+      title,
+      description,
+      category,
+      tags,
+      images,
       variants: [{
         id: product.sku,
         sku: product.sku,
