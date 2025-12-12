@@ -1,33 +1,92 @@
 import type { InsertProduct } from "@shared/schema";
 import crypto from "crypto";
 
-interface GigaCloudProduct {
+interface GigaB2BProductSku {
   sku: string;
-  productName: string;
-  productDescription?: string;
-  price: number;
-  msrp?: number;
-  category?: string;
-  brand?: string;
-  images?: { url: string; isPrimary?: boolean }[];
-  inventory?: number;
-  weight?: number;
-  dimensions?: {
-    length: number;
-    width: number;
-    height: number;
-  };
+  productName?: string;
+  updateTime: string;
+  firstArrivalDate: string;
 }
 
-interface GigaCloudProductsResponse {
-  code: number;
-  message: string;
+interface GigaB2BProductListResponse {
+  success: boolean;
+  code: string;
   data: {
-    list: GigaCloudProduct[];
-    total: number;
-    page: number;
-    pageSize: number;
+    pageInfo: {
+      page: number;
+      totalPage: number;
+      pageSize: number;
+      totalNum: number;
+    };
+    records: GigaB2BProductSku[];
   };
+  requestId: string;
+  msg: string;
+}
+
+interface GigaB2BPriceData {
+  sku: string;
+  currency: string;
+  price: number;
+  shippingFee?: number;
+  shippingFeeRange?: {
+    minAmount: number;
+    maxAmount: number;
+  };
+  exclusivePrice?: number;
+  discountedPrice?: number;
+  promotionFrom?: string;
+  promotionTo?: string;
+  mapPrice?: number;
+  sellerInfo?: {
+    sellerStore: string;
+    sellerType: string;
+    gigaIndex: string;
+    sellerCode: string;
+  };
+  spotPrice?: Array<{
+    minQuantity: number;
+    maxQuantity: number;
+    price: number;
+    discountedSpotPrice?: number;
+  }>;
+  skuAvailable: boolean;
+}
+
+interface GigaB2BPriceResponse {
+  success: boolean;
+  code: string;
+  data: GigaB2BPriceData[];
+  requestId: string;
+  msg: string;
+}
+
+interface GigaB2BOrderSyncResponse {
+  success: boolean;
+  code: string;
+  data: null;
+  requestId: string;
+  msg: string;
+  subMsg?: string;
+}
+
+interface GigaB2BTrackingResponse {
+  success: boolean;
+  code: string;
+  data: Array<{
+    orderNo: string;
+    shipTrackInfo: Array<{
+      sku: string;
+      skuQty: number;
+      isCombo: boolean;
+      comboSku?: string;
+      trackingNum: string;
+      carrierName: string;
+    }>;
+    returnTrackInfo: any[];
+  }>;
+  requestId: string;
+  msg: string;
 }
 
 export interface GigaB2BSyncProgress {
@@ -42,6 +101,7 @@ export interface GigaB2BSyncProgress {
   startedAt?: Date;
   completedAt?: Date;
   errorMessage?: string;
+  accountName?: string;
 }
 
 export class GigaB2BService {
@@ -65,50 +125,36 @@ export class GigaB2BService {
     this.clientSecret = clientSecret;
   }
 
-  private generateNonce(length: number = 10): string {
-    const chars = "0123456789abcdefghijklmnopqrstuvwxyz";
-    let result = "";
-    for (let i = 0; i < length; i++) {
-      result += chars.charAt(Math.floor(Math.random() * chars.length));
-    }
-    return result;
+  private generateNonce(): string {
+    return Math.random().toString(36).substring(2, 12);
   }
 
-  private getApiSign(uri: string, timestamp: number, nonce: string): string {
+  private generateSignature(uri: string, timestamp: number, nonce: string): string {
     const message = `${this.clientId}&${uri}&${timestamp}&${nonce}`;
-    const key = `${this.clientId}&${this.clientSecret}&${nonce}`;
+    const secretKey = `${this.clientId}&${this.clientSecret}&${nonce}`;
     
-    const hmacResult = crypto
-      .createHmac("sha256", key)
-      .update(message)
-      .digest("hex");
-    
-    return Buffer.from(hmacResult).toString("base64");
+    return crypto.createHmac("sha256", secretKey).update(message).digest("base64");
   }
 
-  private async request<T>(path: string, additionalParams: Record<string, string> = {}): Promise<T> {
+  private async request<T>(endpoint: string, body?: any): Promise<T> {
     const timestamp = Date.now();
-    const nonce = this.generateNonce(10);
-    const sign = this.getApiSign(path, timestamp, nonce);
+    const nonce = this.generateNonce();
+    const sign = this.generateSignature(endpoint, timestamp, nonce);
 
-    const params: Record<string, string> = {
-      clientId: this.clientId,
-      timestamp: String(timestamp),
-      nonce: nonce,
-      sign: sign,
-      ...additionalParams,
+    const url = `${this.baseUrl}${endpoint}`;
+    
+    const headers: Record<string, string> = {
+      "Content-Type": "application/json",
+      "client-id": this.clientId,
+      "timestamp": timestamp.toString(),
+      "nonce": nonce,
+      "sign": sign,
     };
 
-    const queryString = new URLSearchParams(params).toString();
-    const url = `${this.baseUrl}${path}?${queryString}`;
-
-    console.log(`[GigaB2B] Request: ${path}`);
-
     const response = await fetch(url, {
-      method: "GET",
-      headers: {
-        "Accept": "application/json",
-      },
+      method: "POST",
+      headers,
+      body: body ? JSON.stringify(body) : undefined,
     });
 
     const text = await response.text();
@@ -118,57 +164,130 @@ export class GigaB2BService {
     }
 
     try {
-      return JSON.parse(text) as T;
-    } catch {
-      throw new Error(`GigaB2B returned invalid JSON: ${text.substring(0, 200)}`);
+      const data = JSON.parse(text) as T & { success?: boolean; code?: string; msg?: string; subMsg?: string };
+      if (data.success === false) {
+        throw new Error(`GigaB2B API error: ${data.code} - ${data.msg}${data.subMsg ? ` (${data.subMsg})` : ""}`);
+      }
+      return data;
+    } catch (err) {
+      if (err instanceof SyntaxError) {
+        throw new Error(`GigaB2B returned invalid JSON: ${text.substring(0, 200)}`);
+      }
+      throw err;
     }
   }
 
-  async testConnection(): Promise<{ success: boolean; message?: string; error?: string }> {
+  async testConnection(): Promise<{ success: boolean; message?: string; error?: string; accountName?: string }> {
     try {
-      const data = await this.request<{ code: number; message: string; data?: any }>("/product/list", {
-        page: "1",
-        pageSize: "1"
-      });
+      const data = await this.request<GigaB2BProductListResponse>(
+        "/b2b-overseas-api/v1/buyer/product/skus/v1",
+        { page: 1, pageSize: 100 }
+      );
       
-      if (data.code === 0 || data.code === 200) {
-        return { 
-          success: true, 
-          message: `Connected successfully. ${data.data?.total || 0} products available.`
-        };
-      } else {
-        return { success: false, error: `API returned code ${data.code}: ${data.message}` };
-      }
+      const totalProducts = data.data?.pageInfo?.totalNum || 0;
+      return { 
+        success: true, 
+        message: `Connected to GigaB2B Open API 2.0. ${totalProducts} products available.`,
+        accountName: "GigaB2B"
+      };
     } catch (error: any) {
       return { success: false, error: error.message };
     }
   }
 
+  async getProductSkus(page: number = 1, pageSize: number = 1000): Promise<{
+    skus: string[];
+    total: number;
+    hasMore: boolean;
+  }> {
+    const response = await this.request<GigaB2BProductListResponse>(
+      "/b2b-overseas-api/v1/buyer/product/skus/v1",
+      { page, pageSize, sort: 2 }
+    );
+
+    return {
+      skus: response.data.records.map(r => r.sku),
+      total: response.data.pageInfo.totalNum,
+      hasMore: page < response.data.pageInfo.totalPage,
+    };
+  }
+
+  async getProductPrices(skus: string[]): Promise<GigaB2BPriceData[]> {
+    if (skus.length === 0) return [];
+    
+    const batchSize = 200;
+    const results: GigaB2BPriceData[] = [];
+    
+    for (let i = 0; i < skus.length; i += batchSize) {
+      const batch = skus.slice(i, i + batchSize);
+      const response = await this.request<GigaB2BPriceResponse>(
+        "/b2b-overseas-api/v1/buyer/product/price/v1",
+        { skus: batch }
+      );
+      results.push(...response.data);
+      
+      if (i + batchSize < skus.length) {
+        await new Promise(resolve => setTimeout(resolve, 1100));
+      }
+    }
+    
+    return results;
+  }
+
   async getProductCount(): Promise<number> {
     try {
-      const data = await this.request<GigaCloudProductsResponse>("/product/list", {
-        page: "1",
-        pageSize: "1"
-      });
-      return data.data?.total || 0;
+      const data = await this.getProductSkus(1, 100);
+      return data.total;
     } catch {
       return 0;
     }
   }
 
-  async getProducts(page: number = 1, pageSize: number = 50): Promise<GigaCloudProductsResponse> {
-    return await this.request<GigaCloudProductsResponse>("/product/list", {
-      page: String(page),
-      pageSize: String(pageSize)
-    });
+  async getTracking(orderNo: string): Promise<GigaB2BTrackingResponse["data"] | null> {
+    try {
+      const response = await this.request<GigaB2BTrackingResponse>(
+        "/b2b-overseas-api/v1/buyer/order/track-no/v1",
+        { orderNo: [orderNo] }
+      );
+      return response.data || null;
+    } catch {
+      return null;
+    }
   }
 
-  async getProductDetail(sku: string): Promise<any> {
-    return await this.request("/product/detail", { sku });
-  }
-
-  async getInventory(sku: string): Promise<any> {
-    return await this.request("/product/inventory", { sku });
+  async syncOrder(order: {
+    orderNo: string;
+    orderDate: string;
+    shipName: string;
+    shipPhone: string;
+    shipEmail?: string;
+    shipAddress1: string;
+    shipAddress2?: string;
+    shipCity: string;
+    shipCountry: string;
+    shipState: string;
+    shipZipCode: string;
+    salesChannel: string;
+    orderLines: Array<{
+      sku: string;
+      qty: number;
+      itemPrice: number;
+      productName?: string;
+    }>;
+    orderTotal: number;
+    customerComments?: string;
+  }): Promise<GigaB2BOrderSyncResponse> {
+    return await this.request<GigaB2BOrderSyncResponse>(
+      "/b2b-overseas-api/v1/buyer/order/dropShip-sync/v1",
+      {
+        ...order,
+        hasOtherLabel: false,
+        valueAddedServices: {
+          returnLabelService: false,
+          deliveryService: "DSR",
+        },
+      }
+    );
   }
 
   getSyncProgress(): GigaB2BSyncProgress {
@@ -196,7 +315,7 @@ export class GigaB2BService {
       this.syncProgress.totalProducts = productCount;
       console.log(`[GigaB2B] Starting sync of ${productCount} products...`);
 
-      const pageSize = 50;
+      const pageSize = 1000;
       const totalPages = Math.ceil(productCount / pageSize);
       let page = 1;
 
@@ -205,27 +324,30 @@ export class GigaB2BService {
         console.log(`[GigaB2B] Fetching page ${page}/${totalPages}...`);
 
         try {
-          const response = await this.getProducts(page, pageSize);
-          const products = response.data?.list || [];
+          const skuData = await this.getProductSkus(page, pageSize);
+          const skus = skuData.skus;
           
-          if (products.length === 0) break;
+          if (skus.length === 0) break;
 
-          this.syncProgress.fetchedProducts += products.length;
+          const priceData = await this.getProductPrices(skus);
+          this.syncProgress.fetchedProducts += priceData.length;
 
-          const productsToSave: InsertProduct[] = products.map(product => 
-            this.transformProduct(product, supplierId)
-          );
+          const productsToSave: InsertProduct[] = priceData
+            .filter(p => p.skuAvailable)
+            .map(product => this.transformProduct(product, supplierId));
 
-          const result = await batchSaveCallback(productsToSave);
-          this.syncProgress.savedProducts += productsToSave.length;
-          this.syncProgress.createdProducts += result.created;
-          this.syncProgress.updatedProducts += result.updated;
+          if (productsToSave.length > 0) {
+            const result = await batchSaveCallback(productsToSave);
+            this.syncProgress.savedProducts += productsToSave.length;
+            this.syncProgress.createdProducts += result.created;
+            this.syncProgress.updatedProducts += result.updated;
 
-          console.log(`[GigaB2B] Page ${page}: saved ${productsToSave.length} products (${result.created} new, ${result.updated} updated)`);
+            console.log(`[GigaB2B] Page ${page}: saved ${productsToSave.length} products (${result.created} new, ${result.updated} updated)`);
+          }
           
           page++;
           
-          await new Promise(resolve => setTimeout(resolve, 300));
+          await new Promise(resolve => setTimeout(resolve, 500));
         } catch (pageError: any) {
           console.error(`[GigaB2B] Error on page ${page}:`, pageError.message);
           this.syncProgress.errors++;
@@ -247,23 +369,20 @@ export class GigaB2BService {
     return this.syncProgress;
   }
 
-  private transformProduct(product: GigaCloudProduct, supplierId: number): InsertProduct {
-    const images = (product.images || []).map((img, index) => ({
-      url: img.url,
-      alt: product.productName,
-      position: index,
-    }));
+  private transformProduct(product: GigaB2BPriceData, supplierId: number): InsertProduct {
+    const basePrice = product.discountedPrice || product.exclusivePrice || product.price;
+    const sellerName = product.sellerInfo?.sellerStore || "GigaB2B";
 
     return {
       supplierId,
       supplierProductId: product.sku,
       supplierSku: product.sku,
-      title: product.productName,
-      description: product.productDescription || "",
-      supplierPrice: product.price,
-      category: product.category || "General",
-      inventoryQuantity: product.inventory || 0,
-      images,
+      title: `${sellerName} - ${product.sku}`,
+      description: `Product SKU: ${product.sku}\nSeller: ${sellerName}\nCurrency: ${product.currency}`,
+      supplierPrice: basePrice,
+      category: "GigaB2B Products",
+      inventoryQuantity: product.skuAvailable ? 100 : 0,
+      images: [],
       variants: null,
       isGlobal: true,
       status: "active",

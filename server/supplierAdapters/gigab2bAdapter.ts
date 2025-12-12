@@ -1,3 +1,4 @@
+import crypto from "crypto";
 import {
   BaseAdapter,
   NormalizedProduct,
@@ -11,77 +12,171 @@ import {
   GigaB2BCredentials,
 } from "./types";
 
+interface GigaB2BProductListResponse {
+  success: boolean;
+  code: string;
+  data: {
+    pageInfo: {
+      page: number;
+      totalPage: number;
+      pageSize: number;
+      totalNum: number;
+    };
+    records: Array<{
+      sku: string;
+      productName?: string;
+      updateTime: string;
+      firstArrivalDate: string;
+    }>;
+  };
+  requestId: string;
+  msg: string;
+}
+
+interface GigaB2BPriceResponse {
+  success: boolean;
+  code: string;
+  data: Array<{
+    sku: string;
+    currency: string;
+    price: number;
+    shippingFee?: number;
+    shippingFeeRange?: {
+      minAmount: number;
+      maxAmount: number;
+    };
+    exclusivePrice?: number;
+    discountedPrice?: number;
+    promotionFrom?: string;
+    promotionTo?: string;
+    mapPrice?: number;
+    sellerInfo?: {
+      sellerStore: string;
+      sellerType: string;
+      gigaIndex: string;
+      sellerCode: string;
+    };
+    spotPrice?: Array<{
+      minQuantity: number;
+      maxQuantity: number;
+      price: number;
+      discountedSpotPrice?: number;
+    }>;
+    skuAvailable: boolean;
+  }>;
+  requestId: string;
+  msg: string;
+}
+
+interface GigaB2BTrackingResponse {
+  success: boolean;
+  code: string;
+  data: Array<{
+    orderNo: string;
+    shipTrackInfo: Array<{
+      sku: string;
+      skuQty: number;
+      isCombo: boolean;
+      comboSku?: string;
+      trackingNum: string;
+      carrierName: string;
+    }>;
+    returnTrackInfo: Array<any>;
+  }>;
+  requestId: string;
+  msg: string;
+}
+
+interface GigaB2BOrderSyncResponse {
+  success: boolean;
+  code: string;
+  data: null;
+  requestId: string;
+  msg: string;
+  subMsg?: string;
+}
+
 export class GigaB2BAdapter extends BaseAdapter {
   readonly type = "gigab2b" as const;
   private baseUrl: string;
   private clientId: string;
   private clientSecret: string;
-  private accessToken: string | null = null;
-  private tokenExpiry: number = 0;
 
   constructor(credentials: GigaB2BCredentials) {
     super(credentials);
-    this.baseUrl = credentials.baseUrl || "https://api.gigab2b.com";
-    this.clientId = credentials.clientId || credentials.apiKey;
+    this.baseUrl = credentials.baseUrl || "https://openapi.gigab2b.com";
+    this.clientId = credentials.clientId || credentials.apiKey || "";
     this.clientSecret = credentials.clientSecret || credentials.apiSecret || "";
   }
 
-  private async ensureAuthenticated(): Promise<void> {
-    if (this.accessToken && Date.now() < this.tokenExpiry) {
-      return;
-    }
-
-    const response = await fetch(`${this.baseUrl}/oauth/token`, {
-      method: "POST",
-      headers: { "Content-Type": "application/x-www-form-urlencoded" },
-      body: new URLSearchParams({
-        grant_type: "client_credentials",
-        client_id: this.clientId,
-        client_secret: this.clientSecret,
-      }),
-    });
-
-    if (!response.ok) {
-      throw new Error(`GigaB2B authentication failed: ${response.status}`);
-    }
-
-    const data = await response.json();
-    this.accessToken = data.access_token;
-    this.tokenExpiry = Date.now() + (data.expires_in - 60) * 1000;
+  private generateNonce(): string {
+    return Math.random().toString(36).substring(2, 12);
   }
 
-  private async gigab2bRequest<T>(endpoint: string, options: RequestInit = {}): Promise<T> {
-    await this.ensureAuthenticated();
+  private generateSignature(uri: string, timestamp: number, nonce: string): string {
+    const message = `${this.clientId}&${uri}&${timestamp}&${nonce}`;
+    const secretKey = `${this.clientId}&${this.clientSecret}&${nonce}`;
+    
+    return crypto.createHmac("sha256", secretKey).update(message).digest("base64");
+  }
+
+  private async gigab2bRequest<T>(
+    endpoint: string, 
+    method: "GET" | "POST" = "POST",
+    body?: any
+  ): Promise<T> {
+    const timestamp = Date.now();
+    const nonce = this.generateNonce();
+    const sign = this.generateSignature(endpoint, timestamp, nonce);
 
     const url = `${this.baseUrl}${endpoint}`;
-    const response = await fetch(url, {
-      ...options,
-      headers: {
-        Authorization: `Bearer ${this.accessToken}`,
-        "Content-Type": "application/json",
-        ...options.headers,
-      },
-    });
+    
+    const headers: Record<string, string> = {
+      "Content-Type": "application/json",
+      "client-id": this.clientId,
+      "timestamp": timestamp.toString(),
+      "nonce": nonce,
+      "sign": sign,
+    };
+
+    const options: RequestInit = {
+      method,
+      headers,
+    };
+
+    if (body && method === "POST") {
+      options.body = JSON.stringify(body);
+    }
+
+    const response = await fetch(url, options);
 
     if (!response.ok) {
       const error = await response.text();
       throw new Error(`GigaB2B API error: ${response.status} - ${error}`);
     }
 
-    return response.json();
+    const data = await response.json();
+    
+    if (data.success === false) {
+      throw new Error(`GigaB2B API error: ${data.code} - ${data.msg}${data.subMsg ? ` (${data.subMsg})` : ""}`);
+    }
+
+    return data as T;
   }
 
   async testConnection(): Promise<ConnectionTestResult> {
     try {
-      await this.ensureAuthenticated();
-      
-      const products = await this.gigab2bRequest<{ total: number }>("/products?limit=1");
+      const response = await this.gigab2bRequest<GigaB2BProductListResponse>(
+        "/b2b-overseas-api/v1/buyer/product/skus/v1",
+        "POST",
+        { page: 1, pageSize: 100 }
+      );
       
       return {
         success: true,
-        message: "Connected to GigaB2B successfully",
+        message: "Connected to GigaB2B Open API 2.0 successfully",
         details: {
-          productsCount: products.total,
+          productsCount: response.data?.pageInfo?.totalNum || 0,
           capabilities: {
             readProducts: true,
             readInventory: true,
@@ -99,24 +194,73 @@ export class GigaB2BAdapter extends BaseAdapter {
     }
   }
 
-  async fetchProducts(page = 1, pageSize = 50): Promise<PaginatedResult<NormalizedProduct>> {
-    try {
-      const offset = (page - 1) * pageSize;
-      const response = await this.gigab2bRequest<{
-        products: any[];
-        total: number;
-      }>(`/products?limit=${pageSize}&offset=${offset}`);
+  async fetchProductList(page = 1, pageSize = 1000): Promise<{
+    skus: string[];
+    total: number;
+    hasMore: boolean;
+  }> {
+    const response = await this.gigab2bRequest<GigaB2BProductListResponse>(
+      "/b2b-overseas-api/v1/buyer/product/skus/v1",
+      "POST",
+      { page, pageSize, sort: 2 }
+    );
 
-      const normalizedProducts: NormalizedProduct[] = response.products.map((p) =>
-        this.normalizeProduct(p)
+    return {
+      skus: response.data.records.map(r => r.sku),
+      total: response.data.pageInfo.totalNum,
+      hasMore: page < response.data.pageInfo.totalPage,
+    };
+  }
+
+  async fetchProductPrices(skus: string[]): Promise<GigaB2BPriceResponse["data"]> {
+    if (skus.length === 0) return [];
+    
+    const batchSize = 200;
+    const results: GigaB2BPriceResponse["data"] = [];
+    
+    for (let i = 0; i < skus.length; i += batchSize) {
+      const batch = skus.slice(i, i + batchSize);
+      const response = await this.gigab2bRequest<GigaB2BPriceResponse>(
+        "/b2b-overseas-api/v1/buyer/product/price/v1",
+        "POST",
+        { skus: batch }
       );
+      results.push(...response.data);
+      
+      if (i + batchSize < skus.length) {
+        await new Promise(resolve => setTimeout(resolve, 1100));
+      }
+    }
+    
+    return results;
+  }
+
+  async fetchProducts(page = 1, pageSize = 100): Promise<PaginatedResult<NormalizedProduct>> {
+    try {
+      const listResponse = await this.fetchProductList(page, pageSize);
+      
+      if (listResponse.skus.length === 0) {
+        return {
+          items: [],
+          total: listResponse.total,
+          page,
+          pageSize,
+          hasMore: false,
+        };
+      }
+
+      const priceData = await this.fetchProductPrices(listResponse.skus);
+      
+      const normalizedProducts: NormalizedProduct[] = priceData
+        .filter(p => p.skuAvailable)
+        .map((p) => this.normalizeProduct(p));
 
       return {
         items: normalizedProducts,
-        total: response.total,
+        total: listResponse.total,
         page,
         pageSize,
-        hasMore: offset + pageSize < response.total,
+        hasMore: listResponse.hasMore,
       };
     } catch (error: any) {
       throw new Error(`Failed to fetch products: ${error.message}`);
@@ -125,12 +269,15 @@ export class GigaB2BAdapter extends BaseAdapter {
 
   async fetchProduct(supplierProductId: string): Promise<NormalizedProduct | null> {
     try {
-      const response = await this.gigab2bRequest<{ product: any }>(
-        `/products/${supplierProductId}`
-      );
-      return this.normalizeProduct(response.product);
+      const priceData = await this.fetchProductPrices([supplierProductId]);
+      
+      if (priceData.length === 0 || !priceData[0].skuAvailable) {
+        return null;
+      }
+      
+      return this.normalizeProduct(priceData[0]);
     } catch (error: any) {
-      if (error.message.includes("404")) {
+      if (error.message.includes("404") || error.message.includes("not found")) {
         return null;
       }
       throw error;
@@ -139,21 +286,18 @@ export class GigaB2BAdapter extends BaseAdapter {
 
   async fetchInventory(supplierProductIds?: string[]): Promise<NormalizedInventory[]> {
     try {
-      let endpoint = "/inventory";
-      if (supplierProductIds && supplierProductIds.length > 0) {
-        endpoint += `?product_ids=${supplierProductIds.join(",")}`;
+      if (!supplierProductIds || supplierProductIds.length === 0) {
+        return [];
       }
 
-      const response = await this.gigab2bRequest<{
-        inventory: { product_id: string; variant_id: string; sku: string; quantity: number }[];
-      }>(endpoint);
-
-      return response.inventory.map((item) => ({
-        supplierProductId: item.product_id,
-        variantId: item.variant_id,
+      const priceData = await this.fetchProductPrices(supplierProductIds);
+      
+      return priceData.map((item) => ({
+        supplierProductId: item.sku,
+        variantId: item.sku,
         sku: item.sku,
-        quantity: item.quantity,
-        available: item.quantity > 0,
+        quantity: item.skuAvailable ? 100 : 0,
+        available: item.skuAvailable,
       }));
     } catch (error: any) {
       throw new Error(`Failed to fetch inventory: ${error.message}`);
@@ -163,40 +307,43 @@ export class GigaB2BAdapter extends BaseAdapter {
   async createOrder(order: OrderCreateRequest): Promise<OrderCreateResponse> {
     try {
       const gigab2bOrder = {
-        items: order.items.map((item) => ({
-          product_id: item.supplierProductId,
-          variant_id: item.variantId,
+        orderDate: new Date().toISOString().replace("T", " ").substring(0, 19),
+        orderNo: `APX${Date.now()}`,
+        shipName: `${order.shippingAddress.firstName} ${order.shippingAddress.lastName}`.trim(),
+        shipPhone: order.shippingAddress.phone || "0000000000",
+        shipEmail: order.shippingAddress.email || "",
+        shipAddress1: order.shippingAddress.address1.substring(0, 35),
+        shipAddress2: (order.shippingAddress.address2 || "").substring(0, 35),
+        shipCity: order.shippingAddress.city,
+        shipCountry: order.shippingAddress.country,
+        shipState: order.shippingAddress.province,
+        shipZipCode: order.shippingAddress.zip,
+        salesChannel: "APEX_MART",
+        orderLines: order.items.map((item) => ({
           sku: item.sku,
-          quantity: item.quantity,
-          unit_price: item.price,
+          qty: item.quantity,
+          itemPrice: item.price,
+          productName: item.sku,
         })),
-        shipping_address: {
-          first_name: order.shippingAddress.firstName,
-          last_name: order.shippingAddress.lastName,
-          street1: order.shippingAddress.address1,
-          street2: order.shippingAddress.address2,
-          city: order.shippingAddress.city,
-          state: order.shippingAddress.province,
-          country: order.shippingAddress.country,
-          postal_code: order.shippingAddress.zip,
-          phone: order.shippingAddress.phone,
-          email: order.shippingAddress.email,
+        orderTotal: order.items.reduce((sum, item) => sum + (item.price * item.quantity), 0),
+        customerComments: order.note || "",
+        valueAddedServices: {
+          returnLabelService: false,
+          deliveryService: "DSR",
         },
-        notes: order.note,
       };
 
-      const response = await this.gigab2bRequest<{
-        order: { id: string; status: string; total: number };
-      }>("/orders", {
-        method: "POST",
-        body: JSON.stringify(gigab2bOrder),
-      });
+      const response = await this.gigab2bRequest<GigaB2BOrderSyncResponse>(
+        "/b2b-overseas-api/v1/buyer/order/dropShip-sync/v1",
+        "POST",
+        gigab2bOrder
+      );
 
       return {
-        supplierOrderId: response.order.id,
-        status: response.order.status,
-        totalCost: response.order.total,
-        rawResponse: response.order,
+        supplierOrderId: gigab2bOrder.orderNo,
+        status: response.success ? "pending" : "failed",
+        totalCost: gigab2bOrder.orderTotal,
+        rawResponse: response,
       };
     } catch (error: any) {
       throw new Error(`Failed to create order: ${error.message}`);
@@ -204,110 +351,75 @@ export class GigaB2BAdapter extends BaseAdapter {
   }
 
   async getOrder(supplierOrderId: string): Promise<NormalizedOrder | null> {
-    try {
-      const response = await this.gigab2bRequest<{ order: any }>(
-        `/orders/${supplierOrderId}`
-      );
-
-      const order = response.order;
-      return {
-        supplierOrderId: order.id,
-        status: this.mapOrderStatus(order.status),
-        items: order.items.map((item: any) => ({
-          supplierProductId: item.product_id,
-          variantId: item.variant_id,
-          quantity: item.quantity,
-          price: item.unit_price,
-          fulfillmentStatus: item.fulfillment_status,
-        })),
-        totalCost: order.total,
-        createdAt: order.created_at,
-        updatedAt: order.updated_at,
-      };
-    } catch (error: any) {
-      if (error.message.includes("404")) {
-        return null;
-      }
-      throw error;
-    }
+    return null;
   }
 
   async getTracking(supplierOrderId: string): Promise<TrackingInfo | null> {
     try {
-      const response = await this.gigab2bRequest<{
-        tracking: {
-          tracking_number: string;
-          carrier: string;
-          tracking_url?: string;
-          status: string;
-          estimated_delivery?: string;
-          events?: { date: string; status: string; location?: string; description?: string }[];
-        };
-      }>(`/orders/${supplierOrderId}/tracking`);
+      const response = await this.gigab2bRequest<GigaB2BTrackingResponse>(
+        "/b2b-overseas-api/v1/buyer/order/track-no/v1",
+        "POST",
+        { orderNo: [supplierOrderId] }
+      );
 
-      const tracking = response.tracking;
-      return {
-        trackingNumber: tracking.tracking_number,
-        carrier: tracking.carrier,
-        trackingUrl: tracking.tracking_url,
-        status: this.mapTrackingStatus(tracking.status),
-        estimatedDelivery: tracking.estimated_delivery,
-        events: tracking.events,
-      };
-    } catch (error: any) {
-      if (error.message.includes("404") || error.message.includes("No tracking")) {
+      if (!response.data || response.data.length === 0) {
         return null;
       }
-      throw error;
+
+      const orderData = response.data[0];
+      if (!orderData.shipTrackInfo || orderData.shipTrackInfo.length === 0) {
+        return null;
+      }
+
+      const firstTrack = orderData.shipTrackInfo[0];
+      return {
+        trackingNumber: firstTrack.trackingNum,
+        carrier: firstTrack.carrierName,
+        status: "in_transit",
+        estimatedDelivery: undefined,
+        events: [],
+      };
+    } catch (error: any) {
+      console.error(`Failed to get tracking for order ${supplierOrderId}:`, error.message);
+      return null;
     }
   }
 
-  private normalizeProduct(product: any): NormalizedProduct {
+  private normalizeProduct(product: GigaB2BPriceResponse["data"][0]): NormalizedProduct {
+    const basePrice = product.discountedPrice || product.exclusivePrice || product.price;
+    const sellerName = product.sellerInfo?.sellerStore || "GigaB2B";
+    
     return {
-      supplierProductId: String(product.id),
-      title: product.title || product.name,
-      description: product.description || "",
-      category: product.category || "Uncategorized",
-      tags: product.tags || [],
-      images: (product.images || []).map((img: any, idx: number) => ({
-        url: typeof img === "string" ? img : img.url,
-        alt: typeof img === "string" ? product.title : img.alt,
-        position: idx + 1,
-      })),
-      variants: (product.variants || [{ id: product.id, sku: product.sku, price: product.price, quantity: product.quantity }]).map((v: any) => ({
-        id: String(v.id),
-        sku: v.sku || "",
-        title: v.title || "Default",
-        price: parseFloat(v.price) || 0,
-        compareAtPrice: v.compare_at_price ? parseFloat(v.compare_at_price) : undefined,
-        cost: v.cost ? parseFloat(v.cost) : 0,
-        inventoryQuantity: v.quantity || v.inventory_quantity || 0,
-      })),
-      supplierSku: product.sku || product.variants?.[0]?.sku || "",
-      supplierPrice: parseFloat(product.price) || parseFloat(product.variants?.[0]?.price) || 0,
+      supplierProductId: product.sku,
+      title: `${sellerName} - ${product.sku}`,
+      description: `Product SKU: ${product.sku}\nSeller: ${sellerName}\nCurrency: ${product.currency}`,
+      category: "GigaB2B Products",
+      tags: ["gigab2b", sellerName.toLowerCase().replace(/\s+/g, "-")],
+      images: [],
+      variants: [{
+        id: product.sku,
+        sku: product.sku,
+        title: "Default",
+        price: basePrice * 100,
+        cost: basePrice * 100,
+        inventoryQuantity: product.skuAvailable ? 100 : 0,
+      }],
+      supplierSku: product.sku,
+      supplierPrice: basePrice,
     };
   }
 
-  private mapOrderStatus(status: string): NormalizedOrder["status"] {
-    const statusMap: Record<string, NormalizedOrder["status"]> = {
+  private mapOrderStatus(status: string): "pending" | "processing" | "shipped" | "delivered" | "cancelled" {
+    const statusMap: Record<string, "pending" | "processing" | "shipped" | "delivered" | "cancelled"> = {
       pending: "pending",
-      confirmed: "confirmed",
       processing: "processing",
       shipped: "shipped",
       delivered: "delivered",
       cancelled: "cancelled",
+      completed: "delivered",
+      fulfilled: "shipped",
     };
-    return statusMap[status.toLowerCase()] || "pending";
-  }
-
-  private mapTrackingStatus(status: string): TrackingInfo["status"] {
-    const statusMap: Record<string, TrackingInfo["status"]> = {
-      pending: "pending",
-      in_transit: "in_transit",
-      out_for_delivery: "out_for_delivery",
-      delivered: "delivered",
-      exception: "exception",
-    };
-    return statusMap[status.toLowerCase()] || "pending";
+    const normalized = status.toLowerCase();
+    return statusMap[normalized] || "pending";
   }
 }

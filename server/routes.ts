@@ -2227,6 +2227,105 @@ export async function registerRoutes(
     }
   });
 
+  // Sync order to GigaB2B drop shipping
+  app.post("/api/admin/gigab2b/order/sync", authMiddleware, adminOnly, async (req: AuthRequest, res: Response) => {
+    try {
+      const { getGigaB2BService } = await import("./gigab2b");
+      const gigab2b = getGigaB2BService();
+      
+      if (!gigab2b) {
+        return res.status(400).json({
+          success: false,
+          error: "GigaB2B credentials not configured."
+        });
+      }
+
+      const { orderId } = req.body;
+      if (!orderId) {
+        return res.status(400).json({ success: false, error: "Order ID is required" });
+      }
+
+      const order = await storage.getOrder(orderId);
+      if (!order) {
+        return res.status(404).json({ success: false, error: "Order not found" });
+      }
+
+      const shippingAddress = order.shippingAddress as any;
+      
+      const result = await gigab2b.syncOrder({
+        orderNo: `APX${order.id}`,
+        orderDate: new Date(order.createdAt!).toISOString().replace("T", " ").substring(0, 19),
+        shipName: `${shippingAddress?.firstName || ""} ${shippingAddress?.lastName || ""}`.trim() || "Customer",
+        shipPhone: shippingAddress?.phone || "0000000000",
+        shipEmail: order.customerEmail || "",
+        shipAddress1: (shippingAddress?.address1 || "").substring(0, 35),
+        shipAddress2: (shippingAddress?.address2 || "").substring(0, 35),
+        shipCity: shippingAddress?.city || "",
+        shipCountry: shippingAddress?.country || "US",
+        shipState: shippingAddress?.province || "",
+        shipZipCode: shippingAddress?.zip || "",
+        salesChannel: "APEX_MART",
+        orderLines: ((order.items || []) as any[]).map((item: any) => ({
+          sku: item.supplierSku || item.sku,
+          qty: item.quantity,
+          itemPrice: item.supplierCost || item.unitPrice,
+          productName: item.title || item.sku,
+        })),
+        orderTotal: Number(order.supplierCost) || Number(order.totalAmount) || 0,
+        customerComments: order.notes || "",
+      });
+
+      await storage.updateOrder(order.id, {
+        supplierOrderId: `APX${order.id}`,
+        status: "processing",
+      });
+
+      res.json({
+        success: true,
+        message: "Order synced to GigaB2B successfully",
+        data: {
+          supplierOrderId: `APX${order.id}`,
+          requestId: result.requestId,
+        }
+      });
+    } catch (error: any) {
+      res.status(500).json({ success: false, error: error.message });
+    }
+  });
+
+  // Get tracking info from GigaB2B
+  app.get("/api/admin/gigab2b/order/:orderNo/tracking", authMiddleware, adminOnly, async (req: AuthRequest, res: Response) => {
+    try {
+      const { getGigaB2BService } = await import("./gigab2b");
+      const gigab2b = getGigaB2BService();
+      
+      if (!gigab2b) {
+        return res.status(400).json({
+          success: false,
+          error: "GigaB2B credentials not configured."
+        });
+      }
+
+      const { orderNo } = req.params;
+      const tracking = await gigab2b.getTracking(orderNo);
+
+      if (!tracking || tracking.length === 0) {
+        return res.json({
+          success: true,
+          data: null,
+          message: "No tracking information available yet"
+        });
+      }
+
+      res.json({
+        success: true,
+        data: tracking[0]
+      });
+    } catch (error: any) {
+      res.status(500).json({ success: false, error: error.message });
+    }
+  });
+
   // Merchants
   app.get("/api/admin/merchants", authMiddleware, adminOnly, async (req: AuthRequest, res: Response) => {
     try {
