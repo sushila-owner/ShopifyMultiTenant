@@ -244,6 +244,16 @@ export class DatabaseStorage implements IStorage {
     return { ...item, categoryId: null } as Product;
   }
 
+  // Helper to strip categoryId from insert data (for PlanetScale compatibility)
+  private stripCategoryIdFromInsert(data: InsertProduct): Omit<InsertProduct, 'categoryId'> {
+    const { categoryId, ...rest } = data as any;
+    return rest;
+  }
+
+  private stripCategoryIdFromInserts(items: InsertProduct[]): Omit<InsertProduct, 'categoryId'>[] {
+    return items.map(item => this.stripCategoryIdFromInsert(item));
+  }
+
   // ==================== USERS ====================
   async getUser(id: number): Promise<User | undefined> {
     const [user] = await db.select().from(users).where(eq(users.id, id));
@@ -406,12 +416,10 @@ export class DatabaseStorage implements IStorage {
   }
 
   async updateCategoryProductCount(categoryId: number): Promise<void> {
-    const [result] = await db
-      .select({ count: count() })
-      .from(products)
-      .where(eq(products.categoryId, categoryId));
-    const productCount = result?.count || 0;
-    await db.update(categories).set({ productCount, updatedAt: new Date() }).where(eq(categories.id, categoryId));
+    // categoryId column disabled for PlanetScale compatibility
+    // For now, set product count to 0 since we can't query by categoryId
+    console.log("[updateCategoryProductCount] Skipped - categoryId column not available in PlanetScale");
+    await db.update(categories).set({ productCount: 0, updatedAt: new Date() }).where(eq(categories.id, categoryId));
   }
 
   // ==================== PRODUCTS ====================
@@ -421,17 +429,26 @@ export class DatabaseStorage implements IStorage {
   }
 
   async createProduct(insertProduct: InsertProduct): Promise<Product> {
-    const [product] = await db.insert(products).values(insertProduct).returning();
+    // Strip categoryId for PlanetScale compatibility
+    const strippedData = this.stripCategoryIdFromInsert(insertProduct);
+    // Insert and return only the id to avoid categoryId reference in RETURNING clause
+    const [inserted] = await db.insert(products).values(strippedData as any).returning({ id: products.id });
+    // Fetch the full product using safe select columns
+    const product = await this.getProduct(inserted.id);
+    if (!product) throw new Error("Failed to fetch inserted product");
     return product;
   }
 
   async updateProduct(id: number, data: Partial<InsertProduct>): Promise<Product | undefined> {
-    const [product] = await db
+    // Strip categoryId for PlanetScale compatibility
+    const strippedData = this.stripCategoryIdFromInsert(data as InsertProduct);
+    // Update without returning all columns to avoid categoryId reference
+    await db
       .update(products)
-      .set({ ...data, updatedAt: new Date() })
-      .where(eq(products.id, id))
-      .returning();
-    return product || undefined;
+      .set({ ...strippedData, updatedAt: new Date() })
+      .where(eq(products.id, id));
+    // Fetch the updated product using safe select columns
+    return this.getProduct(id);
   }
 
   async updateProductPricing(id: number, pricingRule: { type: "percentage" | "fixed"; value: number }): Promise<Product | undefined> {
@@ -447,16 +464,16 @@ export class DatabaseStorage implements IStorage {
     }
     merchantPrice = Math.round(merchantPrice * 100) / 100;
 
-    const [updated] = await db
+    await db
       .update(products)
       .set({
         pricingRule,
         merchantPrice,
         updatedAt: new Date(),
       })
-      .where(eq(products.id, id))
-      .returning();
-    return updated || undefined;
+      .where(eq(products.id, id));
+    // Fetch the updated product using safe select columns
+    return this.getProduct(id);
   }
 
   async bulkUpdateProductPricing(ids: number[], pricingRule: { type: "percentage" | "fixed"; value: number }): Promise<{ updated: number; products: Product[] }> {
@@ -495,10 +512,15 @@ export class DatabaseStorage implements IStorage {
       }
     }
 
-    // Batch insert new products
+    // Batch insert new products (strip categoryId for PlanetScale compatibility)
     if (toCreate.length > 0) {
       try {
-        const inserted = await db.insert(products).values(toCreate).returning();
+        const strippedData = this.stripCategoryIdFromInserts(toCreate);
+        // Only return id and supplierProductId to avoid categoryId reference
+        const inserted = await db.insert(products).values(strippedData as any).returning({ 
+          id: products.id, 
+          supplierProductId: products.supplierProductId 
+        });
         for (const p of inserted) {
           if (p.supplierProductId) {
             existingProductMap.set(p.supplierProductId, p.id);
@@ -509,7 +531,11 @@ export class DatabaseStorage implements IStorage {
         console.error(`[BatchUpsert] Batch insert failed, falling back to individual inserts:`, err.message);
         for (const productData of toCreate) {
           try {
-            const [p] = await db.insert(products).values(productData).returning();
+            const strippedItem = this.stripCategoryIdFromInsert(productData);
+            const [p] = await db.insert(products).values(strippedItem as any).returning({ 
+              id: products.id, 
+              supplierProductId: products.supplierProductId 
+            });
             if (p.supplierProductId) {
               existingProductMap.set(p.supplierProductId, p.id);
             }
@@ -525,7 +551,8 @@ export class DatabaseStorage implements IStorage {
     // Update existing products (one at a time since batch update is complex)
     for (const { id, data } of toUpdate) {
       try {
-        await db.update(products).set({ ...data, id: undefined, updatedAt: new Date() } as any).where(eq(products.id, id));
+        const strippedData = this.stripCategoryIdFromInsert(data);
+        await db.update(products).set({ ...strippedData, id: undefined, updatedAt: new Date() } as any).where(eq(products.id, id));
         updated++;
       } catch (e: any) {
         console.error(`[BatchUpsert] Failed to update product ${id}:`, e.message);
