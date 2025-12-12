@@ -81,6 +81,7 @@ class SupplierSyncService {
 
     try {
       const suppliers = await storage.getActiveSuppliers();
+      console.log(`[SupplierSync] Found ${suppliers.length} active suppliers:`, suppliers.map(s => `${s.name} (${s.type})`).join(", "));
       this.syncStatus.progress.suppliersTotal = suppliers.length;
       this.syncStatus.progress.suppliersCompleted = 0;
 

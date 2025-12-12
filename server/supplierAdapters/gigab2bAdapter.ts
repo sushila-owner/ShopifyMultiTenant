@@ -105,8 +105,17 @@ export class GigaB2BAdapter extends BaseAdapter {
   constructor(credentials: GigaB2BCredentials) {
     super(credentials);
     this.baseUrl = credentials.baseUrl || "https://openapi.gigab2b.com";
-    this.clientId = credentials.clientId || credentials.apiKey || "";
-    this.clientSecret = credentials.clientSecret || credentials.apiSecret || "";
+    
+    // Use environment variables as fallback for security (don't store secrets in DB)
+    const envClientId = process.env.GIGAB2B_CLIENT_ID || "";
+    const envClientSecret = process.env.GIGAB2B_CLIENT_SECRET || "";
+    
+    // Check if credentials are placeholders that indicate env vars should be used
+    const dbClientId = credentials.clientId || credentials.apiKey || "";
+    const dbClientSecret = credentials.clientSecret || credentials.apiSecret || "";
+    
+    this.clientId = (dbClientId === "FROM_ENV" || !dbClientId) ? envClientId : dbClientId;
+    this.clientSecret = (dbClientSecret === "FROM_ENV" || !dbClientSecret) ? envClientSecret : dbClientSecret;
   }
 
   private generateNonce(): string {
