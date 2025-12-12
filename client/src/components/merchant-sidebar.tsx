@@ -24,7 +24,6 @@ import {
   LogOut,
   Search,
   CreditCard,
-  UserPlus,
   Plug,
   Wallet,
 } from "lucide-react";
@@ -45,7 +44,6 @@ const mainMenuItems = [
 const businessMenuItems = [
   { titleKey: "merchant.sidebar.analytics" as const, url: "/dashboard/analytics", icon: BarChart3 },
   { titleKey: "merchant.sidebar.integrations" as const, url: "/dashboard/integrations", icon: Plug },
-  { titleKey: "merchant.sidebar.team" as const, url: "/dashboard/team", icon: UserPlus },
 ];
 
 const settingsMenuItems = [

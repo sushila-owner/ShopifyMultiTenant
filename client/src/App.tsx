@@ -46,7 +46,6 @@ import MerchantOrdersPage from "@/pages/merchant/orders";
 import CustomersPage from "@/pages/merchant/customers";
 import AnalyticsPage from "@/pages/merchant/analytics";
 import IntegrationsPage from "@/pages/merchant/integrations";
-import TeamPage from "@/pages/merchant/team";
 import SubscriptionPage from "@/pages/merchant/subscription";
 import WalletPage from "@/pages/merchant/wallet";
 import SettingsPage from "@/pages/merchant/settings";
@@ -279,13 +278,6 @@ function Router() {
         <ProtectedRoute>
           <MerchantLayout>
             <IntegrationsPage />
-          </MerchantLayout>
-        </ProtectedRoute>
-      </Route>
-      <Route path="/dashboard/team">
-        <ProtectedRoute>
-          <MerchantLayout>
-            <TeamPage />
           </MerchantLayout>
         </ProtectedRoute>
       </Route>
