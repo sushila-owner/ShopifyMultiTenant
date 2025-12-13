@@ -195,7 +195,7 @@ export default function MerchantProductDetailPage() {
   };
 
   return (
-    <div className="bg-background pb-8">
+    <div className="bg-background min-h-screen pb-8">
       <Dialog open={isImportDialogOpen} onOpenChange={setIsImportDialogOpen}>
         <DialogContent className="max-w-md" onCloseAutoFocus={(e) => e.preventDefault()}>
           <DialogHeader>
