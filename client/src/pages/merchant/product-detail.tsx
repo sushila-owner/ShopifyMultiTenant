@@ -6,6 +6,7 @@ import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
 import { Skeleton } from "@/components/ui/skeleton";
 import { Separator } from "@/components/ui/separator";
+import { ScrollArea } from "@/components/ui/scroll-area";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import {
@@ -207,7 +208,8 @@ export default function MerchantProductDetailPage() {
   };
 
   return (
-    <div className="bg-background pb-8">
+    <ScrollArea className="h-full">
+      <div className="bg-background pb-8">
       <Dialog open={isImportDialogOpen} onOpenChange={setIsImportDialogOpen}>
         <DialogContent className="max-w-md" onCloseAutoFocus={(e) => e.preventDefault()}>
           <DialogHeader>
@@ -604,6 +606,7 @@ export default function MerchantProductDetailPage() {
           </div>
         </div>
       </div>
-    </div>
+      </div>
+    </ScrollArea>
   );
 }
