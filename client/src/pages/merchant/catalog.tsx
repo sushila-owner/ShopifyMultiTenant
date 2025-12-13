@@ -1162,17 +1162,14 @@ export default function CatalogPage() {
         </div>
       </div>
 
-      <div className="flex-1 flex overflow-hidden">
-        <div className="hidden lg:block w-72 border-r flex-shrink-0 bg-muted/30">
-          <ScrollArea className="h-full">
-            <div className="p-4">
-              <FilterSidebar />
-            </div>
-          </ScrollArea>
+      <div className="flex-1 flex min-h-0">
+        <div className="hidden lg:block w-72 border-r flex-shrink-0 bg-muted/30 overflow-y-auto">
+          <div className="p-4">
+            <FilterSidebar />
+          </div>
         </div>
 
-        <div className="flex-1 overflow-hidden flex flex-col">
-          <ScrollArea className="flex-1">
+        <div className="flex-1 overflow-y-auto">
             <div className="p-4 md:p-6">
               {isLoading ? (
                 <div className={viewMode === "grid" 
@@ -1273,7 +1270,6 @@ export default function CatalogPage() {
                 </div>
               )}
             </div>
-          </ScrollArea>
         </div>
       </div>
 
