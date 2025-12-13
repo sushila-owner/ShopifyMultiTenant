@@ -1,4 +1,4 @@
-import { useState } from "react";
+import { useState, useEffect, useRef } from "react";
 import { useQuery, useMutation } from "@tanstack/react-query";
 import { useRoute, Link } from "wouter";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
@@ -67,6 +67,15 @@ export default function MerchantProductDetailPage() {
   const productId = catalogParams?.id || productsParams?.id;
   const [selectedImageIndex, setSelectedImageIndex] = useState(0);
   const [isImportDialogOpen, setIsImportDialogOpen] = useState(false);
+  
+  useEffect(() => {
+    setSelectedImageIndex(0);
+    const mainContent = document.querySelector('main');
+    if (mainContent) {
+      mainContent.scrollTo(0, 0);
+    }
+    window.scrollTo(0, 0);
+  }, [productId]);
   const [importSettings, setImportSettings] = useState({
     pricingType: "percentage" as "fixed" | "percentage",
     pricingValue: 20,
