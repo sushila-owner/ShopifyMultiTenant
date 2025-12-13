@@ -66,11 +66,13 @@ import {
   DropdownMenuSeparator,
   DropdownMenuTrigger,
 } from "@/components/ui/dropdown-menu";
-import type { Supplier, SupplierType } from "@shared/schema";
+import type { Supplier } from "@shared/schema";
+
+type SupplierType = "gigab2b" | "shopify" | "amazon" | "woocommerce" | "custom";
 
 const supplierFormSchema = z.object({
   name: z.string().min(2, "Name must be at least 2 characters"),
-  type: z.enum(["gigab2b", "shopify", "woocommerce", "custom"]),
+  type: z.enum(["gigab2b", "shopify", "amazon", "woocommerce", "custom"]),
   description: z.string().optional(),
   apiCredentials: z.object({
     storeDomain: z.string().optional(),
@@ -339,11 +341,11 @@ export default function AdminSuppliersPage() {
     setEditingSupplier(supplier);
     form.reset({
       name: supplier.name,
-      type: supplier.type,
+      type: supplier.type as SupplierType,
       description: supplier.description || "",
       apiCredentials: supplier.apiCredentials || {},
       config: supplier.config || {},
-      isActive: supplier.isActive,
+      isActive: supplier.isActive ?? true,
     });
     setIsDialogOpen(true);
   };
