@@ -127,7 +127,7 @@ export default function MerchantProductDetailPage() {
 
   if (isLoading) {
     return (
-      <div className="flex-1 p-6 md:p-8">
+      <div className="p-6 md:p-8">
         <div className="max-w-7xl mx-auto">
           <Skeleton className="h-10 w-32 mb-8" />
           <div className="grid gap-8 lg:grid-cols-2">
@@ -146,7 +146,7 @@ export default function MerchantProductDetailPage() {
 
   if (!product) {
     return (
-      <div className="flex-1 p-6 md:p-8">
+      <div className="p-6 md:p-8">
         <div className="max-w-7xl mx-auto">
           <div className="text-center py-20">
             <div className="h-24 w-24 rounded-full bg-muted flex items-center justify-center mx-auto mb-6">
@@ -185,7 +185,7 @@ export default function MerchantProductDetailPage() {
   };
 
   return (
-    <div className="min-h-full bg-background">
+    <div className="bg-background pb-8">
       <Dialog open={isImportDialogOpen} onOpenChange={setIsImportDialogOpen}>
         <DialogContent className="max-w-md">
           <DialogHeader>
