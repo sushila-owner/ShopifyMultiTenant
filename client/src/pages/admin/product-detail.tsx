@@ -76,6 +76,16 @@ export default function AdminProductDetailPage() {
 
   const { data: product, isLoading } = useQuery<Product>({
     queryKey: ["/api/admin/products", productId],
+    queryFn: async () => {
+      const response = await fetch(`/api/admin/products/${productId}`, {
+        headers: {
+          Authorization: `Bearer ${localStorage.getItem("apex_token")}`,
+        },
+      });
+      if (!response.ok) throw new Error("Failed to fetch product");
+      const result = await response.json();
+      return result.data;
+    },
     enabled: !!productId,
   });
 
