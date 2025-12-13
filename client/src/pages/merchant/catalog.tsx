@@ -994,7 +994,7 @@ export default function CatalogPage() {
       </Dialog>
 
       <Dialog open={!!quickViewProduct} onOpenChange={() => setQuickViewProduct(null)} modal={true}>
-        <DialogContent className="max-w-2xl" onCloseAutoFocus={(e) => e.preventDefault()}>
+        <DialogContent className="max-w-2xl max-h-[90vh] overflow-y-auto" onCloseAutoFocus={(e) => e.preventDefault()}>
           {quickViewProduct && (
             <>
               <DialogHeader>
