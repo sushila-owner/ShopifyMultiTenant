@@ -177,13 +177,8 @@
   /* Fix for mobile touch scrolling - ensure scrollable areas work on iOS */
   main {
     -webkit-overflow-scrolling: touch;
-    touch-action: pan-y;
-  }
-  
-  /* Reset scroll lock that may linger from dialogs */
-  body:not([data-scroll-locked]) {
-    overflow: auto !important;
-    pointer-events: auto !important;
+    touch-action: pan-y pan-x;
+    overscroll-behavior: contain;
   }
 
   /* Luxurious smooth transitions for all interactive elements */

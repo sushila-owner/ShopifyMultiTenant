@@ -1066,10 +1066,10 @@ export default function CatalogPage() {
                       onClick={() => {
                         const productId = quickViewProduct.id;
                         setQuickViewProduct(null);
-                        // Navigate after dialog state is cleared
+                        // Navigate after dialog fully closes and scroll lock releases
                         setTimeout(() => {
                           navigate(`/dashboard/catalog/${productId}`);
-                        }, 50);
+                        }, 150);
                       }}
                     >
                       View Details

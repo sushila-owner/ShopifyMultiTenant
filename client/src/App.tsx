@@ -104,11 +104,11 @@ function MerchantLayout({ children }: { children: React.ReactNode }) {
 
   return (
     <SidebarProvider style={style as React.CSSProperties}>
-      <div className="flex min-h-screen h-[100dvh] w-full">
+      <div className="flex h-dvh w-full">
         <MerchantSidebar />
-        <div className="flex flex-col flex-1 min-w-0 overflow-hidden">
+        <div className="flex flex-col flex-1 min-w-0">
           <DashboardHeader />
-          <main className="flex-1 overflow-y-auto overflow-x-hidden">{children}</main>
+          <main className="flex-1 overflow-auto overscroll-contain" style={{ WebkitOverflowScrolling: 'touch' }}>{children}</main>
         </div>
       </div>
     </SidebarProvider>

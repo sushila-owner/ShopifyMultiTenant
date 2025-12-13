@@ -71,41 +71,11 @@ export default function MerchantProductDetailPage() {
   useEffect(() => {
     setSelectedImageIndex(0);
     
-    // Aggressively reset any scroll lock that may be lingering from dialogs
-    const resetScrollLock = () => {
-      document.body.style.overflow = '';
-      document.body.style.pointerEvents = '';
-      document.body.style.position = '';
-      document.body.style.top = '';
-      document.body.style.width = '';
-      document.body.removeAttribute('data-scroll-locked');
-      document.documentElement.style.overflow = '';
-      document.documentElement.style.pointerEvents = '';
-      
-      // Also check for Radix scroll lock
-      const scrollLockElements = document.querySelectorAll('[data-radix-scroll-area-viewport]');
-      scrollLockElements.forEach(el => {
-        (el as HTMLElement).style.overflow = '';
-      });
-    };
-    
-    // Reset immediately and after a short delay to catch late scroll locks
-    resetScrollLock();
-    const timer1 = setTimeout(resetScrollLock, 100);
-    const timer2 = setTimeout(resetScrollLock, 300);
-    
+    // Scroll to top when page loads
     const mainContent = document.querySelector('main');
     if (mainContent) {
-      mainContent.scrollTo(0, 0);
+      mainContent.scrollTop = 0;
     }
-    window.scrollTo(0, 0);
-    
-    // Cleanup function to ensure scroll lock is removed when navigating away
-    return () => {
-      clearTimeout(timer1);
-      clearTimeout(timer2);
-      resetScrollLock();
-    };
   }, [productId]);
   const [importSettings, setImportSettings] = useState({
     pricingType: "percentage" as "fixed" | "percentage",
@@ -225,7 +195,7 @@ export default function MerchantProductDetailPage() {
   };
 
   return (
-    <div className="bg-background pb-8 min-h-full">
+    <div className="bg-background pb-8">
       <Dialog open={isImportDialogOpen} onOpenChange={setIsImportDialogOpen}>
         <DialogContent className="max-w-md" onCloseAutoFocus={(e) => e.preventDefault()}>
           <DialogHeader>
