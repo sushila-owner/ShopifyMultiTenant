@@ -75,6 +75,13 @@ export default function MerchantProductDetailPage() {
       mainContent.scrollTo(0, 0);
     }
     window.scrollTo(0, 0);
+    
+    // Cleanup function to ensure scroll lock is removed when navigating away
+    return () => {
+      // Reset any scroll lock that Radix Dialog might have left
+      document.body.style.overflow = '';
+      document.body.style.pointerEvents = '';
+    };
   }, [productId]);
   const [importSettings, setImportSettings] = useState({
     pricingType: "percentage" as "fixed" | "percentage",
@@ -196,7 +203,7 @@ export default function MerchantProductDetailPage() {
   return (
     <div className="bg-background pb-8">
       <Dialog open={isImportDialogOpen} onOpenChange={setIsImportDialogOpen}>
-        <DialogContent className="max-w-md">
+        <DialogContent className="max-w-md" onCloseAutoFocus={(e) => e.preventDefault()}>
           <DialogHeader>
             <DialogTitle className="flex items-center gap-2">
               <ShoppingCart className="h-5 w-5 text-primary" />

@@ -61,7 +61,7 @@ import {
   Heart,
   Check,
 } from "lucide-react";
-import { Link } from "wouter";
+import { Link, useLocation } from "wouter";
 import { useCurrency } from "@/lib/currency";
 import type { Product, Supplier } from "@shared/schema";
 
@@ -118,6 +118,7 @@ interface MerchantSettings {
 export default function CatalogPage() {
   const { toast } = useToast();
   const { formatPrice } = useCurrency();
+  const [, navigate] = useLocation();
   const [selectedSupplier, setSelectedSupplier] = useState<Supplier | null>(null);
   const [searchInput, setSearchInput] = useState("");
   const [debouncedSearch, setDebouncedSearch] = useState("");
@@ -899,7 +900,7 @@ export default function CatalogPage() {
       </Sheet>
 
       <Dialog open={isImportDialogOpen} onOpenChange={setIsImportDialogOpen}>
-        <DialogContent className="max-w-md">
+        <DialogContent className="max-w-md" onCloseAutoFocus={(e) => e.preventDefault()}>
           <DialogHeader>
             <DialogTitle className="flex items-center gap-2">
               <ShoppingCart className="h-5 w-5 text-primary" />
@@ -985,12 +986,15 @@ export default function CatalogPage() {
         </DialogContent>
       </Dialog>
 
-      <Dialog open={!!quickViewProduct} onOpenChange={() => setQuickViewProduct(null)}>
-        <DialogContent className="max-w-2xl">
+      <Dialog open={!!quickViewProduct} onOpenChange={() => setQuickViewProduct(null)} modal={true}>
+        <DialogContent className="max-w-2xl" onCloseAutoFocus={(e) => e.preventDefault()}>
           {quickViewProduct && (
             <>
               <DialogHeader>
                 <DialogTitle className="line-clamp-1">{quickViewProduct.title}</DialogTitle>
+                <DialogDescription className="sr-only">
+                  Quick view of {quickViewProduct.title}
+                </DialogDescription>
               </DialogHeader>
               <div className="grid md:grid-cols-2 gap-6">
                 <div className="aspect-square rounded-xl overflow-hidden bg-white flex items-center justify-center">
@@ -1050,11 +1054,19 @@ export default function CatalogPage() {
                       <Plus className="h-4 w-4" />
                       Import Product
                     </Button>
-                    <Link href={`/dashboard/catalog/${quickViewProduct.id}`}>
-                      <Button variant="outline" onClick={() => setQuickViewProduct(null)}>
-                        View Details
-                      </Button>
-                    </Link>
+                    <Button 
+                      variant="outline" 
+                      onClick={() => {
+                        const productId = quickViewProduct.id;
+                        setQuickViewProduct(null);
+                        // Navigate after dialog state is cleared
+                        setTimeout(() => {
+                          navigate(`/dashboard/catalog/${productId}`);
+                        }, 50);
+                      }}
+                    >
+                      View Details
+                    </Button>
                   </div>
                 </div>
               </div>
