@@ -70,6 +70,12 @@ export default function MerchantProductDetailPage() {
   
   useEffect(() => {
     setSelectedImageIndex(0);
+    
+    // Reset any scroll lock that may be lingering from dialogs
+    document.body.style.overflow = '';
+    document.body.style.pointerEvents = '';
+    document.documentElement.style.overflow = '';
+    
     const mainContent = document.querySelector('main');
     if (mainContent) {
       mainContent.scrollTo(0, 0);
@@ -78,9 +84,9 @@ export default function MerchantProductDetailPage() {
     
     // Cleanup function to ensure scroll lock is removed when navigating away
     return () => {
-      // Reset any scroll lock that Radix Dialog might have left
       document.body.style.overflow = '';
       document.body.style.pointerEvents = '';
+      document.documentElement.style.overflow = '';
     };
   }, [productId]);
   const [importSettings, setImportSettings] = useState({

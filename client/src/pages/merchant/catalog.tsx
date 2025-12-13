@@ -184,6 +184,13 @@ export default function CatalogPage() {
     }
   }, [merchantSettings, settingsLoaded]);
 
+  // Reset any lingering scroll locks when mounting catalog page
+  useEffect(() => {
+    document.body.style.overflow = '';
+    document.body.style.pointerEvents = '';
+    document.documentElement.style.overflow = '';
+  }, []);
+
   useEffect(() => {
     const timer = setTimeout(() => {
       setDebouncedSearch(searchInput);
