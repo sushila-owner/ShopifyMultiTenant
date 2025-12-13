@@ -813,8 +813,8 @@ export default function CatalogPage() {
 
   if (!selectedSupplier) {
     return (
-      <div className="flex flex-col min-h-full bg-background">
-        <div className="flex-shrink-0 border-b bg-gradient-to-r from-primary/5 to-transparent">
+      <div className="bg-background">
+        <div className="border-b bg-gradient-to-r from-primary/5 to-transparent">
           <div className="p-6 md:p-8">
             <h1 className="text-2xl md:text-3xl font-bold" data-testid="text-catalog-title">
               Product Catalog
@@ -825,8 +825,7 @@ export default function CatalogPage() {
           </div>
         </div>
         
-        <ScrollArea className="flex-1">
-          <div className="p-6 md:p-8">
+        <div className="p-6 md:p-8">
             {suppliersLoading ? (
               <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-6">
                 {[1, 2, 3].map((i) => (
@@ -880,13 +879,12 @@ export default function CatalogPage() {
               </div>
             )}
           </div>
-        </ScrollArea>
       </div>
     );
   }
 
   return (
-    <div className="flex flex-col min-h-full bg-background">
+    <div className="bg-background">
       <Sheet open={mobileFilterOpen} onOpenChange={setMobileFilterOpen}>
         <SheetContent side="left" className="w-[300px] p-0">
           <SheetHeader className="p-4 border-b">
