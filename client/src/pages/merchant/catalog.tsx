@@ -813,7 +813,7 @@ export default function CatalogPage() {
 
   if (!selectedSupplier) {
     return (
-      <div className="flex-1 flex flex-col h-full overflow-hidden bg-background">
+      <div className="flex flex-col min-h-full bg-background">
         <div className="flex-shrink-0 border-b bg-gradient-to-r from-primary/5 to-transparent">
           <div className="p-6 md:p-8">
             <h1 className="text-2xl md:text-3xl font-bold" data-testid="text-catalog-title">
@@ -886,7 +886,7 @@ export default function CatalogPage() {
   }
 
   return (
-    <div className="flex-1 flex flex-col h-full overflow-hidden bg-background">
+    <div className="flex flex-col min-h-full bg-background">
       <Sheet open={mobileFilterOpen} onOpenChange={setMobileFilterOpen}>
         <SheetContent side="left" className="w-[300px] p-0">
           <SheetHeader className="p-4 border-b">
@@ -1162,14 +1162,14 @@ export default function CatalogPage() {
         </div>
       </div>
 
-      <div className="flex-1 flex min-h-0">
-        <div className="hidden lg:block w-72 border-r flex-shrink-0 bg-muted/30 overflow-y-auto">
-          <div className="p-4">
+      <div className="flex flex-1">
+        <div className="hidden lg:block w-72 border-r flex-shrink-0 bg-muted/30">
+          <div className="p-4 sticky top-0">
             <FilterSidebar />
           </div>
         </div>
 
-        <div className="flex-1 overflow-y-auto">
+        <div className="flex-1">
             <div className="p-4 md:p-6">
               {isLoading ? (
                 <div className={viewMode === "grid" 
