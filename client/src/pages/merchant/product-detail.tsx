@@ -185,7 +185,7 @@ export default function MerchantProductDetailPage() {
   };
 
   return (
-    <div className="flex-1 bg-background overflow-y-auto">
+    <div className="min-h-full bg-background">
       <Dialog open={isImportDialogOpen} onOpenChange={setIsImportDialogOpen}>
         <DialogContent className="max-w-md">
           <DialogHeader>
