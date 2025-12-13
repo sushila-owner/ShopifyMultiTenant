@@ -173,6 +173,148 @@
   body {
     @apply font-sans antialiased bg-background text-foreground;
   }
+
+  /* Luxurious smooth transitions for all interactive elements */
+  button, a, input, select, textarea, [role="button"] {
+    @apply transition-all duration-200 ease-out;
+  }
+
+  /* Smooth image loading */
+  img {
+    @apply transition-opacity duration-300 ease-out;
+  }
+
+  /* Card hover lift effect */
+  .card-hover {
+    @apply transition-all duration-300 ease-out;
+  }
+  .card-hover:hover {
+    @apply -translate-y-0.5;
+    box-shadow: 0 8px 30px -12px rgba(0, 0, 0, 0.12);
+  }
+  .dark .card-hover:hover {
+    box-shadow: 0 8px 30px -12px rgba(0, 0, 0, 0.4);
+  }
+}
+
+/* Luxurious page fade-in animation */
+@keyframes fadeIn {
+  from {
+    opacity: 0;
+    transform: translateY(8px);
+  }
+  to {
+    opacity: 1;
+    transform: translateY(0);
+  }
+}
+
+@keyframes fadeInScale {
+  from {
+    opacity: 0;
+    transform: scale(0.98);
+  }
+  to {
+    opacity: 1;
+    transform: scale(1);
+  }
+}
+
+@keyframes shimmer {
+  0% {
+    background-position: -200% 0;
+  }
+  100% {
+    background-position: 200% 0;
+  }
+}
+
+@keyframes pulse-soft {
+  0%, 100% {
+    opacity: 1;
+  }
+  50% {
+    opacity: 0.6;
+  }
+}
+
+/* Smooth skeleton loading */
+.skeleton-shimmer {
+  background: linear-gradient(
+    90deg,
+    hsl(var(--muted)) 0%,
+    hsl(var(--muted) / 0.5) 50%,
+    hsl(var(--muted)) 100%
+  );
+  background-size: 200% 100%;
+  animation: shimmer 1.5s ease-in-out infinite;
+}
+
+/* Page content animation */
+.page-enter {
+  animation: fadeIn 0.3s ease-out forwards;
+}
+
+/* Modal/dialog animation enhancement */
+.dialog-enter {
+  animation: fadeInScale 0.2s ease-out forwards;
+}
+
+/* Smooth table row hover */
+tr {
+  @apply transition-colors duration-150 ease-out;
+}
+
+/* Smooth badge transitions */
+[data-slot="badge"] {
+  @apply transition-all duration-200 ease-out;
+}
+
+/* Enhanced focus states */
+:focus-visible {
+  @apply outline-none ring-2 ring-primary/50 ring-offset-2 ring-offset-background transition-all duration-150;
+}
+
+/* Smooth scrollbar */
+::-webkit-scrollbar {
+  width: 8px;
+  height: 8px;
+}
+
+::-webkit-scrollbar-track {
+  background: transparent;
+}
+
+::-webkit-scrollbar-thumb {
+  background: hsl(var(--muted-foreground) / 0.3);
+  border-radius: 4px;
+}
+
+::-webkit-scrollbar-thumb:hover {
+  background: hsl(var(--muted-foreground) / 0.5);
+}
+
+/* Button press effect */
+button:active:not(:disabled),
+[role="button"]:active:not(:disabled) {
+  transform: scale(0.98);
+}
+
+/* Smooth accordion/collapsible transitions */
+[data-state="open"] {
+  animation: fadeIn 0.2s ease-out;
+}
+
+/* Loading spinner smooth rotation */
+.animate-spin {
+  animation: spin 1s linear infinite;
+}
+
+/* Staggered list animation helper */
+.stagger-item {
+  animation: fadeIn 0.3s ease-out forwards;
+  animation-delay: calc(var(--stagger-index, 0) * 50ms);
+  opacity: 0;
 }
 
 /**
