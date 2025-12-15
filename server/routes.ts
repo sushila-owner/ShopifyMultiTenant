@@ -1571,6 +1571,10 @@ export async function registerRoutes(
       const allCategories = await storage.getAllCategories();
       res.json({ success: true, data: allCategories });
     } catch (error: any) {
+      // If categories table doesn't exist, return empty array instead of error
+      if (error.message?.includes('does not exist')) {
+        return res.json({ success: true, data: [] });
+      }
       res.status(500).json({ success: false, error: error.message });
     }
   });
