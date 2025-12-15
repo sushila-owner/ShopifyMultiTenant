@@ -103,20 +103,22 @@ export class ShopifyAdapter extends BaseAdapter {
         const normalized = this.normalizeProduct(p);
         
         // Shopify inventory logic:
-        // - If inventory is explicitly 0, skip this product (out of stock)
-        // - If inventory data is missing/null but product is active, set to 999 (in stock)
-        const hasInventoryData = p.variants?.some((v: any) => 
-          v.inventory_quantity !== null && v.inventory_quantity !== undefined
+        // Check inventory_management field to determine if Shopify tracks inventory
+        // - inventory_management = "shopify" means Shopify tracks inventory
+        // - inventory_management = null/empty means inventory is not tracked (always in stock)
+        const hasInventoryTracking = p.variants?.some((v: any) => 
+          v.inventory_management === "shopify"
         );
-        const totalInventory = normalized.variants.reduce((sum, v) => sum + v.inventoryQuantity, 0);
         
-        if (hasInventoryData && totalInventory === 0) {
-          // Product has inventory tracking and is out of stock - skip it
-          continue;
-        }
-        
-        if (!hasInventoryData) {
-          // No inventory data but product is active - assume in stock (999+)
+        if (hasInventoryTracking) {
+          // Product uses Shopify inventory tracking
+          const totalInventory = normalized.variants.reduce((sum, v) => sum + v.inventoryQuantity, 0);
+          if (totalInventory === 0) {
+            // Product has inventory tracking and is out of stock - skip it
+            continue;
+          }
+        } else {
+          // No inventory tracking - product is always in stock (show as 999+)
           normalized.variants = normalized.variants.map(v => ({
             ...v,
             inventoryQuantity: 999
@@ -153,19 +155,19 @@ export class ShopifyAdapter extends BaseAdapter {
       const p = response.product;
       const normalized = this.normalizeProduct(p);
       
-      // Apply same inventory logic as fetchProducts
-      const hasInventoryData = p.variants?.some((v: any) => 
-        v.inventory_quantity !== null && v.inventory_quantity !== undefined
+      // Check inventory_management field to determine if Shopify tracks inventory
+      const hasInventoryTracking = p.variants?.some((v: any) => 
+        v.inventory_management === "shopify"
       );
-      const totalInventory = normalized.variants.reduce((sum, v) => sum + v.inventoryQuantity, 0);
       
-      // If inventory is 0, return null (out of stock)
-      if (hasInventoryData && totalInventory === 0) {
-        return null;
-      }
-      
-      // If no inventory data but product exists, assume in stock (999)
-      if (!hasInventoryData) {
+      if (hasInventoryTracking) {
+        const totalInventory = normalized.variants.reduce((sum, v) => sum + v.inventoryQuantity, 0);
+        // If inventory is 0 and tracking is enabled, product is out of stock
+        if (totalInventory === 0) {
+          return null;
+        }
+      } else {
+        // No inventory tracking - product is always in stock (show as 999)
         normalized.variants = normalized.variants.map(v => ({
           ...v,
           inventoryQuantity: 999
