@@ -309,6 +309,43 @@ export class GigaB2BAdapter extends BaseAdapter {
     return results;
   }
 
+  // Fetch real inventory quantities from GigaB2B
+  async fetchInventoryQuantities(skus: string[]): Promise<Map<string, number>> {
+    const inventoryMap = new Map<string, number>();
+    if (skus.length === 0) return inventoryMap;
+    
+    try {
+      const batchSize = 200;
+      
+      for (let i = 0; i < skus.length; i += batchSize) {
+        const batch = skus.slice(i, i + batchSize);
+        const response = await this.gigab2bRequest<any>(
+          "/b2b-overseas-api/v1/buyer/inventory/quantity/v2",
+          "POST",
+          { skuList: batch }
+        );
+        
+        if (response.data && Array.isArray(response.data)) {
+          console.log(`[GigaB2B] Inventory returned for ${response.data.length} SKUs`);
+          for (const item of response.data) {
+            // Use the qty or quantity field from the response
+            const qty = item.qty ?? item.quantity ?? item.availableQty ?? 0;
+            inventoryMap.set(item.sku, qty);
+          }
+        }
+        
+        if (i + batchSize < skus.length) {
+          await new Promise(resolve => setTimeout(resolve, 1100));
+        }
+      }
+    } catch (error: any) {
+      console.log(`[GigaB2B] Inventory API failed, using availability flag: ${error.message}`);
+      // Fallback: if inventory API fails, we'll use 0 and rely on skuAvailable flag
+    }
+    
+    return inventoryMap;
+  }
+
   async fetchProductDetails(skus: string[]): Promise<Map<string, GigaB2BProductDetailResponse["data"][0]>> {
     const detailsMap = new Map<string, GigaB2BProductDetailResponse["data"][0]>();
     if (skus.length === 0) return detailsMap;
@@ -373,10 +410,11 @@ export class GigaB2BAdapter extends BaseAdapter {
 
       const skus = listResponse.products.map(p => p.sku);
 
-      // Fetch both price data and product details in parallel
-      const [priceData, detailsMap] = await Promise.all([
+      // Fetch price data, product details, and inventory in parallel
+      const [priceData, detailsMap, inventoryData] = await Promise.all([
         this.fetchProductPrices(skus),
-        this.fetchProductDetails(skus)
+        this.fetchProductDetails(skus),
+        this.fetchInventoryQuantities(skus)
       ]);
       
       const normalizedProducts: NormalizedProduct[] = priceData
@@ -387,7 +425,8 @@ export class GigaB2BAdapter extends BaseAdapter {
           const productNameFromList = productNamesMap.get(p.sku);
           const mergedDetails = details ? { ...details, productName: details.productName || productNameFromList } : 
             productNameFromList ? { sku: p.sku, productName: productNameFromList } : undefined;
-          return this.normalizeProduct(p, mergedDetails);
+          const inventory = inventoryData.get(p.sku) || 0;
+          return this.normalizeProduct(p, mergedDetails, inventory);
         });
 
       return {
@@ -425,13 +464,15 @@ export class GigaB2BAdapter extends BaseAdapter {
         return [];
       }
 
+      // Fetch real inventory quantities from the inventory API
+      const inventoryMap = await this.fetchInventoryQuantities(supplierProductIds);
       const priceData = await this.fetchProductPrices(supplierProductIds);
       
       return priceData.map((item) => ({
         supplierProductId: item.sku,
         variantId: item.sku,
         sku: item.sku,
-        quantity: item.skuAvailable ? 100 : 0,
+        quantity: inventoryMap.get(item.sku) ?? (item.skuAvailable ? 100 : 0),
         available: item.skuAvailable,
       }));
     } catch (error: any) {
@@ -570,7 +611,8 @@ export class GigaB2BAdapter extends BaseAdapter {
 
   private normalizeProduct(
     product: GigaB2BPriceResponse["data"][0], 
-    details?: GigaB2BProductDetailResponse["data"][0]
+    details?: GigaB2BProductDetailResponse["data"][0],
+    inventoryQty?: number
   ): NormalizedProduct {
     const basePrice = product.discountedPrice || product.exclusivePrice || product.price;
     const sellerName = details?.sellerInfo?.sellerStore || product.sellerInfo?.sellerStore || "GigaB2B";
@@ -624,7 +666,7 @@ export class GigaB2BAdapter extends BaseAdapter {
         title: "Default",
         price: basePrice * 100,
         cost: basePrice * 100,
-        inventoryQuantity: product.skuAvailable ? 100 : 0,
+        inventoryQuantity: inventoryQty ?? (product.skuAvailable ? 100 : 0),
       }],
       supplierSku: product.sku,
       supplierPrice: basePrice,
