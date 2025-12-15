@@ -1576,13 +1576,13 @@ export class DatabaseStorage implements IStorage {
       })
       .where(eq(suppliers.type, "gigab2b"));
     
-    // Update Sushila/custom supplier name  
+    // Update Sushila supplier name by searching for name containing 'sushila' (case insensitive)
     await db.update(suppliers)
       .set({ 
         name: "Luxury brands, fashion, beauty",
         description: "Premium fashion, beauty and luxury brand products"
       })
-      .where(eq(suppliers.type, "custom"));
+      .where(sql`LOWER(${suppliers.name}) LIKE '%sushila%'`);
     
     console.log("Supplier display names updated");
   }
