@@ -447,42 +447,6 @@ export default function CatalogPage() {
       )}
 
       <Collapsible 
-        open={expandedFilters.supplier} 
-        onOpenChange={(open) => setExpandedFilters(prev => ({ ...prev, supplier: open }))}
-      >
-        <CollapsibleTrigger className="flex items-center justify-between w-full py-3 px-2 text-sm font-semibold hover:bg-muted/50 rounded-lg transition-colors">
-          <span className="flex items-center gap-2">
-            <Store className="h-4 w-4 text-muted-foreground" />
-            Source
-          </span>
-          <ChevronDown className={`h-4 w-4 transition-transform duration-200 ${expandedFilters.supplier ? "" : "-rotate-90"}`} />
-        </CollapsibleTrigger>
-        <CollapsibleContent className="pb-4 space-y-1 px-1">
-          <button
-            onClick={() => setFilters(prev => ({ ...prev, supplierId: null }))}
-            className={`w-full text-left text-sm py-2 px-3 rounded-lg transition-all ${
-              !filters.supplierId ? "bg-primary text-primary-foreground font-medium" : "hover:bg-muted"
-            }`}
-          >
-            All Sources
-          </button>
-          {suppliers.map((supplier) => (
-            <button
-              key={supplier.id}
-              onClick={() => selectSupplierFilter(supplier.id)}
-              className={`w-full text-left text-sm py-2 px-3 rounded-lg transition-all truncate ${
-                filters.supplierId === supplier.id ? "bg-primary text-primary-foreground font-medium" : "hover:bg-muted"
-              }`}
-            >
-              {supplier.name}
-            </button>
-          ))}
-        </CollapsibleContent>
-      </Collapsible>
-
-      <Separator className="my-2" />
-
-      <Collapsible 
         open={expandedFilters.inventory} 
         onOpenChange={(open) => setExpandedFilters(prev => ({ ...prev, inventory: open }))}
       >
