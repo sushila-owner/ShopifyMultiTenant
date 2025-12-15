@@ -319,17 +319,19 @@ export class GigaB2BAdapter extends BaseAdapter {
       
       for (let i = 0; i < skus.length; i += batchSize) {
         const batch = skus.slice(i, i + batchSize);
+        
         const response = await this.gigab2bRequest<any>(
           "/b2b-overseas-api/v1/buyer/inventory/quantity/v2",
           "POST",
-          { skuList: batch }
+          { skus: batch }
         );
         
         if (response.data && Array.isArray(response.data)) {
-          console.log(`[GigaB2B] Inventory returned for ${response.data.length} SKUs`);
           for (const item of response.data) {
-            // Use the qty or quantity field from the response
-            const qty = item.qty ?? item.quantity ?? item.availableQty ?? 0;
+            // GigaB2B returns inventory in sellerInventoryInfo.sellerAvailableInventory
+            const qty = item.sellerInventoryInfo?.sellerAvailableInventory 
+              ?? item.buyerInventoryInfo?.totalBuyerAvailableInventory
+              ?? item.qty ?? item.quantity ?? item.availableQty ?? item.stock ?? 0;
             inventoryMap.set(item.sku, qty);
           }
         }
