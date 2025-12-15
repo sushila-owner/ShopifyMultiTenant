@@ -19,8 +19,16 @@ export class ShopifyAdapter extends BaseAdapter {
 
   constructor(credentials: ShopifyCredentials) {
     super(credentials);
-    this.storeDomain = credentials.storeDomain;
-    this.accessToken = credentials.accessToken;
+    
+    // Resolve FROM_ENV placeholders from environment variables
+    const envStoreDomain = (process.env.SHOPIFY_STORE_URL || "").trim();
+    const envAccessToken = (process.env.SHOPIFY_ACCESS_TOKEN || "").trim();
+    
+    const dbStoreDomain = (credentials.storeDomain || "").trim();
+    const dbAccessToken = (credentials.accessToken || "").trim();
+    
+    this.storeDomain = (dbStoreDomain === "FROM_ENV" || !dbStoreDomain) ? envStoreDomain : dbStoreDomain;
+    this.accessToken = (dbAccessToken === "FROM_ENV" || !dbAccessToken) ? envAccessToken : dbAccessToken;
   }
 
   private getApiUrl(endpoint: string): string {
@@ -76,12 +84,18 @@ export class ShopifyAdapter extends BaseAdapter {
     }
   }
 
-  async fetchProducts(page = 1, pageSize = 50): Promise<PaginatedResult<NormalizedProduct>> {
+  async fetchProducts(page = 1, pageSize = 50, sinceId?: string): Promise<PaginatedResult<NormalizedProduct>> {
     try {
-      // Only fetch active products
+      // Shopify uses cursor-based pagination with since_id
+      // page param is not used in actual request - we use since_id for pagination
+      let url = `products.json?limit=${pageSize}&status=active`;
+      if (sinceId) {
+        url += `&since_id=${sinceId}`;
+      }
+      
       const products = await this.shopifyRequest<{
         products: any[];
-      }>(`products.json?limit=${pageSize}&page=${page}&status=active`);
+      }>(url);
 
       const normalizedProducts: NormalizedProduct[] = [];
       
@@ -114,12 +128,17 @@ export class ShopifyAdapter extends BaseAdapter {
 
       const countResponse = await this.shopifyRequest<{ count: number }>("products/count.json?status=active");
 
+      // Determine if there are more products to fetch
+      const hasMore = products.products.length === pageSize;
+      
       return {
         items: normalizedProducts,
         total: countResponse.count,
         page,
         pageSize,
-        hasMore: page * pageSize < countResponse.count,
+        hasMore,
+        // Store the last product ID for cursor-based pagination
+        nextCursor: products.products.length > 0 ? String(products.products[products.products.length - 1].id) : undefined,
       };
     } catch (error: any) {
       throw new Error(`Failed to fetch products: ${error.message}`);

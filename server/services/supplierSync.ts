@@ -137,13 +137,18 @@ class SupplierSyncService {
       lastConnectionTest: new Date(),
     });
 
-    // Sync products
+    // Sync products - supports both page-based and cursor-based pagination
     let page = 1;
     let totalSynced = 0;
     let hasMore = true;
+    let cursor: string | undefined = undefined;
 
     while (hasMore) {
-      const result = await adapter.fetchProducts(page, BATCH_SIZE);
+      // For Shopify (cursor-based): pass cursor as 3rd param
+      // For GigaB2B (page-based): uses page param
+      const result = supplier.type === "shopify" 
+        ? await (adapter as any).fetchProducts(page, BATCH_SIZE, cursor)
+        : await adapter.fetchProducts(page, BATCH_SIZE);
       
       if (result.items.length === 0) {
         break;
@@ -159,6 +164,7 @@ class SupplierSyncService {
       console.log(`[SupplierSync] ${supplier.name}: Synced page ${page} (${result.items.length} products)`);
       
       hasMore = result.hasMore;
+      cursor = result.nextCursor; // For cursor-based pagination
       page++;
       
       // Add small delay to avoid rate limiting

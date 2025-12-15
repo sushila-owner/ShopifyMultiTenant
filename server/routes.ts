@@ -1904,7 +1904,13 @@ export async function registerRoutes(
           description: `Products synced from ${connectionTest.shopName}`,
           isActive: true,
           createdBy: req.user!.id,
+          apiCredentials: { storeDomain: "FROM_ENV", accessToken: "FROM_ENV" },
         });
+      } else if (!supplier.apiCredentials || Object.keys(supplier.apiCredentials).length === 0) {
+        // Update existing supplier with credentials if missing
+        supplier = await storage.updateSupplier(supplier.id, {
+          apiCredentials: { storeDomain: "FROM_ENV", accessToken: "FROM_ENV" },
+        }) || supplier;
       }
 
       // Get existing products for this supplier (for update detection)

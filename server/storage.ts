@@ -1584,6 +1584,20 @@ export class DatabaseStorage implements IStorage {
       })
       .where(sql`LOWER(${suppliers.name}) LIKE '%sushila%'`);
     
+    // Update Shopify supplier credentials if missing
+    const shopifySuppliers = await db.select().from(suppliers).where(eq(suppliers.type, "shopify"));
+    for (const supplier of shopifySuppliers) {
+      const creds = supplier.apiCredentials as Record<string, any> | null;
+      if (!creds || Object.keys(creds).length === 0) {
+        await db.update(suppliers)
+          .set({ 
+            apiCredentials: { storeDomain: "FROM_ENV", accessToken: "FROM_ENV" }
+          })
+          .where(eq(suppliers.id, supplier.id));
+        console.log(`Updated Shopify supplier "${supplier.name}" with credentials`);
+      }
+    }
+    
     console.log("Supplier display names updated");
   }
 
