@@ -453,7 +453,7 @@ export default function CatalogPage() {
         <CollapsibleTrigger className="flex items-center justify-between w-full py-3 px-2 text-sm font-semibold hover:bg-muted/50 rounded-lg transition-colors">
           <span className="flex items-center gap-2">
             <Store className="h-4 w-4 text-muted-foreground" />
-            Supplier
+            Source
           </span>
           <ChevronDown className={`h-4 w-4 transition-transform duration-200 ${expandedFilters.supplier ? "" : "-rotate-90"}`} />
         </CollapsibleTrigger>
@@ -464,7 +464,7 @@ export default function CatalogPage() {
               !filters.supplierId ? "bg-primary text-primary-foreground font-medium" : "hover:bg-muted"
             }`}
           >
-            All Suppliers
+            All Sources
           </button>
           {suppliers.map((supplier) => (
             <button
@@ -1090,7 +1090,7 @@ export default function CatalogPage() {
             data-testid="button-back-home"
           >
             <Home className="h-4 w-4" />
-            <span className="hidden sm:inline">Suppliers</span>
+            <span className="hidden sm:inline">Catalog</span>
           </button>
           <ChevronRight className="h-4 w-4 text-muted-foreground" />
           <span className="font-medium truncate">{selectedSupplier.name}</span>
