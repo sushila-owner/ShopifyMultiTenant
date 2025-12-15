@@ -430,6 +430,11 @@ export default function CatalogPage() {
     return merchantPrice - supplierPrice;
   };
 
+  const formatStock = (quantity: number) => {
+    if (quantity >= 999) return "999+";
+    return quantity.toString();
+  };
+
   const FilterSidebar = () => (
     <div className="space-y-1">
       {selectedSupplier && (
@@ -676,7 +681,7 @@ export default function CatalogPage() {
 
             <div className="flex items-center justify-between pt-1">
               <Badge variant="outline" className="text-xs px-2 py-0.5 font-normal">
-                {stock > 0 ? `${stock} in stock` : "Out of stock"}
+                {stock > 0 ? `${formatStock(stock)} in stock` : "Out of stock"}
               </Badge>
             </div>
           </div>
@@ -745,7 +750,7 @@ export default function CatalogPage() {
           </p>
           <div className="flex items-center gap-3 mt-2">
             <Badge variant="outline" className="text-xs">
-              {stock > 0 ? `${stock} in stock` : "Out of stock"}
+              {stock > 0 ? `${formatStock(stock)} in stock` : "Out of stock"}
             </Badge>
             {stock > 100 && (
               <Badge className="text-xs bg-emerald-500 hover:bg-emerald-500">
@@ -1002,7 +1007,7 @@ export default function CatalogPage() {
                   <div className="space-y-2">
                     <div className="flex justify-between text-sm">
                       <span className="text-muted-foreground">Stock</span>
-                      <span className="font-medium">{quickViewProduct.inventoryQuantity || 0} units</span>
+                      <span className="font-medium">{formatStock(quickViewProduct.inventoryQuantity || 0)} units</span>
                     </div>
                     <div className="flex justify-between text-sm">
                       <span className="text-muted-foreground">Category</span>

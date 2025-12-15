@@ -78,15 +78,41 @@ export class ShopifyAdapter extends BaseAdapter {
 
   async fetchProducts(page = 1, pageSize = 50): Promise<PaginatedResult<NormalizedProduct>> {
     try {
+      // Only fetch active products
       const products = await this.shopifyRequest<{
         products: any[];
-      }>(`products.json?limit=${pageSize}&page=${page}`);
+      }>(`products.json?limit=${pageSize}&page=${page}&status=active`);
 
-      const normalizedProducts: NormalizedProduct[] = products.products.map((p) =>
-        this.normalizeProduct(p)
-      );
+      const normalizedProducts: NormalizedProduct[] = [];
+      
+      for (const p of products.products) {
+        const normalized = this.normalizeProduct(p);
+        
+        // Shopify inventory logic:
+        // - If inventory is explicitly 0, skip this product (out of stock)
+        // - If inventory data is missing/null but product is active, set to 999 (in stock)
+        const hasInventoryData = p.variants?.some((v: any) => 
+          v.inventory_quantity !== null && v.inventory_quantity !== undefined
+        );
+        const totalInventory = normalized.variants.reduce((sum, v) => sum + v.inventoryQuantity, 0);
+        
+        if (hasInventoryData && totalInventory === 0) {
+          // Product has inventory tracking and is out of stock - skip it
+          continue;
+        }
+        
+        if (!hasInventoryData) {
+          // No inventory data but product is active - assume in stock (999+)
+          normalized.variants = normalized.variants.map(v => ({
+            ...v,
+            inventoryQuantity: 999
+          }));
+        }
+        
+        normalizedProducts.push(normalized);
+      }
 
-      const countResponse = await this.shopifyRequest<{ count: number }>("products/count.json");
+      const countResponse = await this.shopifyRequest<{ count: number }>("products/count.json?status=active");
 
       return {
         items: normalizedProducts,
@@ -105,7 +131,29 @@ export class ShopifyAdapter extends BaseAdapter {
       const response = await this.shopifyRequest<{ product: any }>(
         `products/${supplierProductId}.json`
       );
-      return this.normalizeProduct(response.product);
+      const p = response.product;
+      const normalized = this.normalizeProduct(p);
+      
+      // Apply same inventory logic as fetchProducts
+      const hasInventoryData = p.variants?.some((v: any) => 
+        v.inventory_quantity !== null && v.inventory_quantity !== undefined
+      );
+      const totalInventory = normalized.variants.reduce((sum, v) => sum + v.inventoryQuantity, 0);
+      
+      // If inventory is 0, return null (out of stock)
+      if (hasInventoryData && totalInventory === 0) {
+        return null;
+      }
+      
+      // If no inventory data but product exists, assume in stock (999)
+      if (!hasInventoryData) {
+        normalized.variants = normalized.variants.map(v => ({
+          ...v,
+          inventoryQuantity: 999
+        }));
+      }
+      
+      return normalized;
     } catch (error: any) {
       if (error.message.includes("404")) {
         return null;
