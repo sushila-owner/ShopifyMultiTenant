@@ -520,6 +520,54 @@ export class GigaB2BAdapter extends BaseAdapter {
     }
   }
 
+  // Get order status from GigaB2B
+  async getOrderStatus(orderNumbers: string[]): Promise<any> {
+    try {
+      const response = await this.gigab2bRequest<any>(
+        "/b2b-overseas-api/v1/buyer/order/status/v1",
+        "POST",
+        { orderNo: orderNumbers }
+      );
+      console.log(`[GigaB2B] Order status response:`, response);
+      return response;
+    } catch (error: any) {
+      console.error(`[GigaB2B] Failed to get order status:`, error.message);
+      return null;
+    }
+  }
+
+  // Get inventory quantity from GigaB2B
+  async getInventoryQuantity(skus: string[]): Promise<any> {
+    try {
+      const response = await this.gigab2bRequest<any>(
+        "/b2b-overseas-api/v1/buyer/inventory/quantity/v2",
+        "POST",
+        { skuList: skus }
+      );
+      console.log(`[GigaB2B] Inventory quantity response for ${skus.length} SKUs`);
+      return response;
+    } catch (error: any) {
+      console.error(`[GigaB2B] Failed to get inventory quantity:`, error.message);
+      return null;
+    }
+  }
+
+  // Get warehouse address from GigaB2B
+  async getWarehouseAddress(): Promise<any> {
+    try {
+      const response = await this.gigab2bRequest<any>(
+        "/b2b-overseas-api/v1/buyer/warehouse/query-address/v1",
+        "POST",
+        {}
+      );
+      console.log(`[GigaB2B] Warehouse address response:`, response);
+      return response;
+    } catch (error: any) {
+      console.error(`[GigaB2B] Failed to get warehouse address:`, error.message);
+      return null;
+    }
+  }
+
   private normalizeProduct(
     product: GigaB2BPriceResponse["data"][0], 
     details?: GigaB2BProductDetailResponse["data"][0]
