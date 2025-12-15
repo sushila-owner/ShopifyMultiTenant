@@ -828,7 +828,7 @@ export default function CatalogPage() {
               Product Catalog
             </h1>
             <p className="text-muted-foreground mt-1">
-              Choose a supplier to start browsing and importing products
+              Choose a category to start browsing and importing products
             </p>
           </div>
         </div>
@@ -845,9 +845,9 @@ export default function CatalogPage() {
                 <div className="h-20 w-20 rounded-full bg-muted flex items-center justify-center mb-6">
                   <Store className="h-10 w-10 text-muted-foreground" />
                 </div>
-                <h3 className="text-xl font-semibold mb-2">No Suppliers Available</h3>
+                <h3 className="text-xl font-semibold mb-2">No Categories Available</h3>
                 <p className="text-muted-foreground max-w-md">
-                  Contact your administrator to add suppliers to your account.
+                  Contact your administrator to add product categories.
                 </p>
               </div>
             ) : (
@@ -875,7 +875,7 @@ export default function CatalogPage() {
                           )}
                           <div className="flex items-center gap-2 mt-3">
                             <Badge variant="secondary" className="text-xs">
-                              Verified Supplier
+                              Verified
                             </Badge>
                           </div>
                         </div>

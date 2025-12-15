@@ -1567,7 +1567,30 @@ export class DatabaseStorage implements IStorage {
     });
   }
 
+  async updateSupplierDisplayNames(): Promise<void> {
+    // Update GigaB2B supplier name
+    await db.update(suppliers)
+      .set({ 
+        name: "Furniture, home essentials, tools, lifestyle",
+        description: "Home decor, furniture, tools and lifestyle products - 60,000+ items"
+      })
+      .where(eq(suppliers.type, "gigab2b"));
+    
+    // Update Sushila/custom supplier name  
+    await db.update(suppliers)
+      .set({ 
+        name: "Luxury brands, fashion, beauty",
+        description: "Premium fashion, beauty and luxury brand products"
+      })
+      .where(eq(suppliers.type, "custom"));
+    
+    console.log("Supplier display names updated");
+  }
+
   async seedGigaB2BSupplier(): Promise<void> {
+    // Update existing supplier names first
+    await this.updateSupplierDisplayNames();
+    
     // Check if GigaB2B supplier already exists
     const existingSuppliers = await db.select().from(suppliers).where(eq(suppliers.type, "gigab2b")).limit(1);
     if (existingSuppliers.length > 0) {
@@ -1580,9 +1603,9 @@ export class DatabaseStorage implements IStorage {
     const createdBy = admin?.id || 1;
 
     await this.createSupplier({
-      name: "GigaB2B Wholesale",
+      name: "Furniture, home essentials, tools, lifestyle",
       type: "gigab2b",
-      description: "Wholesale products from GigaB2B supplier network - 60,000+ products",
+      description: "Home decor, furniture, tools and lifestyle products - 60,000+ items",
       isActive: true,
       createdBy,
       apiCredentials: { clientId: "FROM_ENV", clientSecret: "FROM_ENV" },
