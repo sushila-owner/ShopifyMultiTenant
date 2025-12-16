@@ -7,6 +7,7 @@ import { Input } from "@/components/ui/input";
 import { Badge } from "@/components/ui/badge";
 import { Skeleton } from "@/components/ui/skeleton";
 import { Checkbox } from "@/components/ui/checkbox";
+import { Textarea } from "@/components/ui/textarea";
 import {
   Table,
   TableBody,
@@ -42,6 +43,7 @@ import {
   Pencil,
   DollarSign,
   Percent,
+  Settings,
 } from "lucide-react";
 import { apiRequest, queryClient } from "@/lib/queryClient";
 import { useToast } from "@/hooks/use-toast";
@@ -88,9 +90,16 @@ export default function AdminProductsPage() {
   const [categoryFilter, setCategoryFilter] = useState<string>("all");
   const [selectedProducts, setSelectedProducts] = useState<Set<number>>(new Set());
   const [editingProduct, setEditingProduct] = useState<Product | null>(null);
+  const [fullEditProduct, setFullEditProduct] = useState<Product | null>(null);
   const [bulkEditOpen, setBulkEditOpen] = useState(false);
   const [pricingType, setPricingType] = useState<"percentage" | "fixed">("percentage");
   const [pricingValue, setPricingValue] = useState("");
+  const [editFormData, setEditFormData] = useState({
+    title: "",
+    description: "",
+    category: "",
+    status: "active" as string,
+  });
 
   // Debounce search input
   const searchTimeout = React.useRef<NodeJS.Timeout | null>(null);
@@ -169,6 +178,47 @@ export default function AdminProductsPage() {
       toast({ title: "Error", description: error.message, variant: "destructive" });
     },
   });
+
+  const updateProductMutation = useMutation({
+    mutationFn: async ({ id, data }: { id: number; data: { title?: string; description?: string; category?: string; status?: string } }) => {
+      const response = await apiRequest("PUT", `/api/admin/products/${id}`, data);
+      const result = await response.json();
+      if (!result.success) {
+        throw new Error(result.error || "Failed to update product");
+      }
+      return result;
+    },
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ["/api/admin/products"] });
+      toast({ title: "Success", description: "Product updated successfully" });
+      setFullEditProduct(null);
+    },
+    onError: (error: Error) => {
+      toast({ title: "Error", description: error.message || "Failed to update product", variant: "destructive" });
+    },
+  });
+
+  const openFullEdit = (product: Product) => {
+    setFullEditProduct(product);
+    setEditFormData({
+      title: product.title || "",
+      description: product.description || "",
+      category: product.category || "",
+      status: product.status || "active",
+    });
+  };
+
+  const handleFullEditSave = () => {
+    if (!fullEditProduct) return;
+    if (!editFormData.title.trim()) {
+      toast({ title: "Error", description: "Title is required", variant: "destructive" });
+      return;
+    }
+    updateProductMutation.mutate({
+      id: fullEditProduct.id,
+      data: editFormData,
+    });
+  };
 
   // Server handles filtering/pagination now
   const globalProducts = products;
@@ -316,6 +366,15 @@ export default function AdminProductsPage() {
                 <Button
                   variant="ghost"
                   size="icon"
+                  onClick={() => openFullEdit(product)}
+                  data-testid={`button-edit-product-${product.id}`}
+                  title="Edit Product"
+                >
+                  <Settings className="h-4 w-4" />
+                </Button>
+                <Button
+                  variant="ghost"
+                  size="icon"
                   onClick={() => {
                     setEditingProduct(product);
                     if (product.pricingRule) {
@@ -328,11 +387,12 @@ export default function AdminProductsPage() {
                     }
                   }}
                   data-testid={`button-edit-pricing-${product.id}`}
+                  title="Edit Pricing"
                 >
-                  <Pencil className="h-4 w-4" />
+                  <DollarSign className="h-4 w-4" />
                 </Button>
                 <Link href={`/admin/products/${product.id}`}>
-                  <Button variant="ghost" size="icon" data-testid={`button-view-product-${product.id}`}>
+                  <Button variant="ghost" size="icon" data-testid={`button-view-product-${product.id}`} title="View Details">
                     <Eye className="h-4 w-4" />
                   </Button>
                 </Link>
@@ -736,6 +796,119 @@ export default function AdminProductsPage() {
               data-testid="button-apply-bulk-pricing"
             >
               {bulkUpdateMutation.isPending ? "Applying..." : "Apply to All"}
+            </Button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
+
+      <Dialog open={!!fullEditProduct} onOpenChange={(open) => !open && setFullEditProduct(null)}>
+        <DialogContent className="max-w-2xl">
+          <DialogHeader>
+            <DialogTitle>Edit Product</DialogTitle>
+            <DialogDescription>
+              Update product details for {fullEditProduct?.title}
+            </DialogDescription>
+          </DialogHeader>
+          <div className="space-y-4 py-4">
+            <div className="grid grid-cols-2 gap-4">
+              {fullEditProduct?.images && fullEditProduct.images.length > 0 && (
+                <div className="col-span-2 flex justify-center">
+                  <img
+                    src={fullEditProduct.images[0].url}
+                    alt={fullEditProduct.title}
+                    className="h-32 w-32 rounded-lg object-cover"
+                  />
+                </div>
+              )}
+              <div className="col-span-2 space-y-2">
+                <Label>Title</Label>
+                <Input
+                  value={editFormData.title}
+                  onChange={(e) => setEditFormData({ ...editFormData, title: e.target.value })}
+                  data-testid="input-edit-product-title"
+                />
+              </div>
+              <div className="col-span-2 space-y-2">
+                <Label>Description</Label>
+                <Textarea
+                  value={editFormData.description}
+                  onChange={(e) => setEditFormData({ ...editFormData, description: e.target.value })}
+                  rows={4}
+                  data-testid="input-edit-product-description"
+                />
+              </div>
+              <div className="space-y-2">
+                <Label>Category</Label>
+                <Select
+                  value={editFormData.category || "none"}
+                  onValueChange={(value) => setEditFormData({ ...editFormData, category: value === "none" ? "" : value })}
+                >
+                  <SelectTrigger data-testid="select-edit-product-category">
+                    <SelectValue placeholder="Select category" />
+                  </SelectTrigger>
+                  <SelectContent>
+                    <SelectItem value="none">No Category</SelectItem>
+                    {categories
+                      .filter((c) => !fullEditProduct?.supplierId || c.supplierId === fullEditProduct.supplierId || !c.supplierId)
+                      .map((cat) => (
+                        <SelectItem key={cat.id} value={cat.name}>
+                          {cat.name}
+                        </SelectItem>
+                      ))}
+                  </SelectContent>
+                </Select>
+                <p className="text-xs text-muted-foreground">
+                  Showing categories for this product's supplier
+                </p>
+              </div>
+              <div className="space-y-2">
+                <Label>Status</Label>
+                <Select
+                  value={editFormData.status}
+                  onValueChange={(value) => setEditFormData({ ...editFormData, status: value })}
+                >
+                  <SelectTrigger data-testid="select-edit-product-status">
+                    <SelectValue />
+                  </SelectTrigger>
+                  <SelectContent>
+                    <SelectItem value="active">Active</SelectItem>
+                    <SelectItem value="draft">Draft</SelectItem>
+                    <SelectItem value="archived">Archived</SelectItem>
+                  </SelectContent>
+                </Select>
+              </div>
+              <div className="col-span-2 rounded-lg border p-4 bg-muted/50">
+                <div className="grid grid-cols-2 gap-4 text-sm">
+                  <div>
+                    <span className="text-muted-foreground">SKU:</span>{" "}
+                    <span className="font-medium">{fullEditProduct?.supplierSku || "N/A"}</span>
+                  </div>
+                  <div>
+                    <span className="text-muted-foreground">Supplier Price:</span>{" "}
+                    <span className="font-medium">${formatPrice(fullEditProduct?.supplierPrice || 0)}</span>
+                  </div>
+                  <div>
+                    <span className="text-muted-foreground">Merchant Price:</span>{" "}
+                    <span className="font-medium">${formatPrice(fullEditProduct?.merchantPrice || fullEditProduct?.supplierPrice || 0)}</span>
+                  </div>
+                  <div>
+                    <span className="text-muted-foreground">Inventory:</span>{" "}
+                    <span className="font-medium">{fullEditProduct?.inventoryQuantity || 0}</span>
+                  </div>
+                </div>
+              </div>
+            </div>
+          </div>
+          <DialogFooter>
+            <Button variant="outline" onClick={() => setFullEditProduct(null)}>
+              Cancel
+            </Button>
+            <Button
+              onClick={handleFullEditSave}
+              disabled={updateProductMutation.isPending}
+              data-testid="button-save-product"
+            >
+              {updateProductMutation.isPending ? "Saving..." : "Save Changes"}
             </Button>
           </DialogFooter>
         </DialogContent>
