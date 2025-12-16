@@ -722,9 +722,6 @@ export default function CatalogPage() {
               <span className="text-lg font-bold text-foreground">
                 {formatPrice(actualMerchantPrice)}
               </span>
-              <span className="text-xs text-muted-foreground line-through ml-1">
-                {formatPrice(product.supplierPrice)}
-              </span>
             </div>
             
             <div className="flex items-center gap-2 p-2 rounded-lg bg-emerald-500/10 border border-emerald-500/20">
@@ -820,7 +817,6 @@ export default function CatalogPage() {
         <div className="flex flex-col items-end justify-between">
           <div className="text-right">
             <p className="text-lg font-bold">{formatPrice(actualMerchantPrice)}</p>
-            <p className="text-xs text-muted-foreground line-through">{formatPrice(product.supplierPrice)}</p>
             <p className="text-sm text-emerald-600">+{formatPrice(profit)} ({profitPercent}%)</p>
           </div>
           <div className="flex gap-2">
