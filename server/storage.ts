@@ -90,6 +90,9 @@ export interface IStorage {
   getCategoriesBySupplier(supplierId: number): Promise<Category[]>;
   getActiveCategories(): Promise<Category[]>;
   updateCategoryProductCount(categoryId: number): Promise<void>;
+  bulkAssignCategory(productIds: number[], categoryId: number, categoryName: string): Promise<number>;
+  getProductsByCategoryId(categoryId: number, params: { page: number; pageSize: number }): Promise<{ data: Product[]; total: number }>;
+  bulkRemoveFromCategory(productIds: number[], categoryId: number): Promise<number>;
 
   // Bulk Pricing Rules
   getBulkPricingRule(id: number): Promise<BulkPricingRule | undefined>;
@@ -427,10 +430,55 @@ export class DatabaseStorage implements IStorage {
   }
 
   async updateCategoryProductCount(categoryId: number): Promise<void> {
-    // categoryId column disabled for PlanetScale compatibility
-    // For now, set product count to 0 since we can't query by categoryId
-    console.log("[updateCategoryProductCount] Skipped - categoryId column not available in PlanetScale");
-    await db.update(categories).set({ productCount: 0, updatedAt: new Date() }).where(eq(categories.id, categoryId));
+    // Count products with this categoryId
+    const countResult = await db.select({ count: sql<number>`count(*)::int` })
+      .from(products)
+      .where(eq(products.categoryId, categoryId));
+    const count = countResult[0]?.count || 0;
+    await db.update(categories).set({ productCount: count, updatedAt: new Date() }).where(eq(categories.id, categoryId));
+  }
+
+  async bulkAssignCategory(productIds: number[], categoryId: number, categoryName: string): Promise<number> {
+    const result = await db.update(products)
+      .set({ categoryId, category: categoryName, updatedAt: new Date() })
+      .where(inArray(products.id, productIds));
+    // Update the category product count
+    await this.updateCategoryProductCount(categoryId);
+    return productIds.length;
+  }
+
+  async getProductsByCategoryId(categoryId: number, params: { page: number; pageSize: number }): Promise<{ data: Product[]; total: number }> {
+    const { page, pageSize } = params;
+    const offset = (page - 1) * pageSize;
+    
+    const [data, countResult] = await Promise.all([
+      db.select().from(products)
+        .where(eq(products.categoryId, categoryId))
+        .orderBy(desc(products.updatedAt))
+        .limit(pageSize)
+        .offset(offset),
+      db.select({ count: sql<number>`count(*)::int` })
+        .from(products)
+        .where(eq(products.categoryId, categoryId))
+    ]);
+    
+    return {
+      data,
+      total: countResult[0]?.count || 0,
+    };
+  }
+
+  async bulkRemoveFromCategory(productIds: number[], categoryId: number): Promise<number> {
+    // Only remove from the specified category
+    const result = await db.update(products)
+      .set({ categoryId: null, category: null, updatedAt: new Date() })
+      .where(and(
+        inArray(products.id, productIds),
+        eq(products.categoryId, categoryId)
+      ));
+    // Update the category product count
+    await this.updateCategoryProductCount(categoryId);
+    return productIds.length;
   }
 
   async getCategoriesBySupplier(supplierId: number): Promise<Category[]> {

@@ -20,7 +20,7 @@ The backend uses Express.js with TypeScript on Node.js, featuring modular routin
 The platform supports a multi-role system including Admin, Merchant, and planned Staff roles. Authentication is handled via Email/Password with bcrypt hashing and JWTs (stored in localStorage with a 7-day expiry). A custom auth context and `ProtectedRoute` component enforce role-based access and UI rendering, ensuring data isolation for each merchant.
 
 ### Data Storage
-Drizzle ORM is used with PostgreSQL, specifically PlanetScale PostgreSQL. The database schema is defined in `shared/schema.ts` with Zod validation. Key data models include Users, Authentication, Product Catalog, Order Management, and Business Logic. Multi-tenancy is enforced using a `merchantId` foreign key for data isolation, with admin roles bypassing these filters.
+Drizzle ORM is used with PostgreSQL. The app supports both Neon PostgreSQL (preferred) and PlanetScale PostgreSQL, configured via environment variables. When both are available, Neon (PG* variables like PGHOST, PGDATABASE) is preferred over PlanetScale. The database schema is defined in `shared/schema.ts` with Zod validation. Key data models include Users, Authentication, Product Catalog, Order Management, and Business Logic. Multi-tenancy is enforced using a `merchantId` foreign key for data isolation, with admin roles bypassing these filters.
 
 ### Key Features and System Design
 - **Subscription System**: Offers 6 tiers with varying product/order limits and features like AI ads and white-labeling.

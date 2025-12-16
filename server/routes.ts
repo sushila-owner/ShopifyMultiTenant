@@ -1633,6 +1633,66 @@ export async function registerRoutes(
     }
   });
 
+  // Category Product Management - Assign products to a category/collection
+  app.post("/api/admin/categories/:id/products", authMiddleware, adminOnly, async (req: AuthRequest, res: Response) => {
+    try {
+      const categoryId = parseInt(req.params.id);
+      const { productIds } = req.body;
+      
+      if (!Array.isArray(productIds) || productIds.length === 0) {
+        return res.status(400).json({ success: false, error: "Product IDs array is required" });
+      }
+
+      // Get the category to get its name
+      const category = await storage.getCategory(categoryId);
+      if (!category) {
+        return res.status(404).json({ success: false, error: "Category not found" });
+      }
+
+      // Update products with both categoryId and category name for backwards compatibility
+      const updatedCount = await storage.bulkAssignCategory(productIds, categoryId, category.name);
+      
+      res.json({ success: true, data: { updatedCount } });
+    } catch (error: any) {
+      res.status(400).json({ success: false, error: error.message });
+    }
+  });
+
+  // Get products in a specific category
+  app.get("/api/admin/categories/:id/products", authMiddleware, adminOnly, async (req: AuthRequest, res: Response) => {
+    try {
+      const categoryId = parseInt(req.params.id);
+      const { page = "1", pageSize = "20" } = req.query;
+      
+      const products = await storage.getProductsByCategoryId(categoryId, {
+        page: parseInt(page as string, 10),
+        pageSize: parseInt(pageSize as string, 10),
+      });
+      
+      res.json({ success: true, data: products });
+    } catch (error: any) {
+      res.status(400).json({ success: false, error: error.message });
+    }
+  });
+
+  // Remove products from a category
+  app.delete("/api/admin/categories/:id/products", authMiddleware, adminOnly, async (req: AuthRequest, res: Response) => {
+    try {
+      const categoryId = parseInt(req.params.id);
+      const { productIds } = req.body;
+      
+      if (!Array.isArray(productIds) || productIds.length === 0) {
+        return res.status(400).json({ success: false, error: "Product IDs array is required" });
+      }
+
+      const updatedCount = await storage.bulkRemoveFromCategory(productIds, categoryId);
+      
+      res.json({ success: true, data: { updatedCount } });
+    } catch (error: any) {
+      res.status(400).json({ success: false, error: error.message });
+    }
+  });
+
   // Bulk Pricing Rules
   app.get("/api/admin/bulk-pricing-rules", authMiddleware, adminOnly, async (req: AuthRequest, res: Response) => {
     try {

@@ -319,8 +319,7 @@ export const products = pgTable("products", {
   id: serial("id").primaryKey(),
   merchantId: integer("merchant_id"),
   supplierId: integer("supplier_id").notNull(),
-  // categoryId disabled for PlanetScale compatibility (column doesn't exist in production)
-  // categoryId: integer("category_id"),
+  categoryId: integer("category_id"),
   title: text("title").notNull(),
   description: text("description"),
   category: text("category"),
@@ -365,8 +364,7 @@ export const products = pgTable("products", {
   priceIdx: index("products_price_idx").on(table.supplierPrice),
   createdIdx: index("products_created_idx").on(table.createdAt),
   categoryIdx: index("products_category_idx").on(table.category),
-  // categoryIdIdx disabled for PlanetScale compatibility
-  // categoryIdIdx: index("products_category_id_idx").on(table.categoryId),
+  categoryIdIdx: index("products_category_id_idx").on(table.categoryId),
   inventoryIdx: index("products_inventory_idx").on(table.inventoryQuantity),
 }));
 

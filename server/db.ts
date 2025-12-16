@@ -2,14 +2,16 @@ import { Pool } from 'pg';
 import { drizzle } from 'drizzle-orm/node-postgres';
 import * as schema from "@shared/schema";
 
-// Check if using PlanetScale or local Postgres
-const usePlanetScale = !!process.env.PLANETSCALE_HOST;
+// Check if using Neon PostgreSQL (preferred) or PlanetScale
+// Prefer Neon PostgreSQL (PG* variables) over PlanetScale when both are available
+const useNeonPostgres = !!process.env.PGHOST;
+const usePlanetScale = !useNeonPostgres && !!process.env.PLANETSCALE_HOST;
 
-const host = process.env.PLANETSCALE_HOST || process.env.PGHOST;
-const port = parseInt(process.env.PLANETSCALE_PORT || process.env.PGPORT || '5432');
-const database = process.env.PLANETSCALE_DATABASE || process.env.PGDATABASE;
-const user = process.env.PLANETSCALE_USERNAME || process.env.PGUSER;
-const password = process.env.PLANETSCALE_PASSWORD || process.env.PGPASSWORD;
+const host = process.env.PGHOST || process.env.PLANETSCALE_HOST;
+const port = parseInt(process.env.PGPORT || process.env.PLANETSCALE_PORT || '5432');
+const database = process.env.PGDATABASE || process.env.PLANETSCALE_DATABASE;
+const user = process.env.PGUSER || process.env.PLANETSCALE_USERNAME;
+const password = process.env.PGPASSWORD || process.env.PLANETSCALE_PASSWORD;
 
 if (!host || !database || !user || !password) {
   throw new Error(

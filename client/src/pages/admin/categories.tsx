@@ -8,11 +8,14 @@ import { Textarea } from "@/components/ui/textarea";
 import { Badge } from "@/components/ui/badge";
 import { Switch } from "@/components/ui/switch";
 import { Label } from "@/components/ui/label";
+import { Checkbox } from "@/components/ui/checkbox";
+import { ScrollArea } from "@/components/ui/scroll-area";
 import {
   Dialog,
   DialogContent,
   DialogHeader,
   DialogTitle,
+  DialogDescription,
 } from "@/components/ui/dialog";
 import {
   Table,
@@ -38,6 +41,7 @@ import {
   AlertDialogHeader,
   AlertDialogTitle,
 } from "@/components/ui/alert-dialog";
+import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { useForm } from "react-hook-form";
 import { zodResolver } from "@hookform/resolvers/zod";
 import { z } from "zod";
@@ -57,8 +61,8 @@ import {
   SelectValue,
 } from "@/components/ui/select";
 import { useToast } from "@/hooks/use-toast";
-import { Plus, MoreHorizontal, Pencil, Trash, Layers, Package, ArrowUpDown, Truck, Filter } from "lucide-react";
-import type { Category, Supplier } from "@shared/schema";
+import { Plus, MoreHorizontal, Pencil, Trash, Layers, Package, ArrowUpDown, Truck, Filter, FolderPlus, X, Search, Loader2 } from "lucide-react";
+import type { Category, Supplier, Product } from "@shared/schema";
 
 const categoryFormSchema = z.object({
   name: z.string().min(1, "Name is required"),
@@ -80,6 +84,13 @@ export default function AdminCategories() {
   const [deleteDialogOpen, setDeleteDialogOpen] = useState(false);
   const [categoryToDelete, setCategoryToDelete] = useState<Category | null>(null);
   const [supplierFilter, setSupplierFilter] = useState<string>("all");
+  
+  // Product management state
+  const [manageProductsOpen, setManageProductsOpen] = useState(false);
+  const [managingCategory, setManagingCategory] = useState<Category | null>(null);
+  const [productSearchTerm, setProductSearchTerm] = useState("");
+  const [selectedProductIds, setSelectedProductIds] = useState<number[]>([]);
+  const [manageTab, setManageTab] = useState<"current" | "add">("current");
 
   const form = useForm<CategoryFormData>({
     resolver: zodResolver(categoryFormSchema),
@@ -118,6 +129,42 @@ export default function AdminCategories() {
 
   const categories = categoriesData?.data || [];
 
+  // Products in current category
+  const { data: categoryProductsData, isLoading: categoryProductsLoading } = useQuery<{ success: boolean; data: { data: Product[]; total: number } }>({
+    queryKey: ["/api/admin/categories", managingCategory?.id, "products"],
+    queryFn: async () => {
+      const response = await fetch(`/api/admin/categories/${managingCategory?.id}/products?pageSize=100`, {
+        headers: { Authorization: `Bearer ${localStorage.getItem("apex_token")}` },
+      });
+      if (!response.ok) throw new Error("Failed to fetch category products");
+      return response.json();
+    },
+    enabled: !!managingCategory,
+  });
+
+  const categoryProducts = categoryProductsData?.data?.data || [];
+
+  // Products available to add (search from supplier)
+  const { data: availableProductsData, isLoading: availableProductsLoading } = useQuery<{ success: boolean; data: { data: Product[]; total: number; page: number; pageSize: number } }>({
+    queryKey: ["/api/admin/products", { search: productSearchTerm, supplierId: managingCategory?.supplierId }],
+    queryFn: async () => {
+      const params = new URLSearchParams();
+      if (productSearchTerm) params.append("search", productSearchTerm);
+      if (managingCategory?.supplierId) params.append("supplierId", managingCategory.supplierId.toString());
+      params.append("pageSize", "50");
+      const response = await fetch(`/api/admin/products?${params}`, {
+        headers: { Authorization: `Bearer ${localStorage.getItem("apex_token")}` },
+      });
+      if (!response.ok) throw new Error("Failed to fetch products");
+      return response.json();
+    },
+    enabled: !!managingCategory && manageTab === "add" && productSearchTerm.length >= 2,
+  });
+
+  const availableProducts = (availableProductsData?.data?.data || []).filter(
+    p => !categoryProducts.some(cp => cp.id === p.id)
+  );
+
   const createMutation = useMutation({
     mutationFn: async (data: CategoryFormData) => {
       const response = await fetch("/api/admin/categories", {
@@ -132,13 +179,13 @@ export default function AdminCategories() {
       return response.json();
     },
     onSuccess: () => {
-      toast({ title: "Category created successfully" });
+      toast({ title: "Collection created successfully" });
       queryClient.invalidateQueries({ queryKey: ["/api/admin/categories"] });
       setDialogOpen(false);
       form.reset();
     },
     onError: (error: any) => {
-      toast({ title: "Failed to create category", description: error.message, variant: "destructive" });
+      toast({ title: "Failed to create collection", description: error.message, variant: "destructive" });
     },
   });
 
@@ -156,14 +203,14 @@ export default function AdminCategories() {
       return response.json();
     },
     onSuccess: () => {
-      toast({ title: "Category updated successfully" });
+      toast({ title: "Collection updated successfully" });
       queryClient.invalidateQueries({ queryKey: ["/api/admin/categories"] });
       setDialogOpen(false);
       setEditingCategory(null);
       form.reset();
     },
     onError: (error: any) => {
-      toast({ title: "Failed to update category", description: error.message, variant: "destructive" });
+      toast({ title: "Failed to update collection", description: error.message, variant: "destructive" });
     },
   });
 
@@ -180,13 +227,51 @@ export default function AdminCategories() {
       return response.json();
     },
     onSuccess: () => {
-      toast({ title: "Category deleted successfully" });
+      toast({ title: "Collection deleted successfully" });
       queryClient.invalidateQueries({ queryKey: ["/api/admin/categories"] });
       setDeleteDialogOpen(false);
       setCategoryToDelete(null);
     },
     onError: (error: any) => {
-      toast({ title: "Failed to delete category", description: error.message, variant: "destructive" });
+      toast({ title: "Failed to delete collection", description: error.message, variant: "destructive" });
+    },
+  });
+
+  // Add products to category
+  const addProductsMutation = useMutation({
+    mutationFn: async ({ categoryId, productIds }: { categoryId: number; productIds: number[] }) => {
+      const response = await apiRequest("POST", `/api/admin/categories/${categoryId}/products`, { productIds });
+      const result = await response.json();
+      if (!result.success) throw new Error(result.error || "Failed to add products");
+      return result;
+    },
+    onSuccess: () => {
+      toast({ title: "Products added to collection" });
+      queryClient.invalidateQueries({ queryKey: ["/api/admin/categories", managingCategory?.id, "products"] });
+      queryClient.invalidateQueries({ queryKey: ["/api/admin/categories"] });
+      setSelectedProductIds([]);
+    },
+    onError: (error: any) => {
+      toast({ title: "Failed to add products", description: error.message, variant: "destructive" });
+    },
+  });
+
+  // Remove products from category
+  const removeProductsMutation = useMutation({
+    mutationFn: async ({ categoryId, productIds }: { categoryId: number; productIds: number[] }) => {
+      const response = await apiRequest("DELETE", `/api/admin/categories/${categoryId}/products`, { productIds });
+      const result = await response.json();
+      if (!result.success) throw new Error(result.error || "Failed to remove products");
+      return result;
+    },
+    onSuccess: () => {
+      toast({ title: "Products removed from collection" });
+      queryClient.invalidateQueries({ queryKey: ["/api/admin/categories", managingCategory?.id, "products"] });
+      queryClient.invalidateQueries({ queryKey: ["/api/admin/categories"] });
+      setSelectedProductIds([]);
+    },
+    onError: (error: any) => {
+      toast({ title: "Failed to remove products", description: error.message, variant: "destructive" });
     },
   });
 
@@ -216,6 +301,14 @@ export default function AdminCategories() {
   const handleDelete = (category: Category) => {
     setCategoryToDelete(category);
     setDeleteDialogOpen(true);
+  };
+
+  const handleManageProducts = (category: Category) => {
+    setManagingCategory(category);
+    setManageProductsOpen(true);
+    setProductSearchTerm("");
+    setSelectedProductIds([]);
+    setManageTab("current");
   };
 
   const generateSlug = (name: string) => {
@@ -250,16 +343,51 @@ export default function AdminCategories() {
     return supplier?.name || "Unknown";
   };
 
+  const toggleProductSelection = (productId: number) => {
+    setSelectedProductIds(prev => 
+      prev.includes(productId) 
+        ? prev.filter(id => id !== productId)
+        : [...prev, productId]
+    );
+  };
+
+  const handleAddSelectedProducts = () => {
+    if (managingCategory && selectedProductIds.length > 0) {
+      addProductsMutation.mutate({
+        categoryId: managingCategory.id,
+        productIds: selectedProductIds,
+      });
+    }
+  };
+
+  const handleRemoveSelectedProducts = () => {
+    if (managingCategory && selectedProductIds.length > 0) {
+      removeProductsMutation.mutate({
+        categoryId: managingCategory.id,
+        productIds: selectedProductIds,
+      });
+    }
+  };
+
+  const handleRemoveSingleProduct = (productId: number) => {
+    if (managingCategory) {
+      removeProductsMutation.mutate({
+        categoryId: managingCategory.id,
+        productIds: [productId],
+      });
+    }
+  };
+
   return (
     <div className="p-6 space-y-6">
       <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4">
         <div>
-          <h1 className="text-2xl font-semibold" data-testid="text-page-title">Category Management</h1>
-          <p className="text-muted-foreground">Organize products into categories per supplier</p>
+          <h1 className="text-2xl font-semibold" data-testid="text-page-title">Collections</h1>
+          <p className="text-muted-foreground">Create collections and add products to organize your catalog</p>
         </div>
         <Button onClick={openCreateDialog} data-testid="button-add-category">
           <Plus className="h-4 w-4 mr-2" />
-          Add Category
+          Create Collection
         </Button>
       </div>
 
@@ -293,7 +421,7 @@ export default function AdminCategories() {
       <div className="grid gap-4 md:grid-cols-4">
         <Card>
           <CardHeader className="flex flex-row items-center justify-between gap-2 space-y-0 pb-2">
-            <CardTitle className="text-sm font-medium">Total Categories</CardTitle>
+            <CardTitle className="text-sm font-medium">Total Collections</CardTitle>
             <Layers className="h-4 w-4 text-muted-foreground" />
           </CardHeader>
           <CardContent>
@@ -302,7 +430,7 @@ export default function AdminCategories() {
         </Card>
         <Card>
           <CardHeader className="flex flex-row items-center justify-between gap-2 space-y-0 pb-2">
-            <CardTitle className="text-sm font-medium">Active Categories</CardTitle>
+            <CardTitle className="text-sm font-medium">Active Collections</CardTitle>
             <Layers className="h-4 w-4 text-green-500" />
           </CardHeader>
           <CardContent>
@@ -313,7 +441,7 @@ export default function AdminCategories() {
         </Card>
         <Card>
           <CardHeader className="flex flex-row items-center justify-between gap-2 space-y-0 pb-2">
-            <CardTitle className="text-sm font-medium">Parent Categories</CardTitle>
+            <CardTitle className="text-sm font-medium">Parent Collections</CardTitle>
             <Layers className="h-4 w-4 text-blue-500" />
           </CardHeader>
           <CardContent>
@@ -339,8 +467,8 @@ export default function AdminCategories() {
         <CardHeader>
           <CardTitle>
             {supplierFilter !== "all" 
-              ? `Categories for ${getSupplierName(parseInt(supplierFilter))}`
-              : "All Categories"
+              ? `Collections for ${getSupplierName(parseInt(supplierFilter))}`
+              : "All Collections"
             }
           </CardTitle>
         </CardHeader>
@@ -352,7 +480,7 @@ export default function AdminCategories() {
           ) : categories.length === 0 ? (
             <div className="text-center py-8 text-muted-foreground">
               <Layers className="h-12 w-12 mx-auto mb-4 opacity-50" />
-              <p>No categories found. Create your first category to get started.</p>
+              <p>No collections found. Create your first collection to get started.</p>
             </div>
           ) : (
             <Table>
@@ -398,7 +526,16 @@ export default function AdminCategories() {
                         <span className="text-muted-foreground">—</span>
                       )}
                     </TableCell>
-                    <TableCell>{category.productCount || 0}</TableCell>
+                    <TableCell>
+                      <Button 
+                        variant="ghost" 
+                        className="p-0 h-auto font-normal text-primary underline-offset-4 hover:underline"
+                        onClick={() => handleManageProducts(category)}
+                        data-testid={`button-manage-products-${category.id}`}
+                      >
+                        {category.productCount || 0} products
+                      </Button>
+                    </TableCell>
                     <TableCell>
                       <Badge variant={category.isActive ? "default" : "secondary"}>
                         {category.isActive ? "Active" : "Inactive"}
@@ -412,6 +549,10 @@ export default function AdminCategories() {
                           </Button>
                         </DropdownMenuTrigger>
                         <DropdownMenuContent align="end">
+                          <DropdownMenuItem onClick={() => handleManageProducts(category)} data-testid={`button-manage-${category.id}`}>
+                            <FolderPlus className="h-4 w-4 mr-2" />
+                            Manage Products
+                          </DropdownMenuItem>
                           <DropdownMenuItem onClick={() => handleEdit(category)} data-testid={`button-edit-${category.id}`}>
                             <Pencil className="h-4 w-4 mr-2" />
                             Edit
@@ -435,10 +576,11 @@ export default function AdminCategories() {
         </CardContent>
       </Card>
 
+      {/* Create/Edit Collection Dialog */}
       <Dialog open={dialogOpen} onOpenChange={setDialogOpen}>
         <DialogContent className="max-w-lg">
           <DialogHeader>
-            <DialogTitle>{editingCategory ? "Edit Category" : "Create Category"}</DialogTitle>
+            <DialogTitle>{editingCategory ? "Edit Collection" : "Create Collection"}</DialogTitle>
           </DialogHeader>
           <Form {...form}>
             <form onSubmit={form.handleSubmit(onSubmit)} className="space-y-4">
@@ -476,10 +618,10 @@ export default function AdminCategories() {
                 name="name"
                 render={({ field }) => (
                   <FormItem>
-                    <FormLabel>Name</FormLabel>
+                    <FormLabel>Collection Name</FormLabel>
                     <FormControl>
                       <Input
-                        placeholder="Electronics"
+                        placeholder="e.g., Sofa, Electronics, Beauty"
                         {...field}
                         onChange={(e) => {
                           field.onChange(e);
@@ -502,7 +644,7 @@ export default function AdminCategories() {
                   <FormItem>
                     <FormLabel>Slug</FormLabel>
                     <FormControl>
-                      <Input placeholder="electronics" {...field} data-testid="input-category-slug" />
+                      <Input placeholder="e.g., sofa" {...field} data-testid="input-category-slug" />
                     </FormControl>
                     <FormMessage />
                   </FormItem>
@@ -517,7 +659,7 @@ export default function AdminCategories() {
                     <FormLabel>Description</FormLabel>
                     <FormControl>
                       <Textarea
-                        placeholder="Category description..."
+                        placeholder="Collection description..."
                         {...field}
                         value={field.value || ""}
                         data-testid="input-category-description"
@@ -547,7 +689,7 @@ export default function AdminCategories() {
                 name="parentId"
                 render={({ field }) => (
                   <FormItem>
-                    <FormLabel>Parent Category (optional)</FormLabel>
+                    <FormLabel>Parent Collection (optional)</FormLabel>
                     <Select
                       value={field.value?.toString() || "none"}
                       onValueChange={(value) => field.onChange(value === "none" ? null : parseInt(value))}
@@ -601,7 +743,7 @@ export default function AdminCategories() {
                     <div className="space-y-0.5">
                       <FormLabel>Active</FormLabel>
                       <div className="text-sm text-muted-foreground">
-                        Category will be visible to merchants
+                        Collection will be visible to merchants
                       </div>
                     </div>
                     <FormControl>
@@ -624,7 +766,7 @@ export default function AdminCategories() {
                   disabled={createMutation.isPending || updateMutation.isPending}
                   data-testid="button-save-category"
                 >
-                  {createMutation.isPending || updateMutation.isPending ? "Saving..." : "Save Category"}
+                  {createMutation.isPending || updateMutation.isPending ? "Saving..." : "Save Collection"}
                 </Button>
               </div>
             </form>
@@ -632,13 +774,180 @@ export default function AdminCategories() {
         </DialogContent>
       </Dialog>
 
+      {/* Manage Products Dialog */}
+      <Dialog open={manageProductsOpen} onOpenChange={setManageProductsOpen}>
+        <DialogContent className="max-w-4xl max-h-[85vh]">
+          <DialogHeader>
+            <DialogTitle className="flex items-center gap-2">
+              <FolderPlus className="h-5 w-5" />
+              Manage Products in "{managingCategory?.name}"
+            </DialogTitle>
+            <DialogDescription>
+              Add or remove products from this collection
+            </DialogDescription>
+          </DialogHeader>
+          
+          <Tabs value={manageTab} onValueChange={(v) => { setManageTab(v as "current" | "add"); setSelectedProductIds([]); }}>
+            <TabsList className="grid w-full grid-cols-2">
+              <TabsTrigger value="current" data-testid="tab-current-products">
+                Current Products ({categoryProducts.length})
+              </TabsTrigger>
+              <TabsTrigger value="add" data-testid="tab-add-products">
+                Add Products
+              </TabsTrigger>
+            </TabsList>
+            
+            <TabsContent value="current" className="mt-4">
+              {categoryProductsLoading ? (
+                <div className="flex items-center justify-center py-8">
+                  <Loader2 className="h-6 w-6 animate-spin" />
+                </div>
+              ) : categoryProducts.length === 0 ? (
+                <div className="text-center py-8 text-muted-foreground">
+                  <Package className="h-12 w-12 mx-auto mb-4 opacity-50" />
+                  <p>No products in this collection yet.</p>
+                  <p className="text-sm">Go to "Add Products" to add products to this collection.</p>
+                </div>
+              ) : (
+                <>
+                  {selectedProductIds.length > 0 && (
+                    <div className="flex items-center justify-between mb-4 p-3 bg-muted rounded-lg">
+                      <span>{selectedProductIds.length} products selected</span>
+                      <Button 
+                        variant="destructive" 
+                        size="sm"
+                        onClick={handleRemoveSelectedProducts}
+                        disabled={removeProductsMutation.isPending}
+                        data-testid="button-remove-selected"
+                      >
+                        {removeProductsMutation.isPending ? "Removing..." : "Remove Selected"}
+                      </Button>
+                    </div>
+                  )}
+                  <ScrollArea className="h-[400px]">
+                    <div className="space-y-2">
+                      {categoryProducts.map((product) => (
+                        <div 
+                          key={product.id} 
+                          className="flex items-center gap-3 p-3 border rounded-lg hover-elevate"
+                          data-testid={`product-item-${product.id}`}
+                        >
+                          <Checkbox 
+                            checked={selectedProductIds.includes(product.id)}
+                            onCheckedChange={() => toggleProductSelection(product.id)}
+                            data-testid={`checkbox-product-${product.id}`}
+                          />
+                          {product.images && product.images[0] && (
+                            <img 
+                              src={product.images[0].url} 
+                              alt="" 
+                              className="h-10 w-10 rounded object-cover"
+                            />
+                          )}
+                          <div className="flex-1 min-w-0">
+                            <p className="font-medium truncate">{product.title}</p>
+                            <p className="text-sm text-muted-foreground">${product.supplierPrice?.toFixed(2)}</p>
+                          </div>
+                          <Button 
+                            variant="ghost" 
+                            size="icon"
+                            onClick={() => handleRemoveSingleProduct(product.id)}
+                            disabled={removeProductsMutation.isPending}
+                            data-testid={`button-remove-product-${product.id}`}
+                          >
+                            <X className="h-4 w-4" />
+                          </Button>
+                        </div>
+                      ))}
+                    </div>
+                  </ScrollArea>
+                </>
+              )}
+            </TabsContent>
+            
+            <TabsContent value="add" className="mt-4">
+              <div className="space-y-4">
+                <div className="flex gap-2">
+                  <div className="relative flex-1">
+                    <Search className="absolute left-3 top-1/2 -translate-y-1/2 h-4 w-4 text-muted-foreground" />
+                    <Input 
+                      placeholder="Search products to add (min 2 characters)..."
+                      value={productSearchTerm}
+                      onChange={(e) => setProductSearchTerm(e.target.value)}
+                      className="pl-9"
+                      data-testid="input-search-products"
+                    />
+                  </div>
+                  {selectedProductIds.length > 0 && (
+                    <Button 
+                      onClick={handleAddSelectedProducts}
+                      disabled={addProductsMutation.isPending}
+                      data-testid="button-add-selected"
+                    >
+                      {addProductsMutation.isPending ? "Adding..." : `Add ${selectedProductIds.length} Products`}
+                    </Button>
+                  )}
+                </div>
+
+                {productSearchTerm.length < 2 ? (
+                  <div className="text-center py-8 text-muted-foreground">
+                    <Search className="h-12 w-12 mx-auto mb-4 opacity-50" />
+                    <p>Enter at least 2 characters to search for products</p>
+                  </div>
+                ) : availableProductsLoading ? (
+                  <div className="flex items-center justify-center py-8">
+                    <Loader2 className="h-6 w-6 animate-spin" />
+                  </div>
+                ) : availableProducts.length === 0 ? (
+                  <div className="text-center py-8 text-muted-foreground">
+                    <Package className="h-12 w-12 mx-auto mb-4 opacity-50" />
+                    <p>No products found matching "{productSearchTerm}"</p>
+                  </div>
+                ) : (
+                  <ScrollArea className="h-[350px]">
+                    <div className="space-y-2">
+                      {availableProducts.map((product) => (
+                        <div 
+                          key={product.id} 
+                          className="flex items-center gap-3 p-3 border rounded-lg hover-elevate cursor-pointer"
+                          onClick={() => toggleProductSelection(product.id)}
+                          data-testid={`available-product-${product.id}`}
+                        >
+                          <Checkbox 
+                            checked={selectedProductIds.includes(product.id)}
+                            onCheckedChange={() => toggleProductSelection(product.id)}
+                            data-testid={`checkbox-add-product-${product.id}`}
+                          />
+                          {product.images && product.images[0] && (
+                            <img 
+                              src={product.images[0].url} 
+                              alt="" 
+                              className="h-10 w-10 rounded object-cover"
+                            />
+                          )}
+                          <div className="flex-1 min-w-0">
+                            <p className="font-medium truncate">{product.title}</p>
+                            <p className="text-sm text-muted-foreground">${product.supplierPrice?.toFixed(2)}</p>
+                          </div>
+                        </div>
+                      ))}
+                    </div>
+                  </ScrollArea>
+                )}
+              </div>
+            </TabsContent>
+          </Tabs>
+        </DialogContent>
+      </Dialog>
+
+      {/* Delete Confirmation Dialog */}
       <AlertDialog open={deleteDialogOpen} onOpenChange={setDeleteDialogOpen}>
         <AlertDialogContent>
           <AlertDialogHeader>
-            <AlertDialogTitle>Delete Category</AlertDialogTitle>
+            <AlertDialogTitle>Delete Collection</AlertDialogTitle>
             <AlertDialogDescription>
               Are you sure you want to delete "{categoryToDelete?.name}"? This action cannot be undone.
-              Products in this category will no longer be categorized.
+              Products in this collection will no longer be categorized.
             </AlertDialogDescription>
           </AlertDialogHeader>
           <AlertDialogFooter>
