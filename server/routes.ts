@@ -4067,7 +4067,7 @@ export async function registerRoutes(
           currentPlan,
           availablePlans: plans,
           freeForLifePlan,
-          freeForLifeThreshold: 5000000, // $50,000 in cents
+          freeForLifeThreshold: 100000000, // $1,000,000 in cents
         },
       });
     } catch (error: any) {

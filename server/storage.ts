@@ -1003,7 +1003,7 @@ export class DatabaseStorage implements IStorage {
     const subscription = await this.getSubscriptionByMerchant(merchantId);
     if (!subscription) return undefined;
 
-    const FREE_FOR_LIFE_THRESHOLD = 5000000; // $50,000 in cents
+    const FREE_FOR_LIFE_THRESHOLD = 100000000; // $1,000,000 in cents
     const newLifetimeSales = (subscription.lifetimeSales || 0) + amount;
     const progressPercentage = Math.min(Math.round((newLifetimeSales / FREE_FOR_LIFE_THRESHOLD) * 100), 100);
 
@@ -1029,7 +1029,7 @@ export class DatabaseStorage implements IStorage {
     const subscription = await this.getSubscriptionByMerchant(merchantId);
     if (!subscription) return false;
 
-    const FREE_FOR_LIFE_THRESHOLD = 5000000; // $50,000 in cents
+    const FREE_FOR_LIFE_THRESHOLD = 100000000; // $1,000,000 in cents
     if ((subscription.lifetimeSales || 0) >= FREE_FOR_LIFE_THRESHOLD && subscription.status !== 'free_for_life') {
       await db
         .update(subscriptions)
