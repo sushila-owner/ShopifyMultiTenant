@@ -600,8 +600,10 @@ export default function CatalogPage() {
     const stock = product.inventoryQuantity || 0;
     const isSelected = selectedProducts.includes(product.id);
     const variantCount = (product.variants as any[])?.length || 0;
-    const profit = calculateProfit(product.supplierPrice);
-    const profitPercent = ((profit / product.supplierPrice) * 100).toFixed(0);
+    // Use actual merchantPrice from database (includes supplier markups like GigaB2B 60%)
+    const actualMerchantPrice = product.merchantPrice || product.supplierPrice;
+    const profit = actualMerchantPrice - product.supplierPrice;
+    const profitPercent = product.supplierPrice > 0 ? ((profit / product.supplierPrice) * 100).toFixed(0) : "0";
 
     return (
       <div
@@ -718,9 +720,11 @@ export default function CatalogPage() {
           <div className="space-y-2">
             <div className="flex items-baseline gap-2">
               <span className="text-lg font-bold text-foreground">
+                {formatPrice(actualMerchantPrice)}
+              </span>
+              <span className="text-xs text-muted-foreground line-through ml-1">
                 {formatPrice(product.supplierPrice)}
               </span>
-              <span className="text-xs text-muted-foreground">cost</span>
             </div>
             
             <div className="flex items-center gap-2 p-2 rounded-lg bg-emerald-500/10 border border-emerald-500/20">
@@ -745,8 +749,10 @@ export default function CatalogPage() {
     const stock = product.inventoryQuantity || 0;
     const isSelected = selectedProducts.includes(product.id);
     const variantCount = (product.variants as any[])?.length || 0;
-    const profit = calculateProfit(product.supplierPrice);
-    const profitPercent = ((profit / product.supplierPrice) * 100).toFixed(0);
+    // Use actual merchantPrice from database (includes supplier markups like GigaB2B 60%)
+    const actualMerchantPrice = product.merchantPrice || product.supplierPrice;
+    const profit = actualMerchantPrice - product.supplierPrice;
+    const profitPercent = product.supplierPrice > 0 ? ((profit / product.supplierPrice) * 100).toFixed(0) : "0";
 
     return (
       <div
@@ -813,7 +819,8 @@ export default function CatalogPage() {
 
         <div className="flex flex-col items-end justify-between">
           <div className="text-right">
-            <p className="text-lg font-bold">{formatPrice(product.supplierPrice)}</p>
+            <p className="text-lg font-bold">{formatPrice(actualMerchantPrice)}</p>
+            <p className="text-xs text-muted-foreground line-through">{formatPrice(product.supplierPrice)}</p>
             <p className="text-sm text-emerald-600">+{formatPrice(profit)} ({profitPercent}%)</p>
           </div>
           <div className="flex gap-2">
