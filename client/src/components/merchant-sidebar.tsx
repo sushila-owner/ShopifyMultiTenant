@@ -10,6 +10,7 @@ import {
   SidebarMenu,
   SidebarMenuButton,
   SidebarMenuItem,
+  useSidebar,
 } from "@/components/ui/sidebar";
 import { Avatar, AvatarFallback } from "@/components/ui/avatar";
 import { Badge } from "@/components/ui/badge";
@@ -56,6 +57,7 @@ export function MerchantSidebar() {
   const [location] = useLocation();
   const { user, logout } = useAuth();
   const { t } = useI18n();
+  const { setOpenMobile, isMobile } = useSidebar();
 
   const { data: stats } = useQuery<{ currentProductCount: number; productLimit: number }>({
     queryKey: ["/api/merchants/stats"],
@@ -71,6 +73,12 @@ export function MerchantSidebar() {
   };
 
   const productUsage = stats ? (stats.currentProductCount / stats.productLimit) * 100 : 0;
+
+  const handleNavClick = () => {
+    if (isMobile) {
+      setOpenMobile(false);
+    }
+  };
 
   return (
     <Sidebar>
@@ -96,7 +104,7 @@ export function MerchantSidebar() {
                     isActive={isActive(item.url)}
                     data-testid={`nav-${item.url.split('/').pop()}`}
                   >
-                    <Link href={item.url}>
+                    <Link href={item.url} onClick={handleNavClick}>
                       <item.icon className="h-4 w-4" />
                       <span>{t(item.titleKey)}</span>
                     </Link>
@@ -118,7 +126,7 @@ export function MerchantSidebar() {
                     isActive={isActive(item.url)}
                     data-testid={`nav-${item.url.split('/').pop()}`}
                   >
-                    <Link href={item.url}>
+                    <Link href={item.url} onClick={handleNavClick}>
                       <item.icon className="h-4 w-4" />
                       <span>{t(item.titleKey)}</span>
                     </Link>
@@ -140,7 +148,7 @@ export function MerchantSidebar() {
                     isActive={isActive(item.url)}
                     data-testid={`nav-${item.url.split('/').pop()}`}
                   >
-                    <Link href={item.url}>
+                    <Link href={item.url} onClick={handleNavClick}>
                       <item.icon className="h-4 w-4" />
                       <span className="flex-1">{t(item.titleKey)}</span>
                       {item.url === "/dashboard/wallet" && walletData?.data && (

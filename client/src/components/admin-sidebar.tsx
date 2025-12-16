@@ -10,6 +10,7 @@ import {
   SidebarMenu,
   SidebarMenuButton,
   SidebarMenuItem,
+  useSidebar,
 } from "@/components/ui/sidebar";
 import { Avatar, AvatarFallback } from "@/components/ui/avatar";
 import { Badge } from "@/components/ui/badge";
@@ -54,10 +55,17 @@ const settingsMenuItems = [
 export function AdminSidebar() {
   const [location] = useLocation();
   const { user, logout } = useAuth();
+  const { setOpenMobile, isMobile } = useSidebar();
 
   const isActive = (url: string) => {
     if (url === "/admin") return location === "/admin";
     return location.startsWith(url);
+  };
+
+  const handleNavClick = () => {
+    if (isMobile) {
+      setOpenMobile(false);
+    }
   };
 
   return (
@@ -84,7 +92,7 @@ export function AdminSidebar() {
                     isActive={isActive(item.url)}
                     data-testid={`nav-${item.title.toLowerCase()}`}
                   >
-                    <Link href={item.url}>
+                    <Link href={item.url} onClick={handleNavClick}>
                       <item.icon className="h-4 w-4" />
                       <span>{item.title}</span>
                     </Link>
@@ -106,7 +114,7 @@ export function AdminSidebar() {
                     isActive={isActive(item.url)}
                     data-testid={`nav-${item.title.toLowerCase().replace(/\s+/g, "-")}`}
                   >
-                    <Link href={item.url}>
+                    <Link href={item.url} onClick={handleNavClick}>
                       <item.icon className="h-4 w-4" />
                       <span>{item.title}</span>
                     </Link>
@@ -128,7 +136,7 @@ export function AdminSidebar() {
                     isActive={isActive(item.url)}
                     data-testid={`nav-${item.title.toLowerCase().replace(/\s+/g, "-")}`}
                   >
-                    <Link href={item.url}>
+                    <Link href={item.url} onClick={handleNavClick}>
                       <item.icon className="h-4 w-4" />
                       <span>{item.title}</span>
                     </Link>
