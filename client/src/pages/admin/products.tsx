@@ -44,6 +44,7 @@ import {
   DollarSign,
   Percent,
   Settings,
+  Tag,
 } from "lucide-react";
 import { apiRequest, queryClient } from "@/lib/queryClient";
 import { useToast } from "@/hooks/use-toast";
@@ -92,6 +93,8 @@ export default function AdminProductsPage() {
   const [editingProduct, setEditingProduct] = useState<Product | null>(null);
   const [fullEditProduct, setFullEditProduct] = useState<Product | null>(null);
   const [bulkEditOpen, setBulkEditOpen] = useState(false);
+  const [bulkCategoryOpen, setBulkCategoryOpen] = useState(false);
+  const [selectedCategoryId, setSelectedCategoryId] = useState<string>("");
   const [pricingType, setPricingType] = useState<"percentage" | "fixed">("percentage");
   const [pricingValue, setPricingValue] = useState("");
   const [editFormData, setEditFormData] = useState({
@@ -187,6 +190,23 @@ export default function AdminProductsPage() {
       setBulkEditOpen(false);
       setSelectedProducts(new Set());
       setPricingValue("");
+    },
+    onError: (error: Error) => {
+      toast({ title: "Error", description: error.message, variant: "destructive" });
+    },
+  });
+
+  const bulkCategoryMutation = useMutation({
+    mutationFn: async ({ categoryId, productIds }: { categoryId: number; productIds: number[] }) => {
+      const response = await apiRequest("POST", `/api/admin/categories/${categoryId}/products`, { productIds });
+      return response.json();
+    },
+    onSuccess: (data) => {
+      queryClient.invalidateQueries({ queryKey: ["/api/admin/products"] });
+      toast({ title: "Success", description: `Assigned ${data.data?.updatedCount || 0} products to category` });
+      setBulkCategoryOpen(false);
+      setSelectedProducts(new Set());
+      setSelectedCategoryId("");
     },
     onError: (error: Error) => {
       toast({ title: "Error", description: error.message, variant: "destructive" });
@@ -453,6 +473,15 @@ export default function AdminProductsPage() {
                 >
                   <DollarSign className="h-4 w-4" />
                   Bulk Edit Markup
+                </Button>
+                <Button
+                  onClick={() => setBulkCategoryOpen(true)}
+                  variant="outline"
+                  className="gap-2"
+                  data-testid="button-bulk-assign-category"
+                >
+                  <Tag className="h-4 w-4" />
+                  Assign to Category
                 </Button>
               </div>
             </div>
@@ -810,6 +839,62 @@ export default function AdminProductsPage() {
               data-testid="button-apply-bulk-pricing"
             >
               {bulkUpdateMutation.isPending ? "Applying..." : "Apply to All"}
+            </Button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
+
+      <Dialog open={bulkCategoryOpen} onOpenChange={setBulkCategoryOpen}>
+        <DialogContent>
+          <DialogHeader>
+            <DialogTitle>Assign to Category</DialogTitle>
+            <DialogDescription>
+              Assign {selectedProducts.size} selected product{selectedProducts.size > 1 ? "s" : ""} to a category
+            </DialogDescription>
+          </DialogHeader>
+          <div className="space-y-4 py-4">
+            <div className="space-y-2">
+              <Label>Select Category</Label>
+              <Select value={selectedCategoryId} onValueChange={setSelectedCategoryId}>
+                <SelectTrigger data-testid="select-bulk-category">
+                  <SelectValue placeholder="Choose a category..." />
+                </SelectTrigger>
+                <SelectContent>
+                  {categories.map((cat) => (
+                    <SelectItem key={cat.id} value={cat.id.toString()}>
+                      {cat.name}
+                    </SelectItem>
+                  ))}
+                </SelectContent>
+              </Select>
+            </div>
+            <div className="rounded-lg border p-4 bg-muted/50">
+              <p className="text-sm text-muted-foreground">
+                This will assign all {selectedProducts.size} selected products to the{" "}
+                <span className="font-medium text-foreground">
+                  {categories.find(c => c.id.toString() === selectedCategoryId)?.name || "selected"}
+                </span>{" "}
+                category.
+              </p>
+            </div>
+          </div>
+          <DialogFooter>
+            <Button variant="outline" onClick={() => setBulkCategoryOpen(false)}>
+              Cancel
+            </Button>
+            <Button
+              onClick={() => {
+                if (selectedCategoryId) {
+                  bulkCategoryMutation.mutate({
+                    categoryId: parseInt(selectedCategoryId),
+                    productIds: Array.from(selectedProducts),
+                  });
+                }
+              }}
+              disabled={!selectedCategoryId || bulkCategoryMutation.isPending}
+              data-testid="button-apply-bulk-category"
+            >
+              {bulkCategoryMutation.isPending ? "Assigning..." : "Assign to Category"}
             </Button>
           </DialogFooter>
         </DialogContent>
