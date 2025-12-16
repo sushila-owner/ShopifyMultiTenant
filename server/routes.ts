@@ -86,6 +86,7 @@ export async function registerRoutes(
   await storage.seedDefaultPlans();
   await storage.seedAdminUser();
   await storage.seedGigaB2BSupplier();
+  await storage.seedShopifyLuxuryCategories();
   await storage.seedSampleOrders();
 
   // ==================== SHOPIFY OAUTH ROUTES ====================

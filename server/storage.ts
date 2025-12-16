@@ -210,6 +210,7 @@ export interface IStorage {
   seedDefaultPlans(): Promise<void>;
   seedAdminUser(): Promise<User>;
   seedGigaB2BSupplier(): Promise<void>;
+  seedShopifyLuxuryCategories(): Promise<void>;
 
   // Wallet
   getWalletBalance(merchantId: number): Promise<WalletBalance | undefined>;
@@ -1770,6 +1771,53 @@ export class DatabaseStorage implements IStorage {
       },
     });
     console.log("GigaB2B supplier seeded successfully");
+  }
+
+  async seedShopifyLuxuryCategories(): Promise<void> {
+    // Get the Shopify luxury supplier
+    const shopifySuppliers = await db.select().from(suppliers).where(eq(suppliers.type, "shopify")).limit(1);
+    if (shopifySuppliers.length === 0) {
+      console.log("Shopify supplier not found, skipping luxury categories seeding...");
+      return;
+    }
+    
+    const shopifySupplierId = shopifySuppliers[0].id;
+    
+    // Check if categories already exist for this supplier
+    const existingCategories = await db.select().from(categories)
+      .where(eq(categories.supplierId, shopifySupplierId))
+      .limit(1);
+    
+    if (existingCategories.length > 0) {
+      console.log("Shopify luxury categories already seeded, skipping...");
+      return;
+    }
+    
+    // Define the permanent luxury categories
+    const luxuryCategories = [
+      { name: "Designer Clothing", slug: "designer-clothing", description: "Men's and women's designer clothing", sortOrder: 1 },
+      { name: "Luxury Footwear", slug: "luxury-footwear", description: "Premium designer footwear", sortOrder: 2 },
+      { name: "Premium Handbags & Wallets", slug: "premium-handbags-wallets", description: "Luxury handbags and wallets", sortOrder: 3 },
+      { name: "Fashion Accessories", slug: "fashion-accessories", description: "Belts, sunglasses, scarves, hats", sortOrder: 4 },
+      { name: "Luxury Watches", slug: "luxury-watches", description: "Premium designer watches", sortOrder: 5 },
+      { name: "Jewelry", slug: "jewelry", description: "Fine jewelry and accessories", sortOrder: 6 },
+      { name: "Beauty & Cosmetics", slug: "beauty-cosmetics", description: "Premium beauty and cosmetic products", sortOrder: 7 },
+      { name: "Fragrances / Perfumes", slug: "fragrances-perfumes", description: "Designer fragrances and perfumes", sortOrder: 8 },
+    ];
+    
+    for (const cat of luxuryCategories) {
+      await db.insert(categories).values({
+        supplierId: shopifySupplierId,
+        name: cat.name,
+        slug: `shopify-luxury-${cat.slug}`,
+        description: cat.description,
+        sortOrder: cat.sortOrder,
+        isActive: true,
+        productCount: 0,
+      });
+    }
+    
+    console.log(`Seeded ${luxuryCategories.length} luxury categories for Shopify supplier`);
   }
 
   // OTP Verifications
