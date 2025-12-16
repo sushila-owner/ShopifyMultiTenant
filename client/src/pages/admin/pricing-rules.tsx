@@ -441,7 +441,11 @@ export default function AdminPricingRulesPage() {
                 </SelectTrigger>
                 <SelectContent>
                   {suppliers.map((supplier) => (
-                    <SelectItem key={supplier.id} value={supplier.id.toString()}>
+                    <SelectItem 
+                      key={supplier.id} 
+                      value={supplier.id.toString()}
+                      data-testid={`select-option-supplier-${supplier.id}`}
+                    >
                       {supplier.name}
                     </SelectItem>
                   ))}
