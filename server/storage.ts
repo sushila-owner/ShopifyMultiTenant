@@ -251,6 +251,7 @@ export class DatabaseStorage implements IStorage {
     importedAt: products.importedAt,
     createdAt: products.createdAt,
     updatedAt: products.updatedAt,
+    fulfillmentFee: products.fulfillmentFee,
   };
 
   // Helper to strip categoryId from insert data when needed
