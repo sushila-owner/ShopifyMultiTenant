@@ -192,7 +192,6 @@ class SupplierSyncService {
       supplierId,
       title: product.title,
       description: product.description,
-      category: product.category || "Uncategorized",
       tags: product.tags,
       images: product.images,
       variants: product.variants,
@@ -208,10 +207,17 @@ class SupplierSyncService {
     };
 
     if (existingProducts && existingProducts.length > 0) {
-      // Update existing product
-      await storage.updateProduct(existingProducts[0].id, productData);
+      const existingProduct = existingProducts[0];
+      // Preserve admin-assigned category if it exists (categoryId is set)
+      // Only update category if no admin assignment was made
+      if (!existingProduct.categoryId) {
+        (productData as any).category = product.category || "Uncategorized";
+      }
+      // Update existing product (preserving categoryId and category if admin-assigned)
+      await storage.updateProduct(existingProduct.id, productData);
     } else {
-      // Create new product
+      // Create new product with supplier category
+      (productData as any).category = product.category || "Uncategorized";
       await storage.createProduct(productData as InsertProduct);
     }
   }
