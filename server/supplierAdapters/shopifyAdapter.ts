@@ -11,16 +11,26 @@ import {
   ShopifyCredentials,
 } from "./types";
 
+const SHOPIFY_API_VERSION = "2024-10";
+
+interface GraphQLResponse<T> {
+  data?: T;
+  errors?: Array<{
+    message: string;
+    locations?: Array<{ line: number; column: number }>;
+    path?: string[];
+  }>;
+}
+
 export class ShopifyAdapter extends BaseAdapter {
   readonly type = "shopify" as const;
   private storeDomain: string;
   private accessToken: string;
-  private apiVersion = "2024-01";
+  private apiVersion = SHOPIFY_API_VERSION;
 
   constructor(credentials: ShopifyCredentials) {
     super(credentials);
     
-    // Resolve FROM_ENV placeholders from environment variables
     const envStoreDomain = (process.env.SHOPIFY_STORE_URL || "").trim();
     const envAccessToken = (process.env.SHOPIFY_ACCESS_TOKEN || "").trim();
     
@@ -31,25 +41,25 @@ export class ShopifyAdapter extends BaseAdapter {
     this.accessToken = (dbAccessToken === "FROM_ENV" || !dbAccessToken) ? envAccessToken : dbAccessToken;
   }
 
-  private getApiUrl(endpoint: string): string {
-    const domain = this.storeDomain.replace(/^https?:\/\//, "").replace(/\/$/, "");
-    return `https://${domain}/admin/api/${this.apiVersion}/${endpoint}`;
+  private getDomain(): string {
+    return this.storeDomain.replace(/^https?:\/\//, "").replace(/\/$/, "");
   }
 
-  private async shopifyRequest<T>(endpoint: string, options: RequestInit = {}): Promise<T> {
-    const url = this.getApiUrl(endpoint);
+  private async graphqlRequest<T>(query: string, variables?: Record<string, unknown>): Promise<GraphQLResponse<T>> {
+    const url = `https://${this.getDomain()}/admin/api/${this.apiVersion}/graphql.json`;
+
     const response = await fetch(url, {
-      ...options,
+      method: "POST",
       headers: {
         "X-Shopify-Access-Token": this.accessToken,
         "Content-Type": "application/json",
-        ...options.headers,
       },
+      body: JSON.stringify({ query, variables }),
     });
 
     if (!response.ok) {
-      const error = await response.text();
-      throw new Error(`Shopify API error: ${response.status} - ${error}`);
+      const errorText = await response.text();
+      throw new Error(`Shopify GraphQL error: ${response.status} - ${errorText}`);
     }
 
     return response.json();
@@ -57,15 +67,34 @@ export class ShopifyAdapter extends BaseAdapter {
 
   async testConnection(): Promise<ConnectionTestResult> {
     try {
-      const shop = await this.shopifyRequest<{ shop: { name: string; id: number } }>("shop.json");
-      const productCount = await this.shopifyRequest<{ count: number }>("products/count.json");
-      
+      const result = await this.graphqlRequest<{
+        shop: { name: string; id: string };
+        productsCount: { count: number };
+      }>(`
+        query {
+          shop {
+            name
+            id
+          }
+          productsCount {
+            count
+          }
+        }
+      `);
+
+      if (result.errors?.length) {
+        return {
+          success: false,
+          message: result.errors[0].message,
+        };
+      }
+
       return {
         success: true,
-        message: `Connected to ${shop.shop.name}`,
+        message: `Connected to ${result.data?.shop.name}`,
         details: {
-          storeName: shop.shop.name,
-          productsCount: productCount.count,
+          storeName: result.data?.shop.name,
+          productsCount: result.data?.productsCount.count,
           apiVersion: this.apiVersion,
           capabilities: {
             readProducts: true,
@@ -84,41 +113,117 @@ export class ShopifyAdapter extends BaseAdapter {
     }
   }
 
-  async fetchProducts(page = 1, pageSize = 50, sinceId?: string): Promise<PaginatedResult<NormalizedProduct>> {
+  async fetchProducts(page = 1, pageSize = 50, cursor?: string): Promise<PaginatedResult<NormalizedProduct>> {
     try {
-      // Shopify uses cursor-based pagination with since_id
-      // page param is not used in actual request - we use since_id for pagination
-      let url = `products.json?limit=${pageSize}&status=active`;
-      if (sinceId) {
-        url += `&since_id=${sinceId}`;
+      const result = await this.graphqlRequest<{
+        products: {
+          edges: Array<{
+            cursor: string;
+            node: {
+              id: string;
+              title: string;
+              descriptionHtml: string;
+              vendor: string;
+              productType: string;
+              tags: string[];
+              status: string;
+              images: {
+                edges: Array<{
+                  node: { id: string; url: string; altText: string | null };
+                }>;
+              };
+              variants: {
+                edges: Array<{
+                  node: {
+                    id: string;
+                    title: string;
+                    sku: string;
+                    price: string;
+                    compareAtPrice: string | null;
+                    inventoryQuantity: number;
+                    barcode: string | null;
+                    weight: number | null;
+                    weightUnit: string | null;
+                    inventoryItem: { tracked: boolean } | null;
+                  };
+                }>;
+              };
+            };
+          }>;
+          pageInfo: { hasNextPage: boolean; endCursor: string | null };
+        };
+        productsCount: { count: number };
+      }>(`
+        query GetProducts($first: Int!, $cursor: String) {
+          products(first: $first, after: $cursor, query: "status:active") {
+            edges {
+              cursor
+              node {
+                id
+                title
+                descriptionHtml
+                vendor
+                productType
+                tags
+                status
+                images(first: 10) {
+                  edges {
+                    node {
+                      id
+                      url
+                      altText
+                    }
+                  }
+                }
+                variants(first: 100) {
+                  edges {
+                    node {
+                      id
+                      title
+                      sku
+                      price
+                      compareAtPrice
+                      inventoryQuantity
+                      barcode
+                      inventoryItem {
+                        tracked
+                      }
+                    }
+                  }
+                }
+              }
+            }
+            pageInfo {
+              hasNextPage
+              endCursor
+            }
+          }
+          productsCount {
+            count
+          }
+        }
+      `, { first: pageSize, cursor: cursor || null });
+
+      if (result.errors?.length) {
+        throw new Error(result.errors[0].message);
       }
-      
-      const products = await this.shopifyRequest<{
-        products: any[];
-      }>(url);
 
       const normalizedProducts: NormalizedProduct[] = [];
       
-      for (const p of products.products) {
-        const normalized = this.normalizeProduct(p);
+      for (const edge of result.data?.products.edges || []) {
+        const p = edge.node;
+        const normalized = this.normalizeGraphQLProduct(p);
         
-        // Shopify inventory logic:
-        // Check inventory_management field to determine if Shopify tracks inventory
-        // - inventory_management = "shopify" means Shopify tracks inventory
-        // - inventory_management = null/empty means inventory is not tracked (always in stock)
-        const hasInventoryTracking = p.variants?.some((v: any) => 
-          v.inventory_management === "shopify"
+        const hasInventoryTracking = p.variants.edges.some(
+          v => v.node.inventoryItem?.tracked === true
         );
         
         if (hasInventoryTracking) {
-          // Product uses Shopify inventory tracking
           const totalInventory = normalized.variants.reduce((sum, v) => sum + v.inventoryQuantity, 0);
           if (totalInventory === 0) {
-            // Product has inventory tracking and is out of stock - skip it
             continue;
           }
         } else {
-          // No inventory tracking - product is always in stock (show as 999+)
           normalized.variants = normalized.variants.map(v => ({
             ...v,
             inventoryQuantity: 999
@@ -128,19 +233,15 @@ export class ShopifyAdapter extends BaseAdapter {
         normalizedProducts.push(normalized);
       }
 
-      const countResponse = await this.shopifyRequest<{ count: number }>("products/count.json?status=active");
+      const pageInfo = result.data?.products.pageInfo;
 
-      // Determine if there are more products to fetch
-      const hasMore = products.products.length === pageSize;
-      
       return {
         items: normalizedProducts,
-        total: countResponse.count,
+        total: result.data?.productsCount.count || 0,
         page,
         pageSize,
-        hasMore,
-        // Store the last product ID for cursor-based pagination
-        nextCursor: products.products.length > 0 ? String(products.products[products.products.length - 1].id) : undefined,
+        hasMore: pageInfo?.hasNextPage || false,
+        nextCursor: pageInfo?.endCursor || undefined,
       };
     } catch (error: any) {
       throw new Error(`Failed to fetch products: ${error.message}`);
@@ -149,25 +250,101 @@ export class ShopifyAdapter extends BaseAdapter {
 
   async fetchProduct(supplierProductId: string): Promise<NormalizedProduct | null> {
     try {
-      const response = await this.shopifyRequest<{ product: any }>(
-        `products/${supplierProductId}.json`
-      );
-      const p = response.product;
-      const normalized = this.normalizeProduct(p);
+      const gid = supplierProductId.startsWith("gid://") 
+        ? supplierProductId 
+        : `gid://shopify/Product/${supplierProductId}`;
+
+      const result = await this.graphqlRequest<{
+        product: {
+          id: string;
+          title: string;
+          descriptionHtml: string;
+          vendor: string;
+          productType: string;
+          tags: string[];
+          status: string;
+          images: {
+            edges: Array<{
+              node: { id: string; url: string; altText: string | null };
+            }>;
+          };
+          variants: {
+            edges: Array<{
+              node: {
+                id: string;
+                title: string;
+                sku: string;
+                price: string;
+                compareAtPrice: string | null;
+                inventoryQuantity: number;
+                barcode: string | null;
+                inventoryItem: { tracked: boolean } | null;
+              };
+            }>;
+          };
+        } | null;
+      }>(`
+        query GetProduct($id: ID!) {
+          product(id: $id) {
+            id
+            title
+            descriptionHtml
+            vendor
+            productType
+            tags
+            status
+            images(first: 10) {
+              edges {
+                node {
+                  id
+                  url
+                  altText
+                }
+              }
+            }
+            variants(first: 100) {
+              edges {
+                node {
+                  id
+                  title
+                  sku
+                  price
+                  compareAtPrice
+                  inventoryQuantity
+                  barcode
+                  weight
+                  weightUnit
+                  inventoryItem {
+                    tracked
+                  }
+                }
+              }
+            }
+          }
+        }
+      `, { id: gid });
+
+      if (result.errors?.length) {
+        throw new Error(result.errors[0].message);
+      }
+
+      if (!result.data?.product) {
+        return null;
+      }
+
+      const p = result.data.product;
+      const normalized = this.normalizeGraphQLProduct(p);
       
-      // Check inventory_management field to determine if Shopify tracks inventory
-      const hasInventoryTracking = p.variants?.some((v: any) => 
-        v.inventory_management === "shopify"
+      const hasInventoryTracking = p.variants.edges.some(
+        v => v.node.inventoryItem?.tracked === true
       );
       
       if (hasInventoryTracking) {
         const totalInventory = normalized.variants.reduce((sum, v) => sum + v.inventoryQuantity, 0);
-        // If inventory is 0 and tracking is enabled, product is out of stock
         if (totalInventory === 0) {
           return null;
         }
       } else {
-        // No inventory tracking - product is always in stock (show as 999)
         normalized.variants = normalized.variants.map(v => ({
           ...v,
           inventoryQuantity: 999
@@ -176,7 +353,7 @@ export class ShopifyAdapter extends BaseAdapter {
       
       return normalized;
     } catch (error: any) {
-      if (error.message.includes("404")) {
+      if (error.message.includes("404") || error.message.includes("not found")) {
         return null;
       }
       throw error;
@@ -202,20 +379,6 @@ export class ShopifyAdapter extends BaseAdapter {
             }
           }
         }
-      } else {
-        const response = await this.shopifyRequest<{
-          inventory_levels: { inventory_item_id: number; available: number }[];
-        }>("inventory_levels.json?limit=250");
-        
-        for (const level of response.inventory_levels) {
-          inventoryItems.push({
-            supplierProductId: "",
-            variantId: String(level.inventory_item_id),
-            sku: "",
-            quantity: level.available,
-            available: level.available > 0,
-          });
-        }
       }
 
       return inventoryItems;
@@ -226,16 +389,38 @@ export class ShopifyAdapter extends BaseAdapter {
 
   async createOrder(order: OrderCreateRequest): Promise<OrderCreateResponse> {
     try {
-      const shopifyOrder = {
-        order: {
-          line_items: order.items.map((item) => ({
-            variant_id: item.variantId,
+      const result = await this.graphqlRequest<{
+        draftOrderCreate: {
+          draftOrder: {
+            id: string;
+            totalPrice: string;
+          } | null;
+          userErrors: Array<{ field: string[]; message: string }>;
+        };
+      }>(`
+        mutation CreateDraftOrder($input: DraftOrderInput!) {
+          draftOrderCreate(input: $input) {
+            draftOrder {
+              id
+              totalPrice
+            }
+            userErrors {
+              field
+              message
+            }
+          }
+        }
+      `, {
+        input: {
+          lineItems: order.items.map(item => ({
+            variantId: item.variantId.startsWith("gid://") 
+              ? item.variantId 
+              : `gid://shopify/ProductVariant/${item.variantId}`,
             quantity: item.quantity,
-            price: item.price,
           })),
-          shipping_address: {
-            first_name: order.shippingAddress.firstName,
-            last_name: order.shippingAddress.lastName,
+          shippingAddress: {
+            firstName: order.shippingAddress.firstName,
+            lastName: order.shippingAddress.lastName,
             address1: order.shippingAddress.address1,
             address2: order.shippingAddress.address2,
             city: order.shippingAddress.city,
@@ -245,23 +430,30 @@ export class ShopifyAdapter extends BaseAdapter {
             phone: order.shippingAddress.phone,
           },
           note: order.note,
-          financial_status: "pending",
         },
-      };
+      });
 
-      const response = await this.shopifyRequest<{ order: { id: number; total_price: string } }>(
-        "orders.json",
-        {
-          method: "POST",
-          body: JSON.stringify(shopifyOrder),
-        }
-      );
+      if (result.errors?.length) {
+        throw new Error(result.errors[0].message);
+      }
+
+      const userErrors = result.data?.draftOrderCreate.userErrors || [];
+      if (userErrors.length > 0) {
+        throw new Error(userErrors.map(e => e.message).join(", "));
+      }
+
+      const draftOrder = result.data?.draftOrderCreate.draftOrder;
+      if (!draftOrder) {
+        throw new Error("Failed to create order");
+      }
+
+      const numericId = draftOrder.id.replace("gid://shopify/DraftOrder/", "");
 
       return {
-        supplierOrderId: String(response.order.id),
+        supplierOrderId: numericId,
         status: "submitted",
-        totalCost: parseFloat(response.order.total_price),
-        rawResponse: response.order,
+        totalCost: parseFloat(draftOrder.totalPrice),
+        rawResponse: draftOrder,
       };
     } catch (error: any) {
       throw new Error(`Failed to create order: ${error.message}`);
@@ -270,27 +462,91 @@ export class ShopifyAdapter extends BaseAdapter {
 
   async getOrder(supplierOrderId: string): Promise<NormalizedOrder | null> {
     try {
-      const response = await this.shopifyRequest<{ order: any }>(
-        `orders/${supplierOrderId}.json`
-      );
+      const gid = supplierOrderId.startsWith("gid://") 
+        ? supplierOrderId 
+        : `gid://shopify/Order/${supplierOrderId}`;
 
-      const order = response.order;
+      const result = await this.graphqlRequest<{
+        order: {
+          id: string;
+          displayFulfillmentStatus: string;
+          totalPriceSet: { shopMoney: { amount: string } };
+          createdAt: string;
+          updatedAt: string;
+          lineItems: {
+            edges: Array<{
+              node: {
+                id: string;
+                title: string;
+                quantity: number;
+                variant: {
+                  id: string;
+                  sku: string;
+                  price: string;
+                  product: { id: string };
+                } | null;
+              };
+            }>;
+          };
+        } | null;
+      }>(`
+        query GetOrder($id: ID!) {
+          order(id: $id) {
+            id
+            displayFulfillmentStatus
+            totalPriceSet {
+              shopMoney {
+                amount
+              }
+            }
+            createdAt
+            updatedAt
+            lineItems(first: 50) {
+              edges {
+                node {
+                  id
+                  title
+                  quantity
+                  variant {
+                    id
+                    sku
+                    price
+                    product {
+                      id
+                    }
+                  }
+                }
+              }
+            }
+          }
+        }
+      `, { id: gid });
+
+      if (result.errors?.length) {
+        throw new Error(result.errors[0].message);
+      }
+
+      if (!result.data?.order) {
+        return null;
+      }
+
+      const order = result.data.order;
       return {
-        supplierOrderId: String(order.id),
-        status: this.mapOrderStatus(order.fulfillment_status),
-        items: order.line_items.map((item: any) => ({
-          supplierProductId: String(item.product_id),
-          variantId: String(item.variant_id),
-          quantity: item.quantity,
-          price: parseFloat(item.price),
-          fulfillmentStatus: item.fulfillment_status,
+        supplierOrderId: order.id.replace("gid://shopify/Order/", ""),
+        status: this.mapOrderStatus(order.displayFulfillmentStatus),
+        items: order.lineItems.edges.map(edge => ({
+          supplierProductId: edge.node.variant?.product.id.replace("gid://shopify/Product/", "") || "",
+          variantId: edge.node.variant?.id.replace("gid://shopify/ProductVariant/", "") || "",
+          quantity: edge.node.quantity,
+          price: parseFloat(edge.node.variant?.price || "0"),
+          fulfillmentStatus: order.displayFulfillmentStatus,
         })),
-        totalCost: parseFloat(order.total_price),
-        createdAt: order.created_at,
-        updatedAt: order.updated_at,
+        totalCost: parseFloat(order.totalPriceSet.shopMoney.amount),
+        createdAt: order.createdAt,
+        updatedAt: order.updatedAt,
       };
     } catch (error: any) {
-      if (error.message.includes("404")) {
+      if (error.message.includes("404") || error.message.includes("not found")) {
         return null;
       }
       throw error;
@@ -299,65 +555,130 @@ export class ShopifyAdapter extends BaseAdapter {
 
   async getTracking(supplierOrderId: string): Promise<TrackingInfo | null> {
     try {
-      const response = await this.shopifyRequest<{ fulfillments: any[] }>(
-        `orders/${supplierOrderId}/fulfillments.json`
-      );
+      const gid = supplierOrderId.startsWith("gid://") 
+        ? supplierOrderId 
+        : `gid://shopify/Order/${supplierOrderId}`;
 
-      if (!response.fulfillments || response.fulfillments.length === 0) {
+      const result = await this.graphqlRequest<{
+        order: {
+          fulfillments: Array<{
+            id: string;
+            status: string;
+            trackingInfo: Array<{
+              company: string | null;
+              number: string | null;
+              url: string | null;
+            }>;
+            updatedAt: string;
+          }>;
+        } | null;
+      }>(`
+        query GetOrderFulfillments($id: ID!) {
+          order(id: $id) {
+            fulfillments {
+              id
+              status
+              trackingInfo {
+                company
+                number
+                url
+              }
+              updatedAt
+            }
+          }
+        }
+      `, { id: gid });
+
+      if (result.errors?.length) {
+        throw new Error(result.errors[0].message);
+      }
+
+      const fulfillments = result.data?.order?.fulfillments;
+      if (!fulfillments || fulfillments.length === 0) {
         return null;
       }
 
-      const fulfillment = response.fulfillments[0];
+      const fulfillment = fulfillments[0];
+      const trackingInfo = fulfillment.trackingInfo[0];
+
       return {
-        trackingNumber: fulfillment.tracking_number || "",
-        carrier: fulfillment.tracking_company || "",
-        trackingUrl: fulfillment.tracking_url || undefined,
-        status: this.mapTrackingStatus(fulfillment.shipment_status),
-        lastUpdate: fulfillment.updated_at,
+        trackingNumber: trackingInfo?.number || "",
+        carrier: trackingInfo?.company || "",
+        trackingUrl: trackingInfo?.url || undefined,
+        status: this.mapTrackingStatus(fulfillment.status),
+        lastUpdate: fulfillment.updatedAt,
       };
     } catch (error: any) {
-      if (error.message.includes("404")) {
+      if (error.message.includes("404") || error.message.includes("not found")) {
         return null;
       }
       throw error;
     }
   }
 
-  private normalizeProduct(product: any): NormalizedProduct {
+  private normalizeGraphQLProduct(product: {
+    id: string;
+    title: string;
+    descriptionHtml: string;
+    vendor: string;
+    productType: string;
+    tags: string[];
+    status: string;
+    images: {
+      edges: Array<{
+        node: { id: string; url: string; altText: string | null };
+      }>;
+    };
+    variants: {
+      edges: Array<{
+        node: {
+          id: string;
+          title: string;
+          sku: string;
+          price: string;
+          compareAtPrice: string | null;
+          inventoryQuantity: number;
+          barcode?: string | null;
+        };
+      }>;
+    };
+  }): NormalizedProduct {
+    const numericId = product.id.replace("gid://shopify/Product/", "");
+    const mainVariant = product.variants.edges[0]?.node;
+
     return {
-      supplierProductId: String(product.id),
+      supplierProductId: numericId,
       title: product.title,
-      description: product.body_html || "",
-      category: product.product_type || "Uncategorized",
-      tags: product.tags ? product.tags.split(", ") : [],
-      images: (product.images || []).map((img: any, idx: number) => ({
-        url: img.src,
-        alt: img.alt || product.title,
+      description: product.descriptionHtml || "",
+      category: product.productType || "Uncategorized",
+      tags: product.tags,
+      images: product.images.edges.map((edge, idx) => ({
+        url: edge.node.url,
+        alt: edge.node.altText || product.title,
         position: idx + 1,
       })),
-      variants: (product.variants || []).map((v: any) => ({
-        id: String(v.id),
-        sku: v.sku || "",
-        barcode: v.barcode,
-        title: v.title,
-        price: parseFloat(v.price),
-        compareAtPrice: v.compare_at_price ? parseFloat(v.compare_at_price) : undefined,
-        cost: v.cost ? parseFloat(v.cost) : 0,
-        inventoryQuantity: v.inventory_quantity || 0,
-        weight: v.weight,
-        weightUnit: v.weight_unit,
+      variants: product.variants.edges.map(edge => ({
+        id: edge.node.id.replace("gid://shopify/ProductVariant/", ""),
+        sku: edge.node.sku || "",
+        barcode: edge.node.barcode || undefined,
+        title: edge.node.title,
+        price: parseFloat(edge.node.price),
+        compareAtPrice: edge.node.compareAtPrice ? parseFloat(edge.node.compareAtPrice) : undefined,
+        cost: 0,
+        inventoryQuantity: edge.node.inventoryQuantity || 0,
       })),
-      supplierSku: product.variants?.[0]?.sku || "",
-      supplierPrice: product.variants?.[0] ? parseFloat(product.variants[0].price) : 0,
+      supplierSku: mainVariant?.sku || "",
+      supplierPrice: mainVariant ? parseFloat(mainVariant.price) : 0,
     };
   }
 
   private mapOrderStatus(status: string | null): NormalizedOrder["status"] {
-    switch (status) {
-      case "fulfilled":
+    switch (status?.toUpperCase()) {
+      case "FULFILLED":
         return "shipped";
-      case "partial":
+      case "PARTIALLY_FULFILLED":
         return "processing";
+      case "UNFULFILLED":
       case null:
         return "pending";
       default:
@@ -366,14 +687,14 @@ export class ShopifyAdapter extends BaseAdapter {
   }
 
   private mapTrackingStatus(status: string | null): TrackingInfo["status"] {
-    switch (status) {
-      case "delivered":
+    switch (status?.toUpperCase()) {
+      case "DELIVERED":
         return "delivered";
-      case "in_transit":
+      case "IN_TRANSIT":
         return "in_transit";
-      case "out_for_delivery":
+      case "OUT_FOR_DELIVERY":
         return "out_for_delivery";
-      case "failure":
+      case "FAILURE":
         return "exception";
       default:
         return "pending";
