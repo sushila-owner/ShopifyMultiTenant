@@ -48,6 +48,31 @@ Drizzle ORM is used with PostgreSQL. The app supports both Neon PostgreSQL (pref
   - Auto-logs in the merchant and redirects to dashboard
   - Entry point: GET `/api/shopify/install?shop=store.myshopify.com`
 
+### Shopify App Store Compliance
+
+The platform implements Shopify App Store requirements for public listing:
+
+- **App Bridge 3.x Integration** (`client/src/lib/shopify-app-bridge.tsx`):
+  - Embedded app detection via `host` parameter validation
+  - Dynamic App Bridge script loading with config initialization
+  - Session token retrieval via `window.shopify.idToken()` or `window.shopify.sessionToken.get()`
+  - Hooks for toast notifications, modals, save bar, and loading states
+  - Graceful fallback for standalone mode (direct access without embedding)
+
+- **GraphQL Admin API** (`server/shopifyGraphQL.ts`):
+  - Wrapper client for migrating from deprecated REST API to GraphQL
+  - Typed query execution with error handling
+  - Follows Shopify's 2025 deprecation timeline for REST endpoints
+
+- **Embedded Admin UI** (`client/src/components/shopify/EmbeddedLayout.tsx`):
+  - Polaris-based Frame with navigation menu and user dropdown
+  - Dual-mode shell: renders Polaris when embedded, falls back to existing UI otherwise
+  - Section-based navigation (Products, Orders, Inventory, Shipping, Settings, Analytics)
+
+- **OAuth Flow**: Standard Shopify OAuth with embedded app redirect support, preserving `shop` and `host` params
+
+- **API Key Management**: The SHOPIFY_API_KEY (public, similar to Stripe publishable key) is exposed via `/api/shopify/config` for App Bridge initialization; the SHOPIFY_API_SECRET remains server-side only
+
 ### File Structure
 The project uses a monorepo structure with `/client`, `/server`, `/shared`, `/migrations`, `/attached_assets`, and `/script` directories, alongside path aliases like `@/*` and `@shared/*`.
 
