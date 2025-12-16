@@ -71,7 +71,7 @@ const translations = {
   "pricing.mostPopular": "Most Popular",
   "pricing.popular": "POPULAR",
   "pricing.millionaireChoice": "FUTURE MILLIONAIRE CHOICE",
-  "pricing.freeForLife": "When your sales reach $50,000, current plan becomes FREE FOR LIFE. Choose wisely!",
+  "pricing.freeForLife": "When your sales reach $1M, All plans become FREE FOR LIFE. Choose wisely!",
   "pricing.freeDescription": "Get started with dropshipping",
   "pricing.starterDescription": "For growing businesses",
   "pricing.growthDescription": "Scale your business faster",

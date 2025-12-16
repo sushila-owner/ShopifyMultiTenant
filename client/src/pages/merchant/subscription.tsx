@@ -145,7 +145,7 @@ export default function SubscriptionPage() {
   const currentPlan = data?.currentPlan;
   const availablePlans = data?.availablePlans || [];
   const stripePlans = stripePlansData || [];
-  const freeForLifeThreshold = data?.freeForLifeThreshold || 5000000;
+  const freeForLifeThreshold = data?.freeForLifeThreshold || 100000000;
   const stats = statsData;
   const stripeSubscription = stripeSubData?.stripeSubscription;
   const merchantStripeData = stripeSubData?.merchant;
