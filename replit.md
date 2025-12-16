@@ -32,8 +32,7 @@ Drizzle ORM is used with PostgreSQL. The app supports both Neon PostgreSQL (pref
 - **Semantic Search**: Integrates Claude AI for natural language product query analysis.
 - **Image Storage**: Utilizes AWS S3 for secure, tenant-scoped image storage with signed URLs, validation, and encryption.
 - **Caching**: Simple in-memory cache for performance. Upstash Redis (REST API) is used for distributed OAuth session storage.
-- **Multi-Currency Support**: Supports 30 currencies with client-side selection, persistence via localStorage, and a `CurrencyProvider` context for formatting and conversion.
-- **DeepL Translation Integration**: Provides app-wide translation for dynamic content (product titles, descriptions) using the DeepL API, featuring in-memory caching and React hooks for seamless integration.
+- **Language & Currency**: English-only interface with USD as the sole currency. Multi-language and multi-currency features have been simplified for a streamlined user experience.
 - **Wallet System**: Merchants can pre-fund a wallet via Stripe to automatically cover order fulfillment costs, with transaction history and top-up functionality.
 - **Product Push to Shopify**: Merchants can publish imported products, including titles, descriptions, variants, images, and tags, directly to their connected Shopify store, with inventory management and sync status tracking.
 - **Email Notification Service**: Provides email alerts for various events (e.g., new orders, low stock, wallet low balance) using either Console (default) or SendGrid.
@@ -68,7 +67,6 @@ Deployment is configured for Heroku with a `Procfile` and an optimized build pro
     - AWS S3 (image storage).
     - PlanetScale PostgreSQL (database).
     - Upstash Redis (session storage).
-    - DeepL API (translation services).
     - GigaB2B Open API 2.0 (wholesale supplier integration).
 
 ### GigaB2B Supplier Integration

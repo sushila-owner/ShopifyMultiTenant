@@ -1,5 +1,5 @@
-import { useTranslateText } from "@/hooks/useTranslation";
-import { Skeleton } from "@/components/ui/skeleton";
+// Simplified TranslatedText component - English only
+// Just renders text as-is without translation
 
 interface TranslatedTextProps {
   text: string | undefined | null;
@@ -11,20 +11,13 @@ interface TranslatedTextProps {
 export function TranslatedText({ 
   text, 
   className = "", 
-  showLoading = false,
   as: Component = "span" 
 }: TranslatedTextProps) {
-  const { text: translatedText, isLoading } = useTranslateText(text);
-
   if (!text) {
     return null;
   }
 
-  if (showLoading && isLoading) {
-    return <Skeleton className={`h-4 w-32 ${className}`} />;
-  }
-
-  return <Component className={className}>{translatedText}</Component>;
+  return <Component className={className}>{text}</Component>;
 }
 
 interface TranslatedHtmlProps {
@@ -33,26 +26,14 @@ interface TranslatedHtmlProps {
 }
 
 export function TranslatedHtml({ html, className = "" }: TranslatedHtmlProps) {
-  const { text: translatedHtml, isLoading } = useTranslateText(html);
-
   if (!html) {
     return null;
-  }
-
-  if (isLoading) {
-    return (
-      <div className={className}>
-        <Skeleton className="h-4 w-full mb-2" />
-        <Skeleton className="h-4 w-3/4 mb-2" />
-        <Skeleton className="h-4 w-1/2" />
-      </div>
-    );
   }
 
   return (
     <div 
       className={className}
-      dangerouslySetInnerHTML={{ __html: translatedHtml }}
+      dangerouslySetInnerHTML={{ __html: html }}
     />
   );
 }
