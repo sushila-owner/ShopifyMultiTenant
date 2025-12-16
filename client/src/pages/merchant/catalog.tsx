@@ -735,7 +735,7 @@ export default function CatalogPage() {
             {fulfillmentFee > 0 && (
               <div className="flex items-center gap-2 text-xs text-muted-foreground">
                 <Package className="h-3 w-3" />
-                <span>+{formatPrice(fulfillmentFee * 100)} fulfillment</span>
+                <span>+{formatPrice(fulfillmentFee)} fulfillment</span>
               </div>
             )}
 
@@ -828,7 +828,7 @@ export default function CatalogPage() {
             <p className="text-lg font-bold">{formatPrice(actualMerchantPrice)}</p>
             <p className="text-sm text-emerald-600">+{formatPrice(profit)} ({profitPercent}%)</p>
             {fulfillmentFee > 0 && (
-              <p className="text-xs text-muted-foreground">+{formatPrice(fulfillmentFee * 100)} fulfillment</p>
+              <p className="text-xs text-muted-foreground">+{formatPrice(fulfillmentFee)} fulfillment</p>
             )}
           </div>
           <div className="flex gap-2">
