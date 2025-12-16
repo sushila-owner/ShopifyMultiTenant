@@ -114,8 +114,22 @@ export default function AdminProductsPage() {
     }, 300);
   };
 
+  // Fetch categories based on selected supplier
   const { data: categoriesData } = useQuery<CategoriesResponse>({
-    queryKey: ["/api/admin/categories"],
+    queryKey: ["/api/admin/categories", supplierFilter],
+    queryFn: async () => {
+      const params = new URLSearchParams();
+      if (supplierFilter && supplierFilter !== "all") {
+        params.append("supplierId", supplierFilter);
+      }
+      const response = await fetch(`/api/admin/categories?${params}`, {
+        headers: {
+          Authorization: `Bearer ${localStorage.getItem("apex_token")}`,
+        },
+      });
+      if (!response.ok) throw new Error("Failed to fetch categories");
+      return response.json();
+    },
   });
 
   const categories = categoriesData?.data || [];
@@ -460,7 +474,7 @@ export default function AdminProductsPage() {
                 data-testid="input-search-products"
               />
             </div>
-            <Select value={supplierFilter} onValueChange={(value) => { setSupplierFilter(value); setCurrentPage(1); }}>
+            <Select value={supplierFilter} onValueChange={(value) => { setSupplierFilter(value); setCategoryFilter("all"); setCurrentPage(1); }}>
               <SelectTrigger className="w-[180px]" data-testid="select-supplier-filter">
                 <Filter className="h-4 w-4 mr-2" />
                 <SelectValue placeholder="Supplier" />

@@ -218,6 +218,38 @@ export default function CatalogPage() {
     staleTime: 60000,
   });
 
+  // Fetch supplier-specific categories
+  interface Category {
+    id: number;
+    supplierId: number | null;
+    name: string;
+    slug: string;
+    description: string | null;
+    sortOrder: number;
+    isActive: boolean;
+  }
+
+  const { data: supplierCategories } = useQuery<Category[]>({
+    queryKey: ["/api/merchant/categories", selectedSupplier?.id],
+    queryFn: async () => {
+      if (!selectedSupplier) return [];
+      const token = localStorage.getItem("apex_token");
+      const headers: HeadersInit = {};
+      if (token) {
+        headers["Authorization"] = `Bearer ${token}`;
+      }
+      const res = await fetch(`/api/merchant/categories?supplierId=${selectedSupplier.id}`, {
+        credentials: "include",
+        headers,
+      });
+      if (!res.ok) throw new Error("Failed to fetch categories");
+      const data = await res.json();
+      return data.data || [];
+    },
+    enabled: !!selectedSupplier,
+    staleTime: 60000,
+  });
+
   const buildQueryParams = () => {
     const params = new URLSearchParams();
     params.set("page", currentPage.toString());
@@ -342,6 +374,7 @@ export default function CatalogPage() {
 
   const handleSelectSupplier = (supplier: Supplier) => {
     setSelectedSupplier(supplier);
+    setSelectedCategory(null); // Clear category when switching suppliers
     setFilters(prev => ({ ...prev, supplierId: supplier.id }));
     setCurrentPage(1);
   };
@@ -505,41 +538,59 @@ export default function CatalogPage() {
             className={`w-full text-left text-sm py-2 px-3 rounded-lg transition-all ${
               !selectedCategory ? "bg-primary text-primary-foreground font-medium" : "hover:bg-muted"
             }`}
+            data-testid="button-category-all"
           >
             All Categories
           </button>
-          {Object.keys(categoryTree).slice(0, 20).map((parentCat) => (
-            <div key={parentCat}>
+          {/* Show supplier-specific categories if available */}
+          {supplierCategories && supplierCategories.length > 0 ? (
+            supplierCategories.filter(cat => cat.isActive).map((cat) => (
               <button
-                onClick={() => handleCategorySelect(parentCat)}
-                className={`w-full text-left text-sm py-2 px-3 rounded-lg transition-all flex items-center justify-between ${
-                  selectedCategory === parentCat ? "bg-primary text-primary-foreground font-medium" : "hover:bg-muted"
+                key={cat.id}
+                onClick={() => handleCategorySelect(cat.name)}
+                className={`w-full text-left text-sm py-2 px-3 rounded-lg transition-all ${
+                  selectedCategory === cat.name ? "bg-primary text-primary-foreground font-medium" : "hover:bg-muted"
                 }`}
+                data-testid={`button-category-${cat.id}`}
               >
-                <span className="truncate">{parentCat}</span>
-                {categoryTree[parentCat].length > 0 && (
-                  <ChevronRight 
-                    className={`h-3 w-3 transition-transform ${expandedCategories.includes(parentCat) ? "rotate-90" : ""}`}
-                    onClick={(e) => {
-                      e.stopPropagation();
-                      toggleCategoryExpand(parentCat);
-                    }}
-                  />
-                )}
+                {cat.name}
               </button>
-              {expandedCategories.includes(parentCat) && categoryTree[parentCat].map((child) => (
+            ))
+          ) : (
+            /* Fall back to product-based categories */
+            Object.keys(categoryTree).slice(0, 20).map((parentCat) => (
+              <div key={parentCat}>
                 <button
-                  key={child}
-                  onClick={() => handleCategorySelect(`${parentCat} > ${child}`)}
-                  className={`w-full text-left text-sm py-1.5 px-6 rounded-lg transition-all ${
-                    selectedCategory === `${parentCat} > ${child}` ? "bg-primary text-primary-foreground font-medium" : "hover:bg-muted text-muted-foreground"
+                  onClick={() => handleCategorySelect(parentCat)}
+                  className={`w-full text-left text-sm py-2 px-3 rounded-lg transition-all flex items-center justify-between ${
+                    selectedCategory === parentCat ? "bg-primary text-primary-foreground font-medium" : "hover:bg-muted"
                   }`}
                 >
-                  {child}
+                  <span className="truncate">{parentCat}</span>
+                  {categoryTree[parentCat].length > 0 && (
+                    <ChevronRight 
+                      className={`h-3 w-3 transition-transform ${expandedCategories.includes(parentCat) ? "rotate-90" : ""}`}
+                      onClick={(e) => {
+                        e.stopPropagation();
+                        toggleCategoryExpand(parentCat);
+                      }}
+                    />
+                  )}
                 </button>
-              ))}
-            </div>
-          ))}
+                {expandedCategories.includes(parentCat) && categoryTree[parentCat].map((child) => (
+                  <button
+                    key={child}
+                    onClick={() => handleCategorySelect(`${parentCat} > ${child}`)}
+                    className={`w-full text-left text-sm py-1.5 px-6 rounded-lg transition-all ${
+                      selectedCategory === `${parentCat} > ${child}` ? "bg-primary text-primary-foreground font-medium" : "hover:bg-muted text-muted-foreground"
+                    }`}
+                  >
+                    {child}
+                  </button>
+                ))}
+              </div>
+            ))
+          )}
         </CollapsibleContent>
       </Collapsible>
     </div>

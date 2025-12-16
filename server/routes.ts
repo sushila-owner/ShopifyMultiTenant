@@ -3412,6 +3412,26 @@ export async function registerRoutes(
     }
   });
 
+  // Merchant-accessible categories by supplier (also accessible by admin for testing)
+  app.get("/api/merchant/categories", authMiddleware, async (req: AuthRequest, res: Response) => {
+    // Allow merchant, staff, or admin roles
+    if (req.user?.role !== "merchant" && req.user?.role !== "staff" && req.user?.role !== "admin") {
+      return res.status(403).json({ success: false, error: "Access denied" });
+    }
+    try {
+      const supplierId = req.query.supplierId ? parseInt(req.query.supplierId as string) : undefined;
+      let allCategories;
+      if (supplierId) {
+        allCategories = await storage.getCategoriesBySupplier(supplierId);
+      } else {
+        allCategories = await storage.getAllCategories();
+      }
+      res.json({ success: true, data: allCategories });
+    } catch (error: any) {
+      res.status(500).json({ success: false, error: error.message });
+    }
+  });
+
   // Product Catalog (global products for import) - Server-side pagination for 60k+ products
   app.get("/api/merchant/catalog", authMiddleware, merchantOnly, async (req: AuthRequest, res: Response) => {
     try {
