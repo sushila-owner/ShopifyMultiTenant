@@ -25,6 +25,8 @@ Drizzle ORM is used with PostgreSQL, specifically PlanetScale PostgreSQL. The da
 ### Key Features and System Design
 - **Subscription System**: Offers 6 tiers with varying product/order limits and features like AI ads and white-labeling.
 - **Admin Product Pricing**: Supports single and bulk markup editing (percentage/fixed).
+- **Bulk Pricing Rules**: Supplier-wide pricing adjustments allow admins to apply percentage or fixed price changes to all products from a specific supplier (e.g., decrease all Shopify products by 30%). Rules can be created, edited, activated/deactivated, and applied via `/admin/pricing-rules`.
+- **Supplier-Specific Categories**: Categories can now be scoped to specific suppliers using the `supplierId` field, allowing admins to organize products differently per supplier while maintaining global categories for cross-supplier organization.
 - **Merchant Catalog**: Features a GigaB2B-style layout with tabs, collapsible filters, sorting, and multi-select product import with custom pricing.
 - **Server-Side Pagination**: Handles large product catalogs (60,000+) with server-side pagination, filters, debounced search, and sorting, optimized with database indexes.
 - **Semantic Search**: Integrates Claude AI for natural language product query analysis.
