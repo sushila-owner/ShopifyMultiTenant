@@ -6,6 +6,11 @@ import type { NormalizedProduct, NormalizedInventory } from "../supplierAdapters
 const SYNC_INTERVAL_MS = 15 * 60 * 1000; // 15 minutes
 const BATCH_SIZE = 250;
 
+// GigaB2B permanent pricing markup (60% app profit)
+// Final Price = Base Price × 1.6
+const GIGAB2B_SUPPLIER_ID = 2;
+const GIGAB2B_PRICE_MULTIPLIER = 1.6;
+
 interface SyncStatus {
   isRunning: boolean;
   lastSyncAt: Date | null;
@@ -188,6 +193,12 @@ class SupplierSyncService {
     // Check if product already exists
     const existingProducts = await storage.getProductsBySupplierProductId(supplierId, product.supplierProductId);
     
+    // Apply GigaB2B permanent 60% markup (Final Price = Base Price × 1.6)
+    const isGigaB2B = supplierId === GIGAB2B_SUPPLIER_ID;
+    const finalPrice = isGigaB2B 
+      ? Math.round(product.supplierPrice * GIGAB2B_PRICE_MULTIPLIER * 100) / 100
+      : product.supplierPrice;
+    
     const productData: Partial<InsertProduct> = {
       supplierId,
       title: product.title,
@@ -198,7 +209,7 @@ class SupplierSyncService {
       supplierProductId: product.supplierProductId,
       supplierSku: product.supplierSku,
       supplierPrice: product.supplierPrice,
-      merchantPrice: product.supplierPrice,
+      merchantPrice: finalPrice,
       inventoryQuantity: product.variants[0]?.inventoryQuantity || 0,
       status: "active",
       isGlobal: true,
