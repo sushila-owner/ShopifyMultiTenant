@@ -1,7 +1,7 @@
 import {
   users, merchants, suppliers, products, customers, orders,
   plans, subscriptions, staffInvitations, notifications, activityLogs, syncLogs, adCreatives, otpVerifications, supplierOrders, categories,
-  walletBalances, walletTransactions,
+  walletBalances, walletTransactions, bulkPricingRules,
   type User, type InsertUser,
   type Merchant, type InsertMerchant,
   type Supplier, type InsertSupplier,
@@ -21,6 +21,7 @@ import {
   type Category, type InsertCategory,
   type WalletBalance, type InsertWalletBalance,
   type WalletTransaction, type InsertWalletTransaction,
+  type BulkPricingRule, type InsertBulkPricingRule,
 } from "@shared/schema";
 import { db } from "./db";
 import { eq, and, desc, asc, sql, gte, lte, ilike, or, isNull, count, inArray } from "drizzle-orm";
@@ -86,8 +87,18 @@ export interface IStorage {
   updateCategory(id: number, data: Partial<InsertCategory>): Promise<Category | undefined>;
   deleteCategory(id: number): Promise<boolean>;
   getAllCategories(): Promise<Category[]>;
+  getCategoriesBySupplier(supplierId: number): Promise<Category[]>;
   getActiveCategories(): Promise<Category[]>;
   updateCategoryProductCount(categoryId: number): Promise<void>;
+
+  // Bulk Pricing Rules
+  getBulkPricingRule(id: number): Promise<BulkPricingRule | undefined>;
+  createBulkPricingRule(rule: InsertBulkPricingRule): Promise<BulkPricingRule>;
+  updateBulkPricingRule(id: number, data: Partial<InsertBulkPricingRule>): Promise<BulkPricingRule | undefined>;
+  deleteBulkPricingRule(id: number): Promise<boolean>;
+  getAllBulkPricingRules(): Promise<BulkPricingRule[]>;
+  getBulkPricingRulesBySupplier(supplierId: number): Promise<BulkPricingRule[]>;
+  applyBulkPricingRule(ruleId: number): Promise<{ updated: number }>;
 
   // Products
   getProduct(id: number): Promise<Product | undefined>;
@@ -420,6 +431,85 @@ export class DatabaseStorage implements IStorage {
     // For now, set product count to 0 since we can't query by categoryId
     console.log("[updateCategoryProductCount] Skipped - categoryId column not available in PlanetScale");
     await db.update(categories).set({ productCount: 0, updatedAt: new Date() }).where(eq(categories.id, categoryId));
+  }
+
+  async getCategoriesBySupplier(supplierId: number): Promise<Category[]> {
+    return db.select().from(categories).where(eq(categories.supplierId, supplierId)).orderBy(asc(categories.sortOrder), asc(categories.name));
+  }
+
+  // ==================== BULK PRICING RULES ====================
+  async getBulkPricingRule(id: number): Promise<BulkPricingRule | undefined> {
+    const [rule] = await db.select().from(bulkPricingRules).where(eq(bulkPricingRules.id, id));
+    return rule || undefined;
+  }
+
+  async createBulkPricingRule(rule: InsertBulkPricingRule): Promise<BulkPricingRule> {
+    const [created] = await db.insert(bulkPricingRules).values(rule).returning();
+    return created;
+  }
+
+  async updateBulkPricingRule(id: number, data: Partial<InsertBulkPricingRule>): Promise<BulkPricingRule | undefined> {
+    const [rule] = await db
+      .update(bulkPricingRules)
+      .set({ ...data, updatedAt: new Date() })
+      .where(eq(bulkPricingRules.id, id))
+      .returning();
+    return rule || undefined;
+  }
+
+  async deleteBulkPricingRule(id: number): Promise<boolean> {
+    await db.delete(bulkPricingRules).where(eq(bulkPricingRules.id, id));
+    return true;
+  }
+
+  async getAllBulkPricingRules(): Promise<BulkPricingRule[]> {
+    return db.select().from(bulkPricingRules).orderBy(desc(bulkPricingRules.createdAt));
+  }
+
+  async getBulkPricingRulesBySupplier(supplierId: number): Promise<BulkPricingRule[]> {
+    return db.select().from(bulkPricingRules).where(eq(bulkPricingRules.supplierId, supplierId)).orderBy(desc(bulkPricingRules.createdAt));
+  }
+
+  async applyBulkPricingRule(ruleId: number): Promise<{ updated: number }> {
+    const rule = await this.getBulkPricingRule(ruleId);
+    if (!rule) throw new Error("Bulk pricing rule not found");
+
+    // Get all global products for this supplier
+    const supplierProducts = await db.select().from(products).where(
+      and(
+        eq(products.supplierId, rule.supplierId),
+        eq(products.isGlobal, true)
+      )
+    );
+
+    const pricingRule = { type: rule.ruleType as "percentage" | "fixed", value: rule.value };
+    let updatedCount = 0;
+
+    for (const product of supplierProducts) {
+      const supplierPrice = product.supplierPrice;
+      let merchantPrice: number;
+      if (pricingRule.type === "percentage") {
+        merchantPrice = supplierPrice * (1 + pricingRule.value / 100);
+      } else {
+        merchantPrice = supplierPrice + pricingRule.value;
+      }
+      merchantPrice = Math.round(merchantPrice * 100) / 100;
+
+      await db
+        .update(products)
+        .set({
+          pricingRule,
+          merchantPrice,
+          updatedAt: new Date(),
+        })
+        .where(eq(products.id, product.id));
+      updatedCount++;
+    }
+
+    // Update the rule's appliedAt timestamp
+    await db.update(bulkPricingRules).set({ appliedAt: new Date(), updatedAt: new Date() }).where(eq(bulkPricingRules.id, ruleId));
+
+    return { updated: updatedCount };
   }
 
   // ==================== PRODUCTS ====================

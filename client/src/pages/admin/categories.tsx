@@ -13,7 +13,6 @@ import {
   DialogContent,
   DialogHeader,
   DialogTitle,
-  DialogTrigger,
 } from "@/components/ui/dialog";
 import {
   Table,
@@ -58,8 +57,8 @@ import {
   SelectValue,
 } from "@/components/ui/select";
 import { useToast } from "@/hooks/use-toast";
-import { Plus, MoreHorizontal, Pencil, Trash, Layers, Package, ArrowUpDown } from "lucide-react";
-import type { Category } from "@shared/schema";
+import { Plus, MoreHorizontal, Pencil, Trash, Layers, Package, ArrowUpDown, Truck, Filter } from "lucide-react";
+import type { Category, Supplier } from "@shared/schema";
 
 const categoryFormSchema = z.object({
   name: z.string().min(1, "Name is required"),
@@ -67,6 +66,7 @@ const categoryFormSchema = z.object({
   description: z.string().nullable().optional(),
   image: z.string().nullable().optional(),
   parentId: z.number().nullable().optional(),
+  supplierId: z.number().nullable().optional(),
   sortOrder: z.number().nullable().default(0),
   isActive: z.boolean().nullable().default(true),
 });
@@ -79,6 +79,7 @@ export default function AdminCategories() {
   const [editingCategory, setEditingCategory] = useState<Category | null>(null);
   const [deleteDialogOpen, setDeleteDialogOpen] = useState(false);
   const [categoryToDelete, setCategoryToDelete] = useState<Category | null>(null);
+  const [supplierFilter, setSupplierFilter] = useState<string>("all");
 
   const form = useForm<CategoryFormData>({
     resolver: zodResolver(categoryFormSchema),
@@ -88,13 +89,31 @@ export default function AdminCategories() {
       description: "",
       image: "",
       parentId: null,
+      supplierId: null,
       sortOrder: 0,
       isActive: true,
     },
   });
 
+  const { data: suppliersData } = useQuery<{ success: boolean; data: Supplier[] }>({
+    queryKey: ["/api/admin/suppliers"],
+  });
+
+  const suppliers = suppliersData?.data || [];
+
   const { data: categoriesData, isLoading } = useQuery<{ success: boolean; data: Category[] }>({
-    queryKey: ["/api/admin/categories"],
+    queryKey: ["/api/admin/categories", { supplierId: supplierFilter }],
+    queryFn: async () => {
+      const params = new URLSearchParams();
+      if (supplierFilter && supplierFilter !== "all") {
+        params.append("supplierId", supplierFilter);
+      }
+      const response = await fetch(`/api/admin/categories?${params}`, {
+        headers: { Authorization: `Bearer ${localStorage.getItem("apex_token")}` },
+      });
+      if (!response.ok) throw new Error("Failed to fetch categories");
+      return response.json();
+    },
   });
 
   const categories = categoriesData?.data || [];
@@ -103,7 +122,7 @@ export default function AdminCategories() {
     mutationFn: async (data: CategoryFormData) => {
       const response = await fetch("/api/admin/categories", {
         method: "POST",
-        headers: { "Content-Type": "application/json", "Authorization": `Bearer ${localStorage.getItem("token")}` },
+        headers: { "Content-Type": "application/json", "Authorization": `Bearer ${localStorage.getItem("apex_token")}` },
         body: JSON.stringify(data),
       });
       if (!response.ok) {
@@ -127,7 +146,7 @@ export default function AdminCategories() {
     mutationFn: async ({ id, data }: { id: number; data: CategoryFormData }) => {
       const response = await fetch(`/api/admin/categories/${id}`, {
         method: "PUT",
-        headers: { "Content-Type": "application/json", "Authorization": `Bearer ${localStorage.getItem("token")}` },
+        headers: { "Content-Type": "application/json", "Authorization": `Bearer ${localStorage.getItem("apex_token")}` },
         body: JSON.stringify(data),
       });
       if (!response.ok) {
@@ -152,7 +171,7 @@ export default function AdminCategories() {
     mutationFn: async (id: number) => {
       const response = await fetch(`/api/admin/categories/${id}`, {
         method: "DELETE",
-        headers: { "Authorization": `Bearer ${localStorage.getItem("token")}` },
+        headers: { "Authorization": `Bearer ${localStorage.getItem("apex_token")}` },
       });
       if (!response.ok) {
         const error = await response.json();
@@ -187,6 +206,7 @@ export default function AdminCategories() {
       description: category.description || "",
       image: category.image || "",
       parentId: category.parentId,
+      supplierId: category.supplierId,
       sortOrder: category.sortOrder || 0,
       isActive: category.isActive ?? true,
     });
@@ -204,12 +224,14 @@ export default function AdminCategories() {
 
   const openCreateDialog = () => {
     setEditingCategory(null);
+    const selectedSupplierId = supplierFilter !== "all" ? parseInt(supplierFilter) : null;
     form.reset({
       name: "",
       slug: "",
       description: "",
       image: "",
       parentId: null,
+      supplierId: selectedSupplierId,
       sortOrder: categories.length,
       isActive: true,
     });
@@ -222,18 +244,51 @@ export default function AdminCategories() {
     return parent?.name || null;
   };
 
+  const getSupplierName = (supplierId: number | null | undefined) => {
+    if (!supplierId) return "Global";
+    const supplier = suppliers.find(s => s.id === supplierId);
+    return supplier?.name || "Unknown";
+  };
+
   return (
     <div className="p-6 space-y-6">
-      <div className="flex items-center justify-between">
+      <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4">
         <div>
           <h1 className="text-2xl font-semibold" data-testid="text-page-title">Category Management</h1>
-          <p className="text-muted-foreground">Organize products into categories for better navigation</p>
+          <p className="text-muted-foreground">Organize products into categories per supplier</p>
         </div>
         <Button onClick={openCreateDialog} data-testid="button-add-category">
           <Plus className="h-4 w-4 mr-2" />
           Add Category
         </Button>
       </div>
+
+      <Card>
+        <CardHeader className="flex flex-row items-center justify-between gap-2 space-y-0 pb-4">
+          <CardTitle className="flex items-center gap-2">
+            <Filter className="h-4 w-4" />
+            Filter by Supplier
+          </CardTitle>
+        </CardHeader>
+        <CardContent>
+          <Select value={supplierFilter} onValueChange={setSupplierFilter}>
+            <SelectTrigger className="w-full sm:w-[300px]" data-testid="select-supplier-filter">
+              <SelectValue placeholder="Select a supplier" />
+            </SelectTrigger>
+            <SelectContent>
+              <SelectItem value="all">All Suppliers</SelectItem>
+              {suppliers.map((supplier) => (
+                <SelectItem key={supplier.id} value={supplier.id.toString()}>
+                  <div className="flex items-center gap-2">
+                    <Truck className="h-4 w-4" />
+                    {supplier.name}
+                  </div>
+                </SelectItem>
+              ))}
+            </SelectContent>
+          </Select>
+        </CardContent>
+      </Card>
 
       <div className="grid gap-4 md:grid-cols-4">
         <Card>
@@ -282,7 +337,12 @@ export default function AdminCategories() {
 
       <Card>
         <CardHeader>
-          <CardTitle>Categories</CardTitle>
+          <CardTitle>
+            {supplierFilter !== "all" 
+              ? `Categories for ${getSupplierName(parseInt(supplierFilter))}`
+              : "All Categories"
+            }
+          </CardTitle>
         </CardHeader>
         <CardContent>
           {isLoading ? (
@@ -306,6 +366,7 @@ export default function AdminCategories() {
                   </TableHead>
                   <TableHead>Name</TableHead>
                   <TableHead>Slug</TableHead>
+                  <TableHead>Supplier</TableHead>
                   <TableHead>Parent</TableHead>
                   <TableHead>Products</TableHead>
                   <TableHead>Status</TableHead>
@@ -326,6 +387,11 @@ export default function AdminCategories() {
                     </TableCell>
                     <TableCell>
                       <code className="text-xs bg-muted px-1.5 py-0.5 rounded">{category.slug}</code>
+                    </TableCell>
+                    <TableCell>
+                      <Badge variant="outline">
+                        {getSupplierName(category.supplierId)}
+                      </Badge>
                     </TableCell>
                     <TableCell>
                       {getParentCategoryName(category.parentId) || (
@@ -370,12 +436,41 @@ export default function AdminCategories() {
       </Card>
 
       <Dialog open={dialogOpen} onOpenChange={setDialogOpen}>
-        <DialogContent>
+        <DialogContent className="max-w-lg">
           <DialogHeader>
             <DialogTitle>{editingCategory ? "Edit Category" : "Create Category"}</DialogTitle>
           </DialogHeader>
           <Form {...form}>
             <form onSubmit={form.handleSubmit(onSubmit)} className="space-y-4">
+              <FormField
+                control={form.control}
+                name="supplierId"
+                render={({ field }) => (
+                  <FormItem>
+                    <FormLabel>Supplier</FormLabel>
+                    <Select
+                      value={field.value?.toString() || "global"}
+                      onValueChange={(value) => field.onChange(value === "global" ? null : parseInt(value))}
+                    >
+                      <FormControl>
+                        <SelectTrigger data-testid="select-category-supplier">
+                          <SelectValue placeholder="Select supplier" />
+                        </SelectTrigger>
+                      </FormControl>
+                      <SelectContent>
+                        <SelectItem value="global">Global (All Suppliers)</SelectItem>
+                        {suppliers.map((supplier) => (
+                          <SelectItem key={supplier.id} value={supplier.id.toString()}>
+                            {supplier.name}
+                          </SelectItem>
+                        ))}
+                      </SelectContent>
+                    </Select>
+                    <FormMessage />
+                  </FormItem>
+                )}
+              />
+
               <FormField
                 control={form.control}
                 name="name"

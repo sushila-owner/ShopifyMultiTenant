@@ -31,6 +31,7 @@ import AdminMerchants from "@/pages/admin/merchants";
 import AdminProducts from "@/pages/admin/products";
 import AdminProductDetail from "@/pages/admin/product-detail";
 import AdminCategories from "@/pages/admin/categories";
+import AdminPricingRules from "@/pages/admin/pricing-rules";
 import AdminOrders from "@/pages/admin/orders";
 import AdminAnalytics from "@/pages/admin/analytics";
 import AdminReports from "@/pages/admin/reports";
@@ -171,6 +172,13 @@ function Router() {
         <ProtectedRoute requireAdmin>
           <AdminLayout>
             <AdminCategories />
+          </AdminLayout>
+        </ProtectedRoute>
+      </Route>
+      <Route path="/admin/pricing-rules">
+        <ProtectedRoute requireAdmin>
+          <AdminLayout>
+            <AdminPricingRules />
           </AdminLayout>
         </ProtectedRoute>
       </Route>

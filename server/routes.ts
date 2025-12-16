@@ -15,6 +15,7 @@ import {
   insertOrderSchema,
   insertStaffInvitationSchema,
   insertCategorySchema,
+  insertBulkPricingRuleSchema,
   type User,
 } from "@shared/schema";
 import { randomUUID, randomBytes } from "crypto";
@@ -1568,7 +1569,13 @@ export async function registerRoutes(
   // Categories
   app.get("/api/admin/categories", authMiddleware, adminOnly, async (req: AuthRequest, res: Response) => {
     try {
-      const allCategories = await storage.getAllCategories();
+      const supplierId = req.query.supplierId ? parseInt(req.query.supplierId as string) : undefined;
+      let allCategories;
+      if (supplierId) {
+        allCategories = await storage.getCategoriesBySupplier(supplierId);
+      } else {
+        allCategories = await storage.getAllCategories();
+      }
       res.json({ success: true, data: allCategories });
     } catch (error: any) {
       // If categories table doesn't exist, return empty array instead of error
@@ -1621,6 +1628,77 @@ export async function registerRoutes(
     try {
       await storage.deleteCategory(parseInt(req.params.id));
       res.json({ success: true });
+    } catch (error: any) {
+      res.status(400).json({ success: false, error: error.message });
+    }
+  });
+
+  // Bulk Pricing Rules
+  app.get("/api/admin/bulk-pricing-rules", authMiddleware, adminOnly, async (req: AuthRequest, res: Response) => {
+    try {
+      const supplierId = req.query.supplierId ? parseInt(req.query.supplierId as string) : undefined;
+      let rules;
+      if (supplierId) {
+        rules = await storage.getBulkPricingRulesBySupplier(supplierId);
+      } else {
+        rules = await storage.getAllBulkPricingRules();
+      }
+      res.json({ success: true, data: rules });
+    } catch (error: any) {
+      if (error.message?.includes('does not exist')) {
+        return res.json({ success: true, data: [] });
+      }
+      res.status(500).json({ success: false, error: error.message });
+    }
+  });
+
+  app.get("/api/admin/bulk-pricing-rules/:id", authMiddleware, adminOnly, async (req: AuthRequest, res: Response) => {
+    try {
+      const rule = await storage.getBulkPricingRule(parseInt(req.params.id));
+      if (!rule) {
+        return res.status(404).json({ success: false, error: "Bulk pricing rule not found" });
+      }
+      res.json({ success: true, data: rule });
+    } catch (error: any) {
+      res.status(500).json({ success: false, error: error.message });
+    }
+  });
+
+  app.post("/api/admin/bulk-pricing-rules", authMiddleware, adminOnly, async (req: AuthRequest, res: Response) => {
+    try {
+      const validatedData = insertBulkPricingRuleSchema.parse(req.body);
+      const rule = await storage.createBulkPricingRule(validatedData);
+      res.json({ success: true, data: rule });
+    } catch (error: any) {
+      res.status(400).json({ success: false, error: error.message });
+    }
+  });
+
+  app.put("/api/admin/bulk-pricing-rules/:id", authMiddleware, adminOnly, async (req: AuthRequest, res: Response) => {
+    try {
+      const rule = await storage.updateBulkPricingRule(parseInt(req.params.id), req.body);
+      if (!rule) {
+        return res.status(404).json({ success: false, error: "Bulk pricing rule not found" });
+      }
+      res.json({ success: true, data: rule });
+    } catch (error: any) {
+      res.status(400).json({ success: false, error: error.message });
+    }
+  });
+
+  app.delete("/api/admin/bulk-pricing-rules/:id", authMiddleware, adminOnly, async (req: AuthRequest, res: Response) => {
+    try {
+      await storage.deleteBulkPricingRule(parseInt(req.params.id));
+      res.json({ success: true });
+    } catch (error: any) {
+      res.status(400).json({ success: false, error: error.message });
+    }
+  });
+
+  app.post("/api/admin/bulk-pricing-rules/:id/apply", authMiddleware, adminOnly, async (req: AuthRequest, res: Response) => {
+    try {
+      const result = await storage.applyBulkPricingRule(parseInt(req.params.id));
+      res.json({ success: true, data: result, message: `Applied pricing rule to ${result.updated} products` });
     } catch (error: any) {
       res.status(400).json({ success: false, error: error.message });
     }

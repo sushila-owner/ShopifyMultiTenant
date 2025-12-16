@@ -280,6 +280,7 @@ export const supplierOrders = pgTable("supplier_orders", {
 // ==================== CATEGORIES TABLE ====================
 export const categories = pgTable("categories", {
   id: serial("id").primaryKey(),
+  supplierId: integer("supplier_id"),
   name: text("name").notNull(),
   slug: text("slug").notNull().unique(),
   description: text("description"),
@@ -293,6 +294,24 @@ export const categories = pgTable("categories", {
 }, (table) => ({
   slugIdx: index("categories_slug_idx").on(table.slug),
   parentIdx: index("categories_parent_idx").on(table.parentId),
+  supplierIdx: index("categories_supplier_idx").on(table.supplierId),
+}));
+
+// ==================== BULK PRICING RULES TABLE ====================
+export const bulkPricingRules = pgTable("bulk_pricing_rules", {
+  id: serial("id").primaryKey(),
+  supplierId: integer("supplier_id").notNull(),
+  name: text("name").notNull(),
+  description: text("description"),
+  ruleType: text("rule_type").notNull().$type<"percentage" | "fixed">(),
+  value: real("value").notNull(),
+  isActive: boolean("is_active").default(true),
+  appliedAt: timestamp("applied_at"),
+  createdAt: timestamp("created_at").defaultNow().notNull(),
+  updatedAt: timestamp("updated_at").defaultNow().notNull(),
+}, (table) => ({
+  supplierIdx: index("bulk_pricing_rules_supplier_idx").on(table.supplierId),
+  activeIdx: index("bulk_pricing_rules_active_idx").on(table.isActive),
 }));
 
 // ==================== PRODUCTS TABLE ====================
@@ -742,6 +761,14 @@ export const insertCategorySchema = createInsertSchema(categories).omit({
 });
 export type InsertCategory = z.infer<typeof insertCategorySchema>;
 export type Category = typeof categories.$inferSelect;
+
+export const insertBulkPricingRuleSchema = createInsertSchema(bulkPricingRules).omit({
+  id: true,
+  createdAt: true,
+  updatedAt: true,
+});
+export type InsertBulkPricingRule = z.infer<typeof insertBulkPricingRuleSchema>;
+export type BulkPricingRule = typeof bulkPricingRules.$inferSelect;
 
 export const insertProductSchema = createInsertSchema(products).omit({
   id: true,

@@ -37,6 +37,7 @@ const mainMenuItems = [
   { title: "Suppliers", url: "/admin/suppliers", icon: Truck },
   { title: "Products", url: "/admin/products", icon: Package },
   { title: "Categories", url: "/admin/categories", icon: Layers },
+  { title: "Pricing Rules", url: "/admin/pricing-rules", icon: CreditCard },
   { title: "Merchants", url: "/admin/merchants", icon: Store },
   { title: "Orders", url: "/admin/orders", icon: ShoppingCart },
 ];
