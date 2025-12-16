@@ -195,7 +195,7 @@ export class GigaB2BService {
     }
   }
 
-  async getProductSkus(page: number = 1, pageSize: number = 1000): Promise<{
+  async getProductSkus(page: number = 1, pageSize: number = 100): Promise<{
     skus: string[];
     total: number;
     hasMore: boolean;
@@ -315,7 +315,8 @@ export class GigaB2BService {
       this.syncProgress.totalProducts = productCount;
       console.log(`[GigaB2B] Starting sync of ${productCount} products...`);
 
-      const pageSize = 1000;
+      // GigaB2B API has a maximum pageSize limit of 100
+      const pageSize = 100;
       const totalPages = Math.ceil(productCount / pageSize);
       let page = 1;
 

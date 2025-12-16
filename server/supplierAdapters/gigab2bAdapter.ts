@@ -217,6 +217,7 @@ export class GigaB2BAdapter extends BaseAdapter {
 
     if (body && method === "POST") {
       options.body = JSON.stringify(body);
+      console.log(`[GigaB2B] Request body: ${options.body}`);
     }
 
     const response = await fetch(url, options);
@@ -265,15 +266,16 @@ export class GigaB2BAdapter extends BaseAdapter {
     }
   }
 
-  async fetchProductList(page = 1, pageSize = 1000): Promise<{
+  async fetchProductList(page = 1, pageSize = 100): Promise<{
     products: Array<{ sku: string; productName?: string }>;
     total: number;
     hasMore: boolean;
   }> {
+    // GigaB2B API has a maximum pageSize limit of 100
     const response = await this.gigab2bRequest<GigaB2BProductListResponse>(
       "/b2b-overseas-api/v1/buyer/product/skus/v1",
       "POST",
-      { page, pageSize, sort: 2 }
+      { page, pageSize: Math.min(pageSize, 100), sort: 2 }
     );
 
     return {
