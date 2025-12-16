@@ -211,6 +211,7 @@ export interface IStorage {
   seedAdminUser(): Promise<User>;
   seedGigaB2BSupplier(): Promise<void>;
   seedShopifyLuxuryCategories(): Promise<void>;
+  seedGigaB2BCategories(): Promise<void>;
 
   // Wallet
   getWalletBalance(merchantId: number): Promise<WalletBalance | undefined>;
@@ -1818,6 +1819,78 @@ export class DatabaseStorage implements IStorage {
     }
     
     console.log(`Seeded ${luxuryCategories.length} luxury categories for Shopify supplier`);
+  }
+
+  async seedGigaB2BCategories(): Promise<void> {
+    // Get the GigaB2B supplier
+    const gigaB2BSuppliers = await db.select().from(suppliers).where(eq(suppliers.type, "gigab2b")).limit(1);
+    if (gigaB2BSuppliers.length === 0) {
+      console.log("GigaB2B supplier not found, skipping categories seeding...");
+      return;
+    }
+    
+    const gigaB2BSupplierId = gigaB2BSuppliers[0].id;
+    
+    // Check if categories already exist for this supplier
+    const existingCategories = await db.select().from(categories)
+      .where(eq(categories.supplierId, gigaB2BSupplierId))
+      .limit(1);
+    
+    if (existingCategories.length > 0) {
+      console.log("GigaB2B categories already seeded, skipping...");
+      return;
+    }
+    
+    // Define the GigaB2B categories - furniture, home essentials, lifestyle
+    const gigaB2BCategories = [
+      { name: "Sofas", slug: "sofas", description: "Living room sofas and couches", sortOrder: 1 },
+      { name: "Chairs", slug: "chairs", description: "Chairs for home and office", sortOrder: 2 },
+      { name: "Tables", slug: "tables", description: "Dining, coffee, and side tables", sortOrder: 3 },
+      { name: "Beds", slug: "beds", description: "Beds and bed frames", sortOrder: 4 },
+      { name: "Cabinets", slug: "cabinets", description: "Storage cabinets", sortOrder: 5 },
+      { name: "Wardrobes", slug: "wardrobes", description: "Wardrobes and closets", sortOrder: 6 },
+      { name: "Storage Units", slug: "storage-units", description: "Storage solutions", sortOrder: 7 },
+      { name: "TV Units", slug: "tv-units", description: "TV stands and entertainment units", sortOrder: 8 },
+      { name: "Shelving", slug: "shelving", description: "Shelves and bookcases", sortOrder: 9 },
+      { name: "Desks", slug: "desks", description: "Work and study desks", sortOrder: 10 },
+      { name: "Benches", slug: "benches", description: "Indoor and outdoor benches", sortOrder: 11 },
+      { name: "Stools", slug: "stools", description: "Bar stools and step stools", sortOrder: 12 },
+      { name: "Ottomans", slug: "ottomans", description: "Ottomans and footrests", sortOrder: 13 },
+      { name: "Mattresses", slug: "mattresses", description: "Mattresses and bedding", sortOrder: 14 },
+      { name: "Fans", slug: "fans", description: "Ceiling and standing fans", sortOrder: 15 },
+      { name: "Appliances", slug: "appliances", description: "Home appliances", sortOrder: 16 },
+      { name: "Gym Equipment", slug: "gym-equipment", description: "Gym and fitness equipment", sortOrder: 17 },
+      { name: "Fitness Machines", slug: "fitness-machines", description: "Exercise machines", sortOrder: 18 },
+      { name: "Exercise Accessories", slug: "exercise-accessories", description: "Workout accessories", sortOrder: 19 },
+      { name: "Outdoor Furniture", slug: "outdoor-furniture", description: "Patio and garden furniture", sortOrder: 20 },
+      { name: "Tents", slug: "tents", description: "Camping and outdoor tents", sortOrder: 21 },
+      { name: "Gazebos", slug: "gazebos", description: "Outdoor gazebos and canopies", sortOrder: 22 },
+      { name: "Camping Equipment", slug: "camping-equipment", description: "Camping gear and supplies", sortOrder: 23 },
+      { name: "Travel Gear", slug: "travel-gear", description: "Travel accessories and luggage", sortOrder: 24 },
+      { name: "Kids Furniture", slug: "kids-furniture", description: "Children furniture", sortOrder: 25 },
+      { name: "Ride-On Toys", slug: "ride-on-toys", description: "Ride-on toys for kids", sortOrder: 26 },
+      { name: "Playsets", slug: "playsets", description: "Play equipment for children", sortOrder: 27 },
+      { name: "Swings", slug: "swings", description: "Swings and swing sets", sortOrder: 28 },
+      { name: "Toys", slug: "toys", description: "Toys and games", sortOrder: 29 },
+      { name: "Pet Furniture", slug: "pet-furniture", description: "Furniture for pets", sortOrder: 30 },
+      { name: "Pet Houses", slug: "pet-houses", description: "Pet houses and kennels", sortOrder: 31 },
+      { name: "Pet Enclosures", slug: "pet-enclosures", description: "Pet cages and enclosures", sortOrder: 32 },
+      { name: "Pet Accessories", slug: "pet-accessories", description: "Pet supplies and accessories", sortOrder: 33 },
+    ];
+    
+    for (const cat of gigaB2BCategories) {
+      await db.insert(categories).values({
+        supplierId: gigaB2BSupplierId,
+        name: cat.name,
+        slug: `gigab2b-${cat.slug}`,
+        description: cat.description,
+        sortOrder: cat.sortOrder,
+        isActive: true,
+        productCount: 0,
+      });
+    }
+    
+    console.log(`Seeded ${gigaB2BCategories.length} categories for GigaB2B supplier`);
   }
 
   // OTP Verifications
