@@ -371,6 +371,14 @@ export default function SubscriptionPage() {
         </CardContent>
       </Card>
 
+      {/* Promotional Banner */}
+      <div className="p-6 rounded-xl border-2 border-amber-400 bg-gradient-to-r from-amber-50 to-orange-50 dark:from-amber-950/30 dark:to-orange-950/30">
+        <p className="text-center text-lg font-medium text-slate-700 dark:text-slate-200" data-testid="text-promo-banner">
+          When your sales reach <span className="font-bold text-amber-600 dark:text-amber-400">$1M</span>, All plans become{" "}
+          <span className="font-bold text-amber-600 dark:text-amber-400">FREE FOR LIFE</span>. Choose wisely!
+        </p>
+      </div>
+
       {/* All Available Plans */}
       <div>
         <h2 className="text-xl font-semibold mb-4">Available Plans</h2>

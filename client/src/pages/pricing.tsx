@@ -82,10 +82,18 @@ export default function PricingPage() {
           ))}
         </div>
 
-        <div className="text-center mt-12 p-6 bg-muted rounded-lg">
+        {/* Promotional Banner */}
+        <div className="mt-12 p-6 rounded-xl border-2 border-amber-400 bg-gradient-to-r from-amber-50 to-orange-50 dark:from-amber-950/30 dark:to-orange-950/30">
+          <p className="text-center text-lg font-medium text-slate-700 dark:text-slate-200" data-testid="text-promo-banner">
+            When your sales reach <span className="font-bold text-amber-600 dark:text-amber-400">$1M</span>, All plans become{" "}
+            <span className="font-bold text-amber-600 dark:text-amber-400">FREE FOR LIFE</span>. Choose wisely!
+          </p>
+        </div>
+
+        <div className="text-center mt-8 p-6 bg-muted rounded-lg">
           <h3 className="text-xl font-semibold mb-2">FREE FOR LIFE Program</h3>
           <p className="text-muted-foreground mb-4">
-            Reach $50,000 in lifetime sales and get unlimited access forever - completely free!
+            Reach $1,000,000 in lifetime sales and get unlimited access forever - completely free!
           </p>
           <Link href="/register">
             <Button variant="outline" data-testid="button-learn-more">Learn More</Button>

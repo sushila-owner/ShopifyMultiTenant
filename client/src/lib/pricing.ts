@@ -145,7 +145,7 @@ export const PRICING_PLANS: PricingPlan[] = [
   }
 ];
 
-export const FREE_FOR_LIFE_THRESHOLD = 5000000; // $50,000 in cents
+export const FREE_FOR_LIFE_THRESHOLD = 100000000; // $1,000,000 in cents
 
 export const FREE_FOR_LIFE_PLAN: PricingPlan = {
   id: "free_for_life",
@@ -153,7 +153,7 @@ export const FREE_FOR_LIFE_PLAN: PricingPlan = {
   nameKey: "pricing.freeForLife",
   price: 0,
   period: "forever",
-  description: "Earned by reaching $50,000 in lifetime sales",
+  description: "Earned by reaching $1,000,000 in lifetime sales",
   descriptionKey: "pricing.freeForLifeDescription",
   features: [
     "Unlimited products",
