@@ -657,6 +657,10 @@ export class GigaB2BAdapter extends BaseAdapter {
       tags.push("new-arrival");
     }
     
+    // Extract fulfillment/shipping fee from GigaB2B price data
+    const fulfillmentFee = product.shippingFee ?? 
+      (product.shippingFeeRange ? product.shippingFeeRange.minAmount : 0);
+    
     return {
       supplierProductId: product.sku,
       title,
@@ -674,6 +678,7 @@ export class GigaB2BAdapter extends BaseAdapter {
       }],
       supplierSku: product.sku,
       supplierPrice: basePrice,
+      fulfillmentFee: fulfillmentFee,
     };
   }
 

@@ -30,6 +30,7 @@ export interface NormalizedProduct {
   }[];
   supplierSku: string;
   supplierPrice: number;
+  fulfillmentFee?: number;
 }
 
 export interface NormalizedInventory {

@@ -602,6 +602,7 @@ export default function CatalogPage() {
     const variantCount = (product.variants as any[])?.length || 0;
     // Use actual merchantPrice from database (includes supplier markups like GigaB2B 60%)
     const actualMerchantPrice = product.merchantPrice || product.supplierPrice;
+    const fulfillmentFee = (product as any).fulfillmentFee || 0;
     const profit = actualMerchantPrice - product.supplierPrice;
     const profitPercent = product.supplierPrice > 0 ? ((profit / product.supplierPrice) * 100).toFixed(0) : "0";
 
@@ -731,6 +732,13 @@ export default function CatalogPage() {
               </span>
             </div>
 
+            {fulfillmentFee > 0 && (
+              <div className="flex items-center gap-2 text-xs text-muted-foreground">
+                <Package className="h-3 w-3" />
+                <span>+{formatPrice(fulfillmentFee * 100)} fulfillment</span>
+              </div>
+            )}
+
             <div className="flex items-center justify-between pt-1">
               <Badge variant="outline" className="text-xs px-2 py-0.5 font-normal">
                 {stock > 0 ? `${formatStock(stock)} in stock` : "Out of stock"}
@@ -748,6 +756,7 @@ export default function CatalogPage() {
     const variantCount = (product.variants as any[])?.length || 0;
     // Use actual merchantPrice from database (includes supplier markups like GigaB2B 60%)
     const actualMerchantPrice = product.merchantPrice || product.supplierPrice;
+    const fulfillmentFee = (product as any).fulfillmentFee || 0;
     const profit = actualMerchantPrice - product.supplierPrice;
     const profitPercent = product.supplierPrice > 0 ? ((profit / product.supplierPrice) * 100).toFixed(0) : "0";
 
@@ -818,6 +827,9 @@ export default function CatalogPage() {
           <div className="text-right">
             <p className="text-lg font-bold">{formatPrice(actualMerchantPrice)}</p>
             <p className="text-sm text-emerald-600">+{formatPrice(profit)} ({profitPercent}%)</p>
+            {fulfillmentFee > 0 && (
+              <p className="text-xs text-muted-foreground">+{formatPrice(fulfillmentFee * 100)} fulfillment</p>
+            )}
           </div>
           <div className="flex gap-2">
             <Button

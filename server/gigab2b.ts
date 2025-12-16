@@ -373,6 +373,9 @@ export class GigaB2BService {
   private transformProduct(product: GigaB2BPriceData, supplierId: number): InsertProduct {
     const basePrice = product.discountedPrice || product.exclusivePrice || product.price;
     const sellerName = product.sellerInfo?.sellerStore || "GigaB2B";
+    // Extract fulfillment/shipping fee from GigaB2B price data
+    const fulfillmentFee = product.shippingFee ?? 
+      (product.shippingFeeRange ? product.shippingFeeRange.minAmount : 0);
 
     return {
       supplierId,
@@ -381,6 +384,7 @@ export class GigaB2BService {
       title: `${sellerName} - ${product.sku}`,
       description: `Product SKU: ${product.sku}\nSeller: ${sellerName}\nCurrency: ${product.currency}`,
       supplierPrice: basePrice,
+      fulfillmentFee: fulfillmentFee,
       category: "GigaB2B Products",
       inventoryQuantity: product.skuAvailable ? 100 : 0,
       images: [],

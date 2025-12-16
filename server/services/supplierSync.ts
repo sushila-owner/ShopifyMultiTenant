@@ -209,6 +209,7 @@ class SupplierSyncService {
       supplierProductId: product.supplierProductId,
       supplierSku: product.supplierSku,
       supplierPrice: product.supplierPrice,
+      fulfillmentFee: product.fulfillmentFee || 0,
       merchantPrice: finalPrice,
       inventoryQuantity: product.variants[0]?.inventoryQuantity || 0,
       status: "active",

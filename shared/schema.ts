@@ -342,6 +342,7 @@ export const products = pgTable("products", {
   supplierProductId: text("supplier_product_id"),
   supplierSku: text("supplier_sku"),
   supplierPrice: real("supplier_price").notNull(),
+  fulfillmentFee: real("fulfillment_fee").default(0),
   merchantPrice: real("merchant_price"),
   pricingRule: jsonb("pricing_rule").$type<{ type: string; value: number }>(),
   inventoryQuantity: integer("inventory_quantity").default(0),
