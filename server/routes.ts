@@ -2583,7 +2583,29 @@ export async function registerRoutes(
 
   app.put("/api/admin/products/:id", authMiddleware, adminOnly, async (req: AuthRequest, res: Response) => {
     try {
-      const product = await storage.updateProduct(parseInt(req.params.id), req.body);
+      const updateData = { ...req.body };
+      
+      // If category name is provided, look up the categoryId
+      if (updateData.category) {
+        const existingProduct = await storage.getProduct(parseInt(req.params.id));
+        if (existingProduct) {
+          // Find the category by name and supplierId
+          const allCategories = await storage.getAllCategories();
+          const matchedCategory = allCategories.find(
+            (c) => c.name === updateData.category && 
+            (!c.supplierId || c.supplierId === existingProduct.supplierId)
+          );
+          if (matchedCategory) {
+            updateData.categoryId = matchedCategory.id;
+          }
+        }
+      } else if (updateData.category === "" || updateData.category === null) {
+        // Clear category
+        updateData.categoryId = null;
+        updateData.category = null;
+      }
+      
+      const product = await storage.updateProduct(parseInt(req.params.id), updateData);
       if (!product) {
         return res.status(404).json({ success: false, error: "Product not found" });
       }

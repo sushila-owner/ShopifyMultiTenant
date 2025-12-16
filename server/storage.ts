@@ -223,7 +223,7 @@ export interface IStorage {
 }
 
 export class DatabaseStorage implements IStorage {
-  // Helper to select products without categoryId column (for PlanetScale compatibility)
+  // Product select columns including categoryId (Neon PostgreSQL supports it)
   private productSelectColumns = {
     id: products.id,
     merchantId: products.merchantId,
@@ -231,6 +231,7 @@ export class DatabaseStorage implements IStorage {
     title: products.title,
     description: products.description,
     category: products.category,
+    categoryId: products.categoryId,
     tags: products.tags,
     images: products.images,
     variants: products.variants,
@@ -252,15 +253,7 @@ export class DatabaseStorage implements IStorage {
     updatedAt: products.updatedAt,
   };
 
-  private addNullCategoryId(items: any[]): Product[] {
-    return items.map(item => ({ ...item, categoryId: null })) as Product[];
-  }
-
-  private addNullCategoryIdSingle(item: any): Product {
-    return { ...item, categoryId: null } as Product;
-  }
-
-  // Helper to strip categoryId from insert data (for PlanetScale compatibility)
+  // Helper to strip categoryId from insert data when needed
   private stripCategoryIdFromInsert(data: InsertProduct): Omit<InsertProduct, 'categoryId'> {
     const { categoryId, ...rest } = data as any;
     return rest;
@@ -565,7 +558,7 @@ export class DatabaseStorage implements IStorage {
   // ==================== PRODUCTS ====================
   async getProduct(id: number): Promise<Product | undefined> {
     const [product] = await db.select(this.productSelectColumns).from(products).where(eq(products.id, id));
-    return product ? this.addNullCategoryIdSingle(product) : undefined;
+    return product as Product | undefined;
   }
 
   async createProduct(insertProduct: InsertProduct): Promise<Product> {
@@ -580,14 +573,14 @@ export class DatabaseStorage implements IStorage {
   }
 
   async updateProduct(id: number, data: Partial<InsertProduct>): Promise<Product | undefined> {
-    // Strip categoryId for PlanetScale compatibility
-    const strippedData = this.stripCategoryIdFromInsert(data as InsertProduct);
-    // Update without returning all columns to avoid categoryId reference
+    // Allow categoryId to be set/updated directly (Neon PostgreSQL supports it)
+    const updateData: any = { ...data, updatedAt: new Date() };
+    
     await db
       .update(products)
-      .set({ ...strippedData, updatedAt: new Date() })
+      .set(updateData)
       .where(eq(products.id, id));
-    // Fetch the updated product using safe select columns
+    // Fetch the updated product
     return this.getProduct(id);
   }
 
@@ -707,7 +700,7 @@ export class DatabaseStorage implements IStorage {
     const items = await db.select(this.productSelectColumns).from(products)
       .where(and(eq(products.isGlobal, true), isNull(products.merchantId)))
       .orderBy(desc(products.createdAt));
-    return this.addNullCategoryId(items);
+    return items as Product[];
   }
 
   async getGlobalProductsPaginated(params: PaginationParams): Promise<PaginatedResponse<Product>> {
@@ -729,10 +722,9 @@ export class DatabaseStorage implements IStorage {
       conditions.push(eq(products.category, category));
     }
 
-    // categoryId filtering disabled until migration is applied to production database
-    // if (categoryId) {
-    //   conditions.push(eq(products.categoryId, categoryId));
-    // }
+    if (categoryId) {
+      conditions.push(eq(products.categoryId, categoryId));
+    }
 
     if (priceMin !== undefined) {
       conditions.push(gte(products.supplierPrice, priceMin));
@@ -786,7 +778,7 @@ export class DatabaseStorage implements IStorage {
       .offset(offset);
 
     return {
-      items: this.addNullCategoryId(items),
+      items: items as Product[],
       total,
       page,
       pageSize,
@@ -798,12 +790,12 @@ export class DatabaseStorage implements IStorage {
     const items = await db.select(this.productSelectColumns).from(products)
       .where(eq(products.merchantId, merchantId))
       .orderBy(desc(products.createdAt));
-    return this.addNullCategoryId(items);
+    return items as Product[];
   }
 
   async getProductsBySupplier(supplierId: number): Promise<Product[]> {
     const items = await db.select(this.productSelectColumns).from(products).where(eq(products.supplierId, supplierId));
-    return this.addNullCategoryId(items);
+    return items as Product[];
   }
 
   async getProductsBySupplierProductId(supplierId: number, supplierProductId: string): Promise<Product[]> {
@@ -813,12 +805,13 @@ export class DatabaseStorage implements IStorage {
         eq(products.supplierProductId, supplierProductId)
       )
     );
-    return this.addNullCategoryId(items);
+    return items as Product[];
   }
 
   async getProductsByCategory(categoryId: number): Promise<Product[]> {
-    // Category filtering disabled until migration is applied to production database
-    return [];
+    const items = await db.select(this.productSelectColumns).from(products)
+      .where(eq(products.categoryId, categoryId));
+    return items as Product[];
   }
 
   // ==================== CUSTOMERS ====================
