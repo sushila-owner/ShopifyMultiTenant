@@ -7,8 +7,8 @@ import {
   ProductIcon, 
   OrderIcon, 
   SettingsIcon, 
-  StoreMajor,
-  AnalyticsIcon
+  PackageIcon,
+  ChartVerticalIcon
 } from "@shopify/polaris-icons";
 import { useLocation, Link } from "wouter";
 import { useShopifyEmbedded } from "@/lib/shopify-app-bridge";
@@ -57,7 +57,7 @@ export function EmbeddedLayout({
         {
           url: "/my-products",
           label: "My Products",
-          icon: StoreMajor,
+          icon: PackageIcon,
           selected: location.startsWith("/my-products"),
         },
         {
@@ -95,7 +95,7 @@ export function EmbeddedLayout({
         {
           url: "/admin/analytics",
           label: "Analytics",
-          icon: AnalyticsIcon,
+          icon: ChartVerticalIcon,
           selected: location === "/admin/analytics",
         },
         {

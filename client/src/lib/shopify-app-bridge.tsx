@@ -42,8 +42,29 @@ export function isShopifyEmbedded(): boolean {
   }
 }
 
+let cachedApiKey: string | null = null;
+
+export async function fetchShopifyApiKey(): Promise<string> {
+  if (cachedApiKey) {
+    return cachedApiKey;
+  }
+  
+  try {
+    const response = await fetch("/api/shopify/config");
+    const data = await response.json();
+    if (data.success && data.data?.apiKey) {
+      cachedApiKey = data.data.apiKey;
+      return cachedApiKey || "";
+    }
+  } catch (error) {
+    console.error("[Shopify] Failed to fetch API key:", error);
+  }
+  
+  return "";
+}
+
 export function getShopifyApiKey(): string {
-  return import.meta.env.VITE_SHOPIFY_API_KEY || "";
+  return cachedApiKey || import.meta.env.VITE_SHOPIFY_API_KEY || "";
 }
 
 interface ShopifyProviderProps {
@@ -56,14 +77,20 @@ export function ShopifyProvider({ children }: ShopifyProviderProps) {
   const { shop, host } = getShopifyParams();
 
   useEffect(() => {
-    const checkEmbedded = isShopifyEmbedded();
-    setEmbedded(checkEmbedded);
-    setIsLoading(false);
-    
-    if (checkEmbedded && host) {
-      console.log("[Shopify] Running in embedded mode");
-      initializeAppBridge(host);
+    async function initialize() {
+      const checkEmbedded = isShopifyEmbedded();
+      setEmbedded(checkEmbedded);
+      
+      if (checkEmbedded && host) {
+        console.log("[Shopify] Running in embedded mode");
+        await fetchShopifyApiKey();
+        initializeAppBridge(host);
+      }
+      
+      setIsLoading(false);
     }
+    
+    initialize();
   }, [host]);
 
   return (

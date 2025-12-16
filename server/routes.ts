@@ -4353,6 +4353,22 @@ export async function registerRoutes(
     }
   });
 
+  // ==================== SHOPIFY CONFIG ROUTES ====================
+  
+  // Get Shopify API key for App Bridge initialization (public key, not secret)
+  // The API key is meant to be public per Shopify's App Bridge documentation
+  app.get("/api/shopify/config", async (req: Request, res: Response) => {
+    try {
+      const apiKey = process.env.SHOPIFY_API_KEY;
+      if (!apiKey) {
+        return res.json({ success: true, data: { apiKey: null, configured: false } });
+      }
+      res.json({ success: true, data: { apiKey, configured: true } });
+    } catch (error: any) {
+      res.status(500).json({ success: false, error: error.message });
+    }
+  });
+
   // ==================== STRIPE SUBSCRIPTION ROUTES ====================
   
   // Get Stripe publishable key for frontend
