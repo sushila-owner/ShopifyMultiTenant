@@ -967,6 +967,70 @@ export async function registerRoutes(
     }
   });
 
+  // Shopify app_subscriptions/update webhook - handle billing subscription changes
+  app.post("/api/shopify/webhooks/app_subscriptions/update", 
+    express.raw({ type: 'application/json' }),
+    async (req: Request, res: Response) => {
+    try {
+      const hmacHeader = req.headers["x-shopify-hmac-sha256"] as string;
+      const shopDomain = req.headers["x-shopify-shop-domain"] as string;
+      const rawBody = req.body.toString("utf8");
+      
+      if (!hmacHeader || !shopDomain) {
+        console.error("[Shopify Billing Webhook] Missing required headers");
+        return res.status(401).send("Unauthorized");
+      }
+      
+      const { verifyWebhookHmac } = await import("./shopifyOAuth");
+      if (!verifyWebhookHmac(rawBody, hmacHeader)) {
+        console.error("[Shopify Billing Webhook] HMAC validation failed");
+        return res.status(401).send("Unauthorized");
+      }
+      
+      const payload = JSON.parse(rawBody);
+      const subscription = payload.app_subscription || payload;
+      console.log(`[Shopify Billing Webhook] Subscription update for shop: ${shopDomain}`, subscription);
+      
+      // Find merchant by shop domain
+      const merchants = await storage.getAllMerchants();
+      const merchant = merchants.find(m => {
+        const store = m.shopifyStore as { domain?: string } | null;
+        return store?.domain === shopDomain || store?.domain?.includes(shopDomain);
+      });
+      
+      if (!merchant) {
+        console.error(`[Shopify Billing Webhook] Merchant not found for shop: ${shopDomain}`);
+        return res.status(200).send("OK");
+      }
+      
+      const { handleShopifySubscriptionCancelled, handleShopifySubscriptionActivated } = await import("./services/shopifyBilling");
+      
+      // Extract status (Shopify sends it in different cases depending on context)
+      const status = (subscription.status || subscription.admin_graphql_api_id?.includes('ACTIVE') ? 'ACTIVE' : '')?.toUpperCase();
+      
+      // Handle subscription status changes
+      if (status === "CANCELLED" || status === "EXPIRED" || status === "FROZEN") {
+        await handleShopifySubscriptionCancelled(merchant.id);
+        console.log(`[Shopify Billing Webhook] Cancelled subscription for merchant ${merchant.id}`);
+      } else if (status === "ACTIVE") {
+        // For activations via webhook, extract plan info from subscription name
+        const planName = subscription.name || "";
+        const planSlug = planName.toLowerCase().replace(/\s+/g, "_");
+        const subscriptionId = subscription.admin_graphql_api_id || subscription.id?.toString() || "";
+        
+        if (subscriptionId) {
+          await handleShopifySubscriptionActivated(merchant.id, subscriptionId, planSlug);
+          console.log(`[Shopify Billing Webhook] Activated subscription for merchant ${merchant.id} on plan ${planSlug}`);
+        }
+      }
+      
+      res.status(200).send("OK");
+    } catch (error: any) {
+      console.error("[Shopify Billing Webhook] Error processing subscription update:", error);
+      res.status(200).send("OK");
+    }
+  });
+
   // ==================== MERCHANT ORDERS ROUTES ====================
   
   // Get merchant orders
