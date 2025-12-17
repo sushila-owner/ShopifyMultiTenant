@@ -18,6 +18,7 @@ export const itemFulfillmentStatusEnum = pgEnum("item_fulfillment_status", ["pen
 export const customerTierEnum = pgEnum("customer_tier", ["bronze", "silver", "gold", "platinum"]);
 export const pricingRuleTypeEnum = pgEnum("pricing_rule_type", ["fixed", "percentage"]);
 export const billingIntervalEnum = pgEnum("billing_interval", ["monthly", "yearly"]);
+export const billingProviderEnum = pgEnum("billing_provider", ["stripe", "shopify"]);
 export const notificationTypeEnum = pgEnum("notification_type", ["order", "product", "inventory", "system", "billing"]);
 export const invitationStatusEnum = pgEnum("invitation_status", ["pending", "accepted", "expired"]);
 
@@ -502,8 +503,11 @@ export const subscriptions = pgTable("subscriptions", {
   trialStart: timestamp("trial_start"),
   trialEnd: timestamp("trial_end"),
   cancelledAt: timestamp("cancelled_at"),
+  billingProvider: billingProviderEnum("billing_provider").default("stripe"),
   stripeSubscriptionId: text("stripe_subscription_id"),
   stripeCustomerId: text("stripe_customer_id"),
+  shopifySubscriptionId: text("shopify_subscription_id"),
+  shopifyChargeId: text("shopify_charge_id"),
   productsUsed: integer("products_used").default(0),
   ordersUsed: integer("orders_used").default(0),
   teamMembersUsed: integer("team_members_used").default(0),
