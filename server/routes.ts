@@ -207,10 +207,11 @@ export async function registerRoutes(
   app.get("/", async (req: Request, res: Response, next: NextFunction) => {
     const shop = req.query.shop as string;
     const hmac = req.query.hmac as string;
+    const host = req.query.host as string;
     
     // If this is a Shopify install request (has shop and hmac), handle OAuth
     if (shop && hmac) {
-      console.log(`[Shopify] Root install request for shop: ${shop}`);
+      console.log(`[Shopify] Root install request for shop: ${shop}, host: ${host}`);
       
       const { 
         isShopifyConfigured, 
@@ -239,6 +240,7 @@ export async function registerRoutes(
         shop, 
         merchantId: null, 
         isAppStoreInstall: true,
+        host: host || null,
         timestamp: Date.now() 
       });
 
@@ -270,6 +272,7 @@ export async function registerRoutes(
       }
 
       const shop = req.query.shop as string;
+      const host = req.query.host as string;
       if (!shop) {
         return res.status(400).send("Missing shop parameter. Please install from Shopify App Store.");
       }
@@ -290,11 +293,12 @@ export async function registerRoutes(
         shop, 
         merchantId: null, 
         isAppStoreInstall: true,
+        host: host || null,
         timestamp: Date.now() 
       });
 
       const installUrl = buildInstallUrl(shop, config, nonce);
-      console.log(`[Shopify] App Store install initiated for shop: ${shop}`);
+      console.log(`[Shopify] App Store install initiated for shop: ${shop}, host: ${host}`);
       
       res.redirect(installUrl);
     } catch (error: any) {
@@ -485,6 +489,7 @@ export async function registerRoutes(
       }
       
       const isAppStoreInstall = nonceData.isAppStoreInstall === true;
+      const savedHost = nonceData.host as string | null;
       let merchantId = nonceData.merchantId;
       await deleteNonce(state);
 
@@ -605,8 +610,34 @@ export async function registerRoutes(
           
           console.log(`[Shopify OAuth] Auth code created for merchant ${merchantId}`);
           
-          // Redirect with secure code - not the raw JWT
+          // For embedded apps, redirect back to Shopify Admin with the host parameter
+          if (savedHost) {
+            try {
+              // Decode the host to get the admin URL
+              const decodedHost = Buffer.from(savedHost, 'base64').toString('utf8');
+              console.log(`[Shopify OAuth] Embedded app redirect to: ${decodedHost}`);
+              
+              // Redirect back to the embedded app in Shopify Admin
+              // The host contains the path like: admin.shopify.com/store/shop-name
+              const embeddedAppUrl = `https://${decodedHost}?code=${authCode}&shop=${encodeURIComponent(shop)}`;
+              return res.redirect(embeddedAppUrl);
+            } catch (decodeError) {
+              console.error("[Shopify OAuth] Failed to decode host:", decodeError);
+            }
+          }
+          
+          // Fallback: Redirect with secure code - not the raw JWT
           return res.redirect(`/shopify-connected?code=${authCode}&shop=${encodeURIComponent(shopInfo.shop.name)}`);
+        }
+
+        // For embedded apps without auth code, still redirect to Shopify Admin
+        if (savedHost) {
+          try {
+            const decodedHost = Buffer.from(savedHost, 'base64').toString('utf8');
+            return res.redirect(`https://${decodedHost}?shop=${encodeURIComponent(shop)}`);
+          } catch (decodeError) {
+            console.error("[Shopify OAuth] Failed to decode host:", decodeError);
+          }
         }
 
         return res.redirect(`/dashboard?shopify_connected=true&shop=${encodeURIComponent(shopInfo.shop.name)}`);
