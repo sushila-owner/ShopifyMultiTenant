@@ -6,6 +6,11 @@ import type { NormalizedProduct, NormalizedInventory } from "../supplierAdapters
 const SYNC_INTERVAL_MS = 15 * 60 * 1000; // 15 minutes
 const BATCH_SIZE = 250;
 
+// Shopify supplier permanent 30% discount (backend only, not shown to merchants)
+// Final Price = Original Price × 0.7
+const SHOPIFY_SUPPLIER_ID = 1;
+const SHOPIFY_PRICE_MULTIPLIER = 0.7;
+
 // GigaB2B permanent pricing markup (60% app profit)
 // Final Price = Base Price × 1.6
 const GIGAB2B_SUPPLIER_ID = 2;
@@ -193,11 +198,16 @@ class SupplierSyncService {
     // Check if product already exists
     const existingProducts = await storage.getProductsBySupplierProductId(supplierId, product.supplierProductId);
     
-    // Apply GigaB2B permanent 60% markup (Final Price = Base Price × 1.6)
-    const isGigaB2B = supplierId === GIGAB2B_SUPPLIER_ID;
-    const finalPrice = isGigaB2B 
-      ? Math.round(product.supplierPrice * GIGAB2B_PRICE_MULTIPLIER * 100) / 100
-      : product.supplierPrice;
+    // Apply supplier-specific pricing rules (backend only, not shown to merchants)
+    let finalPrice = product.supplierPrice;
+    
+    if (supplierId === SHOPIFY_SUPPLIER_ID) {
+      // Shopify: 30% discount (New Price = Original Price × 0.7)
+      finalPrice = Math.round(product.supplierPrice * SHOPIFY_PRICE_MULTIPLIER * 100) / 100;
+    } else if (supplierId === GIGAB2B_SUPPLIER_ID) {
+      // GigaB2B: 60% markup (Final Price = Base Price × 1.6)
+      finalPrice = Math.round(product.supplierPrice * GIGAB2B_PRICE_MULTIPLIER * 100) / 100;
+    }
     
     const productData: Partial<InsertProduct> = {
       supplierId,
