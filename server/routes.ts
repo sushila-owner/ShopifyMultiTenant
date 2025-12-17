@@ -2764,7 +2764,10 @@ export async function registerRoutes(
       
       // Process in batches to avoid memory issues
       while (hasMore && processed < limit) {
-        const productsResult = await storage.getGlobalProducts(page, batchSize);
+        const productsResult = await storage.getGlobalProductsPaginated({
+          page,
+          pageSize: batchSize
+        });
         let productsToProcess = productsResult.items;
         
         if (productsToProcess.length === 0) {
