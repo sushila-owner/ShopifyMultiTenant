@@ -428,6 +428,23 @@ export default function MerchantProductDetailPage() {
                   </p>
                 </div>
 
+                {(product as any).fulfillmentFee > 0 && (
+                  <div className="p-4 rounded-xl bg-gradient-to-r from-amber-500/10 to-amber-500/5 border border-amber-500/20 mb-4">
+                    <div className="flex items-center gap-2 mb-2">
+                      <Truck className="h-5 w-5 text-amber-600" />
+                      <span className="font-semibold text-amber-700 dark:text-amber-400">
+                        Fulfillment Fee
+                      </span>
+                    </div>
+                    <p className="text-2xl font-bold text-amber-600" data-testid="text-fulfillment-fee">
+                      +{formatPrice((product as any).fulfillmentFee)} per order
+                    </p>
+                    <p className="text-sm text-muted-foreground mt-1">
+                      Shipping & handling charged at fulfillment
+                    </p>
+                  </div>
+                )}
+
                 <Button 
                   size="lg" 
                   className="w-full gap-2 h-12 text-base"

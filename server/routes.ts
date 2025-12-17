@@ -3061,9 +3061,16 @@ export async function registerRoutes(
       const images = (product.images as any[]) || [];
       const tags = (product.tags as string[]) || [];
 
+      // Build description with fulfillment fee if present
+      let productDescription = product.description || "";
+      if (product.fulfillmentFee && product.fulfillmentFee > 0) {
+        const fulfillmentNote = `\n\n---\n**Fulfillment Fee:** $${product.fulfillmentFee.toFixed(2)} per order (shipping & handling)`;
+        productDescription = productDescription + fulfillmentNote;
+      }
+
       const result = await shopifyService.createProduct({
         title: product.title,
-        description: product.description || "",
+        description: productDescription,
         productType: product.category || "",
         tags,
         variants: variants.map(v => ({
@@ -3133,9 +3140,16 @@ export async function registerRoutes(
         const images = (product.images as any[]) || [];
         const tags = (product.tags as string[]) || [];
 
+        // Build description with fulfillment fee if present
+        let productDescription = product.description || "";
+        if (product.fulfillmentFee && product.fulfillmentFee > 0) {
+          const fulfillmentNote = `\n\n---\n**Fulfillment Fee:** $${product.fulfillmentFee.toFixed(2)} per order (shipping & handling)`;
+          productDescription = productDescription + fulfillmentNote;
+        }
+
         const result = await shopifyService.createProduct({
           title: product.title,
-          description: product.description || "",
+          description: productDescription,
           productType: product.category || "",
           tags,
           variants: variants.map(v => ({
