@@ -486,11 +486,6 @@ export default function SubscriptionPage() {
                         </span>
                         {!isFree && <span className="text-muted-foreground">/month</span>}
                       </div>
-                      {stripePlan?.yearlyAmount && stripePlan.yearlyAmount > 0 && (
-                        <p className="text-xs text-muted-foreground mt-1">
-                          or {formatCurrency(stripePlan.yearlyAmount)}/year (save 17%)
-                        </p>
-                      )}
                     </CardHeader>
                     <CardContent>
                       <ul className="space-y-2 mb-6 text-sm">
