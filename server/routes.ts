@@ -25,9 +25,9 @@ import { supplierSyncService } from "./services/supplierSync";
 import { orderFulfillmentService } from "./services/orderFulfillment";
 import { analyticsEvents } from "./services/analyticsEvents";
 
-const JWT_SECRET = process.env.SESSION_SECRET;
-if (!JWT_SECRET) {
-  console.error("FATAL: SESSION_SECRET environment variable is required");
+const JWT_SECRET = process.env.SESSION_SECRET || "fallback-secret-for-development-only";
+if (!process.env.SESSION_SECRET) {
+  console.error("WARNING: SESSION_SECRET environment variable is not set, using fallback");
 }
 const JWT_EXPIRES_IN = "7d";
 

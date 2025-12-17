@@ -156,7 +156,7 @@ class SupplierSyncService {
     while (hasMore) {
       // For Shopify (cursor-based): pass cursor as 3rd param
       // For GigaB2B (page-based): uses page param
-      const result = supplier.type === "shopify" 
+      const result: { items: NormalizedProduct[]; hasMore: boolean; nextCursor?: string } = supplier.type === "shopify" 
         ? await (adapter as any).fetchProducts(page, BATCH_SIZE, cursor)
         : await adapter.fetchProducts(page, BATCH_SIZE);
       
