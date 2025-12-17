@@ -26,7 +26,9 @@ import {
   TrendingUp,
   ExternalLink,
   Loader2,
+  Store,
 } from "lucide-react";
+import { SiShopify } from "react-icons/si";
 import type { Plan, Subscription } from "@shared/schema";
 import { useCurrency } from "@/lib/currency";
 
@@ -63,11 +65,15 @@ export default function SubscriptionPage() {
         title: "Subscription Updated",
         description: "Your subscription has been updated successfully!",
       });
-      // Clean up URL
       window.history.replaceState({}, '', '/merchant/subscription');
-      // Refresh subscription data
       queryClient.invalidateQueries({ queryKey: ["/api/stripe/subscription"] });
       queryClient.invalidateQueries({ queryKey: ["/api/merchant/subscription"] });
+    } else if (params.get('shopify_billing') === 'success') {
+      const planSlug = params.get('plan');
+      if (planSlug) {
+        shopifyConfirmMutation.mutate({ planSlug });
+      }
+      window.history.replaceState({}, '', '/merchant/subscription');
     } else if (params.get('canceled') === 'true') {
       toast({
         title: "Checkout Canceled",
@@ -101,6 +107,14 @@ export default function SubscriptionPage() {
     totalOrders: number;
   }>({
     queryKey: ["/api/merchant/stats"],
+  });
+
+  const { data: shopifyBillingData } = useQuery<{
+    shopifyConnected: boolean;
+    storeDomain: string | null;
+    currentSubscription: any;
+  }>({
+    queryKey: ["/api/shopify/billing/status"],
   });
 
   const checkoutMutation = useMutation({
@@ -141,6 +155,47 @@ export default function SubscriptionPage() {
     },
   });
 
+  const shopifyCheckoutMutation = useMutation({
+    mutationFn: async ({ planSlug, billingInterval }: { planSlug: string; billingInterval: string }) => {
+      const response = await apiRequest("POST", "/api/shopify/billing/checkout", { planSlug, billingInterval });
+      return response.json();
+    },
+    onSuccess: (data) => {
+      if (data.data?.confirmationUrl) {
+        window.location.href = data.data.confirmationUrl;
+      }
+    },
+    onError: (error: any) => {
+      toast({
+        title: "Shopify Billing Error",
+        description: error.message || "Failed to start Shopify billing",
+        variant: "destructive",
+      });
+    },
+  });
+
+  const shopifyConfirmMutation = useMutation({
+    mutationFn: async ({ planSlug }: { planSlug: string }) => {
+      const response = await apiRequest("POST", "/api/shopify/billing/confirm", { planSlug });
+      return response.json();
+    },
+    onSuccess: () => {
+      toast({
+        title: "Subscription Activated",
+        description: "Your subscription has been activated via Shopify Billing!",
+      });
+      queryClient.invalidateQueries({ queryKey: ["/api/merchant/subscription"] });
+      queryClient.invalidateQueries({ queryKey: ["/api/shopify/billing/status"] });
+    },
+    onError: (error: any) => {
+      toast({
+        title: "Confirmation Failed",
+        description: error.message || "Failed to confirm Shopify subscription",
+        variant: "destructive",
+      });
+    },
+  });
+
   const subscription = data?.subscription;
   const currentPlan = data?.currentPlan;
   const availablePlans = data?.availablePlans || [];
@@ -174,9 +229,15 @@ export default function SubscriptionPage() {
     checkoutMutation.mutate({ priceId });
   };
 
+  const handleShopifyCheckout = (planSlug: string) => {
+    shopifyCheckoutMutation.mutate({ planSlug, billingInterval: "monthly" });
+  };
+
   const handleManageSubscription = () => {
     portalMutation.mutate();
   };
+
+  const shopifyConnected = shopifyBillingData?.shopifyConnected || false;
 
   if (isLoading) {
     return (
@@ -482,22 +543,42 @@ export default function SubscriptionPage() {
                           Free Tier
                         </Button>
                       ) : (
-                        <Button
-                          variant={isPopular ? "default" : "outline"}
-                          className="w-full gap-2"
-                          onClick={() => stripePlan?.monthlyPriceId && handleCheckout(stripePlan.monthlyPriceId)}
-                          disabled={checkoutMutation.isPending || !stripePlan?.monthlyPriceId}
-                          data-testid={`button-select-${plan.slug || plan.id}`}
-                        >
-                          {checkoutMutation.isPending ? (
-                            <Loader2 className="h-4 w-4 animate-spin" />
-                          ) : (
-                            <>
-                              {stripePlan?.monthlyPriceId ? "Subscribe" : "Contact Sales"}
-                              <ArrowRight className="h-4 w-4" />
-                            </>
+                        <div className="space-y-2">
+                          <Button
+                            variant={isPopular ? "default" : "outline"}
+                            className="w-full gap-2"
+                            onClick={() => stripePlan?.monthlyPriceId && handleCheckout(stripePlan.monthlyPriceId)}
+                            disabled={checkoutMutation.isPending || !stripePlan?.monthlyPriceId}
+                            data-testid={`button-select-${plan.slug || plan.id}`}
+                          >
+                            {checkoutMutation.isPending ? (
+                              <Loader2 className="h-4 w-4 animate-spin" />
+                            ) : (
+                              <>
+                                <CreditCard className="h-4 w-4" />
+                                {stripePlan?.monthlyPriceId ? "Pay with Card" : "Contact Sales"}
+                              </>
+                            )}
+                          </Button>
+                          {shopifyConnected && (
+                            <Button
+                              variant="outline"
+                              className="w-full gap-2 border-green-500/30 text-green-700 hover:bg-green-500/10"
+                              onClick={() => handleShopifyCheckout(plan.slug)}
+                              disabled={shopifyCheckoutMutation.isPending}
+                              data-testid={`button-shopify-${plan.slug || plan.id}`}
+                            >
+                              {shopifyCheckoutMutation.isPending ? (
+                                <Loader2 className="h-4 w-4 animate-spin" />
+                              ) : (
+                                <>
+                                  <SiShopify className="h-4 w-4" />
+                                  Shopify Billing
+                                </>
+                              )}
+                            </Button>
                           )}
-                        </Button>
+                        </div>
                       )}
                     </CardContent>
                   </Card>
@@ -513,24 +594,25 @@ export default function SubscriptionPage() {
           <CardTitle>Billing Information</CardTitle>
           <CardDescription>Your payment method and billing details</CardDescription>
         </CardHeader>
-        <CardContent>
+        <CardContent className="space-y-4">
+          {/* Stripe Billing */}
           <div className="flex items-center justify-between gap-4 p-4 rounded-lg border">
             <div className="flex items-center gap-4">
               <div className="flex h-12 w-12 items-center justify-center rounded-lg bg-muted">
                 <CreditCard className="h-6 w-6 text-muted-foreground" />
               </div>
               <div>
-                {merchantStripeData?.stripeCustomerId ? (
-                  <>
-                    <p className="font-medium">Payment method on file</p>
-                    <p className="text-sm text-muted-foreground">Manage your subscription in the billing portal</p>
-                  </>
-                ) : (
-                  <>
-                    <p className="font-medium">No payment method</p>
-                    <p className="text-sm text-muted-foreground">Subscribe to a plan to add a payment method</p>
-                  </>
-                )}
+                <p className="font-medium flex items-center gap-2">
+                  Stripe Billing
+                  {merchantStripeData?.stripeCustomerId && (
+                    <Badge variant="outline" className="text-xs">Connected</Badge>
+                  )}
+                </p>
+                <p className="text-sm text-muted-foreground">
+                  {merchantStripeData?.stripeCustomerId 
+                    ? "Manage your subscription in the billing portal" 
+                    : "Pay with credit card via Stripe"}
+                </p>
               </div>
             </div>
             {merchantStripeData?.stripeCustomerId && (
@@ -549,20 +631,75 @@ export default function SubscriptionPage() {
               </Button>
             )}
           </div>
+
+          {/* Shopify Billing */}
+          <div className="flex items-center justify-between gap-4 p-4 rounded-lg border">
+            <div className="flex items-center gap-4">
+              <div className="flex h-12 w-12 items-center justify-center rounded-lg bg-green-500/10">
+                <SiShopify className="h-6 w-6 text-green-600" />
+              </div>
+              <div>
+                <p className="font-medium flex items-center gap-2">
+                  Shopify Billing
+                  {shopifyConnected && (
+                    <Badge variant="outline" className="text-xs bg-green-500/10 text-green-700 border-green-500/30">
+                      Store Connected
+                    </Badge>
+                  )}
+                </p>
+                <p className="text-sm text-muted-foreground">
+                  {shopifyConnected 
+                    ? `Pay through your Shopify account (${shopifyBillingData?.storeDomain})` 
+                    : "Connect your Shopify store to use Shopify Billing"}
+                </p>
+              </div>
+            </div>
+            {!shopifyConnected && (
+              <Button 
+                variant="outline" 
+                onClick={() => window.location.href = "/merchant/store"}
+                data-testid="button-connect-shopify"
+              >
+                <Store className="h-4 w-4 mr-2" />
+                Connect Store
+              </Button>
+            )}
+          </div>
+
+          {shopifyConnected && !stripeSubscription && !shopifyBillingData?.currentSubscription && (
+            <div className="p-3 rounded-lg bg-green-500/10 border border-green-500/20">
+              <p className="text-sm text-green-800 dark:text-green-200">
+                <SiShopify className="inline h-4 w-4 mr-1" />
+                Shopify store connected! You can now pay for subscriptions through Shopify Billing - 
+                charges will appear on your Shopify invoice.
+              </p>
+            </div>
+          )}
+
           {stripeSubscription && (
-            <div className="mt-4 p-3 rounded-lg bg-green-500/10 border border-green-500/20">
+            <div className="p-3 rounded-lg bg-green-500/10 border border-green-500/20">
               <p className="text-sm text-green-800 dark:text-green-200">
                 <Check className="inline h-4 w-4 mr-1" />
-                Active subscription - Next billing date: {new Date(stripeSubscription.currentPeriodEnd * 1000).toLocaleDateString()}
+                Active Stripe subscription - Next billing: {new Date(stripeSubscription.currentPeriodEnd * 1000).toLocaleDateString()}
                 {stripeSubscription.cancelAtPeriodEnd && " (Cancels at end of period)"}
               </p>
             </div>
           )}
-          {subscription?.status === "trial" && !stripeSubscription && (
-            <div className="mt-4 p-3 rounded-lg bg-blue-500/10 border border-blue-500/20">
+
+          {shopifyBillingData?.currentSubscription?.status === "ACTIVE" && (
+            <div className="p-3 rounded-lg bg-green-500/10 border border-green-500/20">
+              <p className="text-sm text-green-800 dark:text-green-200">
+                <SiShopify className="inline h-4 w-4 mr-1" />
+                Active Shopify subscription - Billed through your Shopify account
+              </p>
+            </div>
+          )}
+
+          {subscription?.status === "trial" && !stripeSubscription && !shopifyBillingData?.currentSubscription && (
+            <div className="p-3 rounded-lg bg-blue-500/10 border border-blue-500/20">
               <p className="text-sm text-blue-800 dark:text-blue-200">
                 <Zap className="inline h-4 w-4 mr-1" />
-                You're currently on a free trial. Subscribe to a paid plan to access more features and higher limits.
+                You're on a free trial. Subscribe via Stripe or Shopify Billing to access more features.
               </p>
             </div>
           )}
