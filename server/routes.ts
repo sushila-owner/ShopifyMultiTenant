@@ -202,6 +202,56 @@ export async function registerRoutes(
     return `${protocol}://${host}`;
   }
 
+  // Root URL handler for Shopify App Store installs
+  // Shopify may send install requests to the App URL root with shop parameter
+  app.get("/", async (req: Request, res: Response, next: NextFunction) => {
+    const shop = req.query.shop as string;
+    const hmac = req.query.hmac as string;
+    
+    // If this is a Shopify install request (has shop and hmac), handle OAuth
+    if (shop && hmac) {
+      console.log(`[Shopify] Root install request for shop: ${shop}`);
+      
+      const { 
+        isShopifyConfigured, 
+        getShopifyConfig, 
+        validateShopDomain, 
+        generateNonce, 
+        buildInstallUrl 
+      } = await import("./shopifyOAuth");
+
+      if (!isShopifyConfigured()) {
+        return res.status(500).send("Shopify app not configured. Please contact support.");
+      }
+
+      if (!validateShopDomain(shop)) {
+        return res.status(400).send("Invalid Shopify store domain.");
+      }
+
+      const appUrl = getAppUrl(req);
+      const config = getShopifyConfig(appUrl);
+      if (!config) {
+        return res.status(500).send("Failed to configure Shopify app.");
+      }
+
+      const nonce = generateNonce();
+      await setNonce(nonce, { 
+        shop, 
+        merchantId: null, 
+        isAppStoreInstall: true,
+        timestamp: Date.now() 
+      });
+
+      const installUrl = buildInstallUrl(shop, config, nonce);
+      console.log(`[Shopify] Redirecting to OAuth: ${installUrl}`);
+      
+      return res.redirect(installUrl);
+    }
+    
+    // Not a Shopify request, pass to next handler (frontend)
+    next();
+  });
+
   // PUBLIC: Shopify App Store installation endpoint
   // This is the entry point when a merchant installs from Shopify App Store
   // No authentication required - merchant account will be auto-created during OAuth
