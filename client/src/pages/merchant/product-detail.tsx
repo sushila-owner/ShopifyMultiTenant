@@ -48,6 +48,7 @@ import {
   Clock,
   Zap,
   Languages,
+  Edit,
 } from "lucide-react";
 import type { Product } from "@shared/schema";
 import { useCurrency } from "@/lib/currency";
@@ -67,6 +68,7 @@ export default function MerchantProductDetailPage() {
   const productId = catalogParams?.id || productsParams?.id;
   const [selectedImageIndex, setSelectedImageIndex] = useState(0);
   const [isImportDialogOpen, setIsImportDialogOpen] = useState(false);
+  const [isEditMarkupOpen, setIsEditMarkupOpen] = useState(false);
   
   useEffect(() => {
     setSelectedImageIndex(0);
@@ -81,11 +83,48 @@ export default function MerchantProductDetailPage() {
     pricingType: "percentage" as "fixed" | "percentage",
     pricingValue: 20,
   });
+  
+  const [markupSettings, setMarkupSettings] = useState({
+    pricingType: "percentage" as "fixed" | "percentage",
+    pricingValue: 20,
+  });
 
   const { data: product, isLoading } = useQuery<Product>({
     queryKey: [`/api/merchant/products/${productId}`],
     enabled: !!productId,
   });
+
+  // Check if this is an imported product (owned by merchant)
+  const isImportedProduct = product?.merchantId !== null && product?.merchantId !== undefined;
+
+  // Initialize markup settings when product loads
+  useEffect(() => {
+    if (product && isImportedProduct) {
+      const pricingRule = product.pricingRule as { type: string; value: number } | null;
+      if (pricingRule && typeof pricingRule.value === 'number') {
+        setMarkupSettings({
+          pricingType: pricingRule.type as "percentage" | "fixed",
+          pricingValue: Number(pricingRule.value) || 20,
+        });
+      } else {
+        // Calculate markup from merchant price vs supplier price
+        const merchantPrice = Number(product.merchantPrice) || Number(product.supplierPrice);
+        const supplierPrice = Number(product.supplierPrice);
+        if (supplierPrice > 0) {
+          const defaultMarkup = ((merchantPrice - supplierPrice) / supplierPrice) * 100;
+          setMarkupSettings({
+            pricingType: "percentage",
+            pricingValue: Math.round(defaultMarkup * 10) / 10 || 20, // Round to 1 decimal
+          });
+        } else {
+          setMarkupSettings({
+            pricingType: "percentage",
+            pricingValue: 20,
+          });
+        }
+      }
+    }
+  }, [product, isImportedProduct]);
 
   const translated = useTranslateProduct(product ? {
     id: product.id,
@@ -124,15 +163,70 @@ export default function MerchantProductDetailPage() {
     },
   });
 
+  const updateMarkupMutation = useMutation({
+    mutationFn: async () => {
+      if (!product) throw new Error("No product");
+      const numericMarkupValue = Number(markupSettings.pricingValue) || 0;
+      const merchantPrice = calculateMerchantPriceForMarkup(product.supplierPrice);
+      await apiRequest("PUT", `/api/merchant/products/${product.id}`, {
+        merchantPrice: Math.round(merchantPrice * 100) / 100, // Round to 2 decimals
+        pricingRule: { type: markupSettings.pricingType, value: numericMarkupValue },
+      });
+    },
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: [`/api/merchant/products/${productId}`] });
+      queryClient.invalidateQueries({ queryKey: ["/api/merchant/products"] });
+      toast({
+        title: "Markup Updated",
+        description: "Your pricing has been saved.",
+      });
+      setIsEditMarkupOpen(false);
+    },
+    onError: (error: any) => {
+      toast({
+        title: "Update Failed",
+        description: error.message || "Failed to update markup",
+        variant: "destructive",
+      });
+    },
+  });
+
+  const isValidMarkupValue = (value: number) => {
+    const numericValue = Number(value);
+    return !isNaN(numericValue) && isFinite(numericValue) && numericValue >= 0;
+  };
+
   const calculateMerchantPrice = (supplierPrice: number) => {
+    const numericSupplierPrice = Math.max(0, Number(supplierPrice) || 0);
+    const numericValue = Math.max(0, Number(importSettings.pricingValue) || 0);
     if (importSettings.pricingType === "percentage") {
-      return supplierPrice * (1 + importSettings.pricingValue / 100);
+      return numericSupplierPrice * (1 + numericValue / 100);
     }
-    return supplierPrice + importSettings.pricingValue;
+    return numericSupplierPrice + numericValue;
+  };
+
+  const calculateMerchantPriceForMarkup = (supplierPrice: number) => {
+    const numericSupplierPrice = Math.max(0, Number(supplierPrice) || 0);
+    const numericValue = Math.max(0, Number(markupSettings.pricingValue) || 0);
+    if (markupSettings.pricingType === "percentage") {
+      return numericSupplierPrice * (1 + numericValue / 100);
+    }
+    return numericSupplierPrice + numericValue;
   };
 
   const calculateProfit = (supplierPrice: number) => {
-    return calculateMerchantPrice(supplierPrice) - supplierPrice;
+    const numericSupplierPrice = Math.max(0, Number(supplierPrice) || 0);
+    return calculateMerchantPrice(supplierPrice) - numericSupplierPrice;
+  };
+
+  const calculateProfitForMarkup = (supplierPrice: number) => {
+    const numericSupplierPrice = Math.max(0, Number(supplierPrice) || 0);
+    return calculateMerchantPriceForMarkup(supplierPrice) - numericSupplierPrice;
+  };
+
+  const calculateProfitMargin = (profit: number, sellingPrice: number) => {
+    if (!sellingPrice || sellingPrice <= 0) return 0;
+    return (profit / sellingPrice) * 100;
   };
 
   if (isLoading) {
@@ -179,7 +273,8 @@ export default function MerchantProductDetailPage() {
   const images = product.images as { url: string; alt?: string; position?: number }[] | null;
   const variants = product.variants as { id: string; title: string; price: number; sku: string; inventoryQuantity: number }[] | null;
   const profit = calculateProfit(product.supplierPrice);
-  const profitPercent = ((profit / product.supplierPrice) * 100).toFixed(0);
+  const supplierPriceSafe = Math.max(0.01, Number(product.supplierPrice) || 0.01);
+  const profitPercent = ((profit / supplierPriceSafe) * 100).toFixed(0);
   const stock = product.inventoryQuantity || 0;
 
   const nextImage = () => {
@@ -265,7 +360,7 @@ export default function MerchantProductDetailPage() {
             </Button>
             <Button 
               onClick={() => importMutation.mutate([product.id])} 
-              disabled={importMutation.isPending}
+              disabled={importMutation.isPending || !isValidMarkupValue(importSettings.pricingValue)}
               className="gap-2"
             >
               {importMutation.isPending ? (
@@ -279,12 +374,113 @@ export default function MerchantProductDetailPage() {
         </DialogContent>
       </Dialog>
 
+      {/* Edit Markup Dialog for imported products */}
+      <Dialog open={isEditMarkupOpen} onOpenChange={setIsEditMarkupOpen}>
+        <DialogContent className="max-w-md" onCloseAutoFocus={(e) => e.preventDefault()}>
+          <DialogHeader>
+            <DialogTitle className="flex items-center gap-2">
+              <DollarSign className="h-5 w-5 text-primary" />
+              Edit Price Markup
+            </DialogTitle>
+            <DialogDescription>
+              Update your markup for this product
+            </DialogDescription>
+          </DialogHeader>
+          <div className="space-y-4 py-4">
+            <div className="space-y-2">
+              <Label className="text-sm font-medium">Your Cost (Supplier Price)</Label>
+              <p className="text-2xl font-bold">{formatPrice(product?.supplierPrice || 0)}</p>
+            </div>
+            <div className="space-y-2">
+              <Label className="text-sm font-medium">Markup Type</Label>
+              <Select
+                value={markupSettings.pricingType}
+                onValueChange={(v) => setMarkupSettings(prev => ({ ...prev, pricingType: v as "fixed" | "percentage" }))}
+              >
+                <SelectTrigger data-testid="select-edit-markup-type">
+                  <SelectValue />
+                </SelectTrigger>
+                <SelectContent>
+                  <SelectItem value="percentage">Percentage Markup (%)</SelectItem>
+                  <SelectItem value="fixed">Fixed Amount ($)</SelectItem>
+                </SelectContent>
+              </Select>
+            </div>
+            <div className="space-y-2">
+              <Label className="text-sm font-medium">
+                {markupSettings.pricingType === "percentage" ? "Markup Percentage" : "Markup Amount"}
+              </Label>
+              <div className="relative">
+                {markupSettings.pricingType === "fixed" && (
+                  <span className="absolute left-3 top-1/2 -translate-y-1/2 text-muted-foreground">$</span>
+                )}
+                <Input
+                  type="number"
+                  value={markupSettings.pricingValue}
+                  onChange={(e) => setMarkupSettings(prev => ({ ...prev, pricingValue: parseFloat(e.target.value) || 0 }))}
+                  className={markupSettings.pricingType === "fixed" ? "pl-7 pr-3" : "pr-8"}
+                  data-testid="input-edit-markup-value"
+                />
+                {markupSettings.pricingType === "percentage" && (
+                  <span className="absolute right-3 top-1/2 -translate-y-1/2 text-muted-foreground">%</span>
+                )}
+              </div>
+            </div>
+            {product && (
+              <div className="p-4 bg-muted/50 rounded-xl space-y-3">
+                <div className="flex justify-between text-sm">
+                  <span className="text-muted-foreground">Your Cost</span>
+                  <span className="font-medium">{formatPrice(product.supplierPrice)}</span>
+                </div>
+                <Separator />
+                <div className="flex justify-between text-sm">
+                  <span className="text-muted-foreground">Your Selling Price</span>
+                  <span className="font-bold text-primary text-lg">
+                    {formatPrice(calculateMerchantPriceForMarkup(product.supplierPrice))}
+                  </span>
+                </div>
+                <div className="flex justify-between text-sm">
+                  <span className="text-muted-foreground">Your Profit</span>
+                  <span className="font-medium text-emerald-600">
+                    +{formatPrice(calculateProfitForMarkup(product.supplierPrice))}
+                  </span>
+                </div>
+                <div className="flex justify-between text-sm">
+                  <span className="text-muted-foreground">Profit Margin</span>
+                  <span className="font-medium">
+                    {calculateProfitMargin(calculateProfitForMarkup(product.supplierPrice), calculateMerchantPriceForMarkup(product.supplierPrice)).toFixed(1)}%
+                  </span>
+                </div>
+              </div>
+            )}
+          </div>
+          <DialogFooter>
+            <Button variant="outline" onClick={() => setIsEditMarkupOpen(false)}>
+              Cancel
+            </Button>
+            <Button 
+              onClick={() => updateMarkupMutation.mutate()} 
+              disabled={updateMarkupMutation.isPending || !isValidMarkupValue(markupSettings.pricingValue)}
+              className="gap-2"
+              data-testid="button-save-markup"
+            >
+              {updateMarkupMutation.isPending ? (
+                <Loader2 className="h-4 w-4 animate-spin" />
+              ) : (
+                <Check className="h-4 w-4" />
+              )}
+              Save Markup
+            </Button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
+
       <div className="border-b bg-muted/30">
         <div className="max-w-7xl mx-auto px-6 py-4">
-          <Link href="/dashboard/catalog">
+          <Link href={isImportedProduct ? "/dashboard/products" : "/dashboard/catalog"}>
             <Button variant="ghost" size="sm" className="gap-2 -ml-2" data-testid="button-back">
               <ArrowLeft className="h-4 w-4" />
-              Back to Catalog
+              {isImportedProduct ? "Back to My Products" : "Back to Catalog"}
             </Button>
           </Link>
         </div>
@@ -410,50 +606,100 @@ export default function MerchantProductDetailPage() {
                   <span className="text-muted-foreground">your cost</span>
                 </div>
 
-                <div className="p-4 rounded-xl bg-gradient-to-r from-emerald-500/10 to-emerald-500/5 border border-emerald-500/20 mb-4">
-                  <div className="flex items-center gap-2 mb-2">
-                    <TrendingUp className="h-5 w-5 text-emerald-600" />
-                    <span className="font-semibold text-emerald-700 dark:text-emerald-400">
-                      Profit Potential
-                    </span>
-                  </div>
-                  <p className="text-2xl font-bold text-emerald-600" data-testid="text-profit">
-                    +{formatPrice(profit)} per sale
-                    <span className="text-base font-normal text-emerald-600/70 ml-2">
-                      ({profitPercent}% margin)
-                    </span>
-                  </p>
-                  <p className="text-sm text-muted-foreground mt-1">
-                    Based on {importSettings.pricingValue}% markup • Selling at {formatPrice(calculateMerchantPrice(product.supplierPrice))}
-                  </p>
-                </div>
-
-                {(product as any).fulfillmentFee > 0 && (
-                  <div className="p-4 rounded-xl bg-gradient-to-r from-amber-500/10 to-amber-500/5 border border-amber-500/20 mb-4">
-                    <div className="flex items-center gap-2 mb-2">
-                      <Truck className="h-5 w-5 text-amber-600" />
-                      <span className="font-semibold text-amber-700 dark:text-amber-400">
-                        Fulfillment Fee
-                      </span>
+                {isImportedProduct ? (
+                  <>
+                    {/* Imported Product - Show current markup and selling price */}
+                    <div className="p-4 rounded-xl bg-gradient-to-r from-primary/10 to-primary/5 border border-primary/20 mb-4">
+                      <div className="flex items-center justify-between mb-2">
+                        <div className="flex items-center gap-2">
+                          <DollarSign className="h-5 w-5 text-primary" />
+                          <span className="font-semibold">Your Pricing</span>
+                        </div>
+                        <Badge variant="outline" className="gap-1">
+                          {markupSettings.pricingType === "percentage" 
+                            ? `${markupSettings.pricingValue}% markup` 
+                            : `+$${markupSettings.pricingValue} markup`}
+                        </Badge>
+                      </div>
+                      <p className="text-2xl font-bold text-primary" data-testid="text-selling-price">
+                        {formatPrice(calculateMerchantPriceForMarkup(product.supplierPrice))} selling price
+                      </p>
                     </div>
-                    <p className="text-2xl font-bold text-amber-600" data-testid="text-fulfillment-fee">
-                      +{formatPrice((product as any).fulfillmentFee)} per order
-                    </p>
-                    <p className="text-sm text-muted-foreground mt-1">
-                      Shipping & handling charged at fulfillment
-                    </p>
-                  </div>
-                )}
 
-                <Button 
-                  size="lg" 
-                  className="w-full gap-2 h-12 text-base"
-                  onClick={() => setIsImportDialogOpen(true)}
-                  data-testid="button-import"
-                >
-                  <Plus className="h-5 w-5" />
-                  Import to My Store
-                </Button>
+                    <div className="p-4 rounded-xl bg-gradient-to-r from-emerald-500/10 to-emerald-500/5 border border-emerald-500/20 mb-4">
+                      <div className="flex items-center gap-2 mb-2">
+                        <TrendingUp className="h-5 w-5 text-emerald-600" />
+                        <span className="font-semibold text-emerald-700 dark:text-emerald-400">
+                          Your Profit
+                        </span>
+                      </div>
+                      <p className="text-2xl font-bold text-emerald-600" data-testid="text-profit">
+                        +{formatPrice(calculateProfitForMarkup(product.supplierPrice))} per sale
+                        <span className="text-base font-normal text-emerald-600/70 ml-2">
+                          ({calculateProfitMargin(calculateProfitForMarkup(product.supplierPrice), calculateMerchantPriceForMarkup(product.supplierPrice)).toFixed(0)}% margin)
+                        </span>
+                      </p>
+                    </div>
+
+                    <Button 
+                      size="lg" 
+                      className="w-full gap-2 h-12 text-base"
+                      onClick={() => setIsEditMarkupOpen(true)}
+                      data-testid="button-edit-markup"
+                    >
+                      <Edit className="h-5 w-5" />
+                      Edit Markup
+                    </Button>
+                  </>
+                ) : (
+                  <>
+                    {/* Catalog Product - Show profit potential and import button */}
+                    <div className="p-4 rounded-xl bg-gradient-to-r from-emerald-500/10 to-emerald-500/5 border border-emerald-500/20 mb-4">
+                      <div className="flex items-center gap-2 mb-2">
+                        <TrendingUp className="h-5 w-5 text-emerald-600" />
+                        <span className="font-semibold text-emerald-700 dark:text-emerald-400">
+                          Profit Potential
+                        </span>
+                      </div>
+                      <p className="text-2xl font-bold text-emerald-600" data-testid="text-profit">
+                        +{formatPrice(profit)} per sale
+                        <span className="text-base font-normal text-emerald-600/70 ml-2">
+                          ({profitPercent}% margin)
+                        </span>
+                      </p>
+                      <p className="text-sm text-muted-foreground mt-1">
+                        Based on {importSettings.pricingValue}% markup • Selling at {formatPrice(calculateMerchantPrice(product.supplierPrice))}
+                      </p>
+                    </div>
+
+                    {(product as any).fulfillmentFee > 0 && (
+                      <div className="p-4 rounded-xl bg-gradient-to-r from-amber-500/10 to-amber-500/5 border border-amber-500/20 mb-4">
+                        <div className="flex items-center gap-2 mb-2">
+                          <Truck className="h-5 w-5 text-amber-600" />
+                          <span className="font-semibold text-amber-700 dark:text-amber-400">
+                            Fulfillment Fee
+                          </span>
+                        </div>
+                        <p className="text-2xl font-bold text-amber-600" data-testid="text-fulfillment-fee">
+                          +{formatPrice((product as any).fulfillmentFee)} per order
+                        </p>
+                        <p className="text-sm text-muted-foreground mt-1">
+                          Shipping & handling charged at fulfillment
+                        </p>
+                      </div>
+                    )}
+
+                    <Button 
+                      size="lg" 
+                      className="w-full gap-2 h-12 text-base"
+                      onClick={() => setIsImportDialogOpen(true)}
+                      data-testid="button-import"
+                    >
+                      <Plus className="h-5 w-5" />
+                      Import to My Store
+                    </Button>
+                  </>
+                )}
               </CardContent>
             </Card>
 

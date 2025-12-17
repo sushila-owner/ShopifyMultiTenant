@@ -67,7 +67,8 @@ export default function MyProductsPage() {
   const [statusFilter, setStatusFilter] = useState<string>("all");
   const [selectedProduct, setSelectedProduct] = useState<Product | null>(null);
   const [isEditOpen, setIsEditOpen] = useState(false);
-  const [editPrice, setEditPrice] = useState("");
+  const [markupType, setMarkupType] = useState<"percentage" | "fixed">("percentage");
+  const [markupValue, setMarkupValue] = useState(20);
 
   const { data: products, isLoading } = useQuery<Product[]>({
     queryKey: ["/api/merchant/products"],
@@ -117,15 +118,63 @@ export default function MyProductsPage() {
 
   const handleEdit = (product: Product) => {
     setSelectedProduct(product);
-    setEditPrice((product.merchantPrice || product.supplierPrice).toString());
+    // Load existing pricing rule if available
+    const pricingRule = product.pricingRule as { type: string; value: number } | null;
+    if (pricingRule && typeof pricingRule.value === 'number') {
+      setMarkupType(pricingRule.type as "percentage" | "fixed");
+      setMarkupValue(Number(pricingRule.value) || 20);
+    } else {
+      // Calculate markup from merchant price vs supplier price
+      const merchantPrice = Number(product.merchantPrice) || Number(product.supplierPrice);
+      const supplierPrice = Number(product.supplierPrice);
+      if (supplierPrice > 0) {
+        const defaultMarkup = ((merchantPrice - supplierPrice) / supplierPrice) * 100;
+        setMarkupType("percentage");
+        setMarkupValue(Math.round(defaultMarkup * 10) / 10 || 20); // Round to 1 decimal
+      } else {
+        setMarkupType("percentage");
+        setMarkupValue(20);
+      }
+    }
     setIsEditOpen(true);
   };
 
+  const isValidMarkupValue = () => {
+    const numericValue = Number(markupValue);
+    return !isNaN(numericValue) && isFinite(numericValue) && numericValue >= 0;
+  };
+
+  const calculateMerchantPrice = (supplierPrice: number) => {
+    const numericSupplierPrice = Math.max(0, Number(supplierPrice) || 0);
+    const numericMarkupValue = Math.max(0, Number(markupValue) || 0);
+    if (markupType === "percentage") {
+      return numericSupplierPrice * (1 + numericMarkupValue / 100);
+    }
+    return numericSupplierPrice + numericMarkupValue;
+  };
+
+  const calculateProfit = (supplierPrice: number) => {
+    const numericSupplierPrice = Math.max(0, Number(supplierPrice) || 0);
+    return calculateMerchantPrice(supplierPrice) - numericSupplierPrice;
+  };
+
+  const calculateProfitMargin = (supplierPrice: number) => {
+    const merchantPrice = calculateMerchantPrice(supplierPrice);
+    if (!merchantPrice || merchantPrice <= 0) return 0;
+    const profit = calculateProfit(supplierPrice);
+    return (profit / merchantPrice) * 100;
+  };
+
   const handleSaveEdit = () => {
-    if (selectedProduct) {
+    if (selectedProduct && isValidMarkupValue()) {
+      const numericMarkupValue = Math.max(0, Number(markupValue) || 0);
+      const merchantPrice = calculateMerchantPrice(selectedProduct.supplierPrice);
       updateMutation.mutate({
         id: selectedProduct.id,
-        data: { merchantPrice: Number(editPrice) },
+        data: { 
+          merchantPrice: Math.round(merchantPrice * 100) / 100, // Round to 2 decimals
+          pricingRule: { type: markupType, value: numericMarkupValue }
+        },
       });
     }
   };
@@ -317,7 +366,7 @@ export default function MyProductsPage() {
                             </Link>
                             <DropdownMenuItem onClick={() => handleEdit(product)}>
                               <Edit className="mr-2 h-4 w-4" />
-                              Edit Price
+                              Edit Markup
                             </DropdownMenuItem>
                             <DropdownMenuItem
                               onClick={() => pushToShopifyMutation.mutate(product.id)}
@@ -359,51 +408,78 @@ export default function MyProductsPage() {
         </CardContent>
       </Card>
 
-      {/* Edit Price Dialog */}
+      {/* Edit Markup Dialog */}
       <Dialog open={isEditOpen} onOpenChange={setIsEditOpen}>
         <DialogContent>
           <DialogHeader>
-            <DialogTitle>Edit Product Price</DialogTitle>
+            <DialogTitle>Edit Price Markup</DialogTitle>
             <DialogDescription>
-              Update the selling price for {selectedProduct?.title}
+              Set your markup for {selectedProduct?.title}
             </DialogDescription>
           </DialogHeader>
           <div className="space-y-4 py-4">
             <div className="space-y-2">
-              <Label>Supplier Cost</Label>
+              <Label>Your Cost (Supplier Price)</Label>
               <p className="text-2xl font-bold">{formatPrice(selectedProduct?.supplierPrice || 0)}</p>
             </div>
             <div className="space-y-2">
-              <Label htmlFor="sellPrice">Selling Price</Label>
+              <Label>Markup Type</Label>
+              <Select
+                value={markupType}
+                onValueChange={(v) => setMarkupType(v as "percentage" | "fixed")}
+              >
+                <SelectTrigger data-testid="select-markup-type">
+                  <SelectValue />
+                </SelectTrigger>
+                <SelectContent>
+                  <SelectItem value="percentage">Percentage Markup (%)</SelectItem>
+                  <SelectItem value="fixed">Fixed Amount ($)</SelectItem>
+                </SelectContent>
+              </Select>
+            </div>
+            <div className="space-y-2">
+              <Label>
+                {markupType === "percentage" ? "Markup Percentage" : "Markup Amount"}
+              </Label>
               <div className="relative">
-                <span className="absolute left-3 top-2.5 text-muted-foreground">$</span>
+                {markupType === "fixed" && (
+                  <span className="absolute left-3 top-2.5 text-muted-foreground">$</span>
+                )}
                 <Input
-                  id="sellPrice"
                   type="number"
-                  step="0.01"
-                  value={editPrice}
-                  onChange={(e) => setEditPrice(e.target.value)}
-                  className="pl-7"
-                  data-testid="input-sell-price"
+                  step={markupType === "percentage" ? "1" : "0.01"}
+                  value={markupValue}
+                  onChange={(e) => setMarkupValue(parseFloat(e.target.value) || 0)}
+                  className={markupType === "fixed" ? "pl-7 pr-3" : "pr-8"}
+                  data-testid="input-markup-value"
                 />
+                {markupType === "percentage" && (
+                  <span className="absolute right-3 top-2.5 text-muted-foreground">%</span>
+                )}
               </div>
             </div>
             {selectedProduct && (
-              <div className="p-4 rounded-lg bg-muted/50">
+              <div className="p-4 rounded-lg bg-muted/50 space-y-3">
                 <div className="flex justify-between text-sm">
-                  <span className="text-muted-foreground">Profit per sale</span>
-                  <span className="font-medium text-chart-2">
-                    {formatPrice(Number(editPrice) - selectedProduct.supplierPrice)}
+                  <span className="text-muted-foreground">Your Cost</span>
+                  <span className="font-medium">{formatPrice(selectedProduct.supplierPrice)}</span>
+                </div>
+                <div className="flex justify-between text-sm">
+                  <span className="text-muted-foreground">Your Selling Price</span>
+                  <span className="font-bold text-primary text-lg">
+                    {formatPrice(calculateMerchantPrice(selectedProduct.supplierPrice))}
                   </span>
                 </div>
-                <div className="flex justify-between text-sm mt-2">
-                  <span className="text-muted-foreground">Margin</span>
+                <div className="flex justify-between text-sm">
+                  <span className="text-muted-foreground">Profit per sale</span>
+                  <span className="font-medium text-emerald-600">
+                    +{formatPrice(calculateProfit(selectedProduct.supplierPrice))}
+                  </span>
+                </div>
+                <div className="flex justify-between text-sm">
+                  <span className="text-muted-foreground">Profit Margin</span>
                   <span className="font-medium">
-                    {(
-                      ((Number(editPrice) - selectedProduct.supplierPrice) / Number(editPrice)) *
-                      100
-                    ).toFixed(1)}
-                    %
+                    {calculateProfitMargin(selectedProduct.supplierPrice).toFixed(1)}%
                   </span>
                 </div>
               </div>
@@ -413,9 +489,13 @@ export default function MyProductsPage() {
             <Button variant="outline" onClick={() => setIsEditOpen(false)}>
               Cancel
             </Button>
-            <Button onClick={handleSaveEdit} disabled={updateMutation.isPending} data-testid="button-save-price">
+            <Button 
+              onClick={handleSaveEdit} 
+              disabled={updateMutation.isPending || !isValidMarkupValue()} 
+              data-testid="button-save-price"
+            >
               {updateMutation.isPending && <Loader2 className="mr-2 h-4 w-4 animate-spin" />}
-              Save Changes
+              Save Markup
             </Button>
           </DialogFooter>
         </DialogContent>
