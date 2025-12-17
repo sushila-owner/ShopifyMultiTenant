@@ -276,7 +276,7 @@ export async function handleShopifySubscriptionActivated(
   const now = new Date();
   const periodEnd = new Date(now.getTime() + 30 * 24 * 60 * 60 * 1000);
 
-  const existingSubscription = await storage.getSubscriptionByMerchantId(merchantId);
+  const existingSubscription = await storage.getSubscriptionByMerchant(merchantId);
 
   if (existingSubscription) {
     await db

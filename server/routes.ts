@@ -4700,6 +4700,170 @@ export async function registerRoutes(
     }
   });
 
+  // ==================== SHOPIFY BILLING ROUTES ====================
+  const { getShopifyBillingFromMerchant, handleShopifySubscriptionActivated } = await import("./services/shopifyBilling");
+
+  // Check if merchant has Shopify store connected for billing
+  app.get("/api/shopify/billing/status", authMiddleware, merchantOnly, async (req: AuthRequest, res: Response) => {
+    try {
+      if (!req.user?.merchantId) {
+        return res.status(400).json({ success: false, error: "No merchant associated" });
+      }
+
+      const merchant = await storage.getMerchant(req.user.merchantId);
+      const shopifyStore = merchant?.shopifyStore as { domain?: string; accessToken?: string; isConnected?: boolean } | null;
+      const isConnected = !!(shopifyStore?.domain && shopifyStore?.accessToken && shopifyStore?.isConnected);
+
+      const billingService = await getShopifyBillingFromMerchant(req.user.merchantId);
+      let currentSubscription = null;
+      
+      if (billingService) {
+        currentSubscription = await billingService.getCurrentSubscription();
+      }
+
+      res.json({
+        success: true,
+        data: {
+          shopifyConnected: isConnected,
+          storeDomain: shopifyStore?.domain || null,
+          currentSubscription,
+        },
+      });
+    } catch (error: any) {
+      res.status(500).json({ success: false, error: error.message });
+    }
+  });
+
+  // Create Shopify billing subscription
+  app.post("/api/shopify/billing/checkout", authMiddleware, merchantOnly, async (req: AuthRequest, res: Response) => {
+    try {
+      if (!req.user?.merchantId) {
+        return res.status(400).json({ success: false, error: "No merchant associated" });
+      }
+
+      const { planSlug, billingInterval } = req.body;
+      if (!planSlug) {
+        return res.status(400).json({ success: false, error: "Plan slug required" });
+      }
+
+      const plan = await storage.getPlanBySlug(planSlug);
+      if (!plan) {
+        return res.status(404).json({ success: false, error: "Plan not found" });
+      }
+
+      const billingService = await getShopifyBillingFromMerchant(req.user.merchantId);
+      if (!billingService) {
+        return res.status(400).json({ success: false, error: "Shopify store not connected" });
+      }
+
+      const protocol = req.headers['x-forwarded-proto'] || req.protocol;
+      const host = req.headers['x-forwarded-host'] || req.get('host');
+      const baseUrl = `${protocol}://${host}`;
+
+      const interval = billingInterval === "yearly" ? "ANNUAL" : "EVERY_30_DAYS";
+      const price = billingInterval === "yearly" ? plan.yearlyPrice / 100 : plan.monthlyPrice / 100;
+
+      const result = await billingService.createSubscription(
+        `${plan.displayName} Plan`,
+        price,
+        interval,
+        `${baseUrl}/merchant/subscription?shopify_billing=success&plan=${planSlug}`,
+        2,
+        process.env.NODE_ENV !== "production"
+      );
+
+      if (!result.success) {
+        return res.status(400).json({ success: false, error: result.error });
+      }
+
+      res.json({
+        success: true,
+        data: {
+          confirmationUrl: result.confirmationUrl,
+          subscriptionId: result.subscriptionId,
+        },
+      });
+    } catch (error: any) {
+      console.error("[ShopifyBilling] Checkout error:", error);
+      res.status(500).json({ success: false, error: error.message });
+    }
+  });
+
+  // Confirm Shopify billing subscription (called after merchant approves)
+  app.post("/api/shopify/billing/confirm", authMiddleware, merchantOnly, async (req: AuthRequest, res: Response) => {
+    try {
+      if (!req.user?.merchantId) {
+        return res.status(400).json({ success: false, error: "No merchant associated" });
+      }
+
+      const { planSlug } = req.body;
+      if (!planSlug) {
+        return res.status(400).json({ success: false, error: "Plan slug required" });
+      }
+
+      const billingService = await getShopifyBillingFromMerchant(req.user.merchantId);
+      if (!billingService) {
+        return res.status(400).json({ success: false, error: "Shopify store not connected" });
+      }
+
+      const currentSubscription = await billingService.getCurrentSubscription();
+      if (!currentSubscription || currentSubscription.status !== "ACTIVE") {
+        return res.status(400).json({ success: false, error: "No active Shopify subscription found" });
+      }
+
+      await handleShopifySubscriptionActivated(
+        req.user.merchantId,
+        currentSubscription.id,
+        planSlug
+      );
+
+      const plan = await storage.getPlanBySlug(planSlug);
+      await storage.updateMerchant(req.user.merchantId, {
+        subscriptionStatus: "active",
+        subscriptionPlanId: plan?.id,
+        productLimit: plan?.productLimit || 25,
+      });
+
+      res.json({ success: true, data: { message: "Subscription activated via Shopify Billing" } });
+    } catch (error: any) {
+      console.error("[ShopifyBilling] Confirm error:", error);
+      res.status(500).json({ success: false, error: error.message });
+    }
+  });
+
+  // Cancel Shopify billing subscription
+  app.post("/api/shopify/billing/cancel", authMiddleware, merchantOnly, async (req: AuthRequest, res: Response) => {
+    try {
+      if (!req.user?.merchantId) {
+        return res.status(400).json({ success: false, error: "No merchant associated" });
+      }
+
+      const subscription = await storage.getSubscriptionByMerchant(req.user.merchantId);
+      if (!subscription?.shopifySubscriptionId) {
+        return res.status(400).json({ success: false, error: "No Shopify subscription found" });
+      }
+
+      const billingService = await getShopifyBillingFromMerchant(req.user.merchantId);
+      if (!billingService) {
+        return res.status(400).json({ success: false, error: "Shopify store not connected" });
+      }
+
+      const result = await billingService.cancelSubscription(subscription.shopifySubscriptionId);
+      if (!result.success) {
+        return res.status(400).json({ success: false, error: result.error });
+      }
+
+      await storage.updateSubscription(subscription.id, {
+        status: "cancelled",
+        cancelledAt: new Date(),
+      });
+
+      res.json({ success: true, data: { message: "Subscription cancelled" } });
+    } catch (error: any) {
+      res.status(500).json({ success: false, error: error.message });
+    }
+  });
+
   // ==================== ANALYTICS ROUTES ====================
   const { analyticsService } = await import("./services/analyticsService");
 
