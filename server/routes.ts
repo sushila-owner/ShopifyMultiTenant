@@ -2746,6 +2746,95 @@ export async function registerRoutes(
     }
   });
 
+  // Auto-categorize products (Admin) - Re-categorize uncategorized products
+  app.post("/api/admin/products/auto-categorize", authMiddleware, adminOnly, async (req: AuthRequest, res: Response) => {
+    try {
+      const { categorizationService } = await import("./services/categorizationService");
+      const { supplierId, forceRecategorize, limit = 1000 } = req.body;
+      
+      // Cache suppliers to avoid repeated lookups
+      const supplierCache = new Map<number, any>();
+      
+      let categorized = 0;
+      let failed = 0;
+      let processed = 0;
+      let page = 1;
+      const batchSize = 100;
+      let hasMore = true;
+      
+      // Process in batches to avoid memory issues
+      while (hasMore && processed < limit) {
+        const productsResult = await storage.getGlobalProducts(page, batchSize);
+        let productsToProcess = productsResult.items;
+        
+        if (productsToProcess.length === 0) {
+          hasMore = false;
+          break;
+        }
+        
+        // Filter by supplier if specified
+        if (supplierId) {
+          productsToProcess = productsToProcess.filter(p => p.supplierId === supplierId);
+        }
+        
+        // Filter to only uncategorized products unless force recategorize
+        if (!forceRecategorize) {
+          productsToProcess = productsToProcess.filter(p => !p.categoryId);
+        }
+        
+        for (const product of productsToProcess) {
+          if (processed >= limit) break;
+          
+          try {
+            // Get supplier from cache or fetch
+            let supplier = supplierCache.get(product.supplierId);
+            if (!supplier) {
+              supplier = await storage.getSupplier(product.supplierId);
+              if (supplier) supplierCache.set(product.supplierId, supplier);
+            }
+            if (!supplier) continue;
+            
+            // Only use keyword matching (no AI) for bulk operations to control costs
+            const match = await categorizationService.categorizeProduct(
+              product.supplierId,
+              supplier.type as 'gigab2b' | 'shopify',
+              product.title,
+              product.description || undefined,
+              product.category || undefined
+            );
+            
+            if (match && match.method === 'keyword') {
+              await storage.updateProduct(product.id, {
+                categoryId: match.categoryId,
+                category: match.categoryName,
+              });
+              categorized++;
+            }
+            processed++;
+          } catch (error) {
+            failed++;
+            processed++;
+          }
+        }
+        
+        page++;
+        hasMore = productsResult.items.length === batchSize;
+      }
+      
+      res.json({ 
+        success: true, 
+        data: { 
+          processed,
+          categorized,
+          failed,
+          skipped: processed - categorized - failed
+        } 
+      });
+    } catch (error: any) {
+      res.status(500).json({ success: false, error: error.message });
+    }
+  });
+
   // All Orders (Admin)
   app.get("/api/admin/orders", authMiddleware, adminOnly, async (req: AuthRequest, res: Response) => {
     try {

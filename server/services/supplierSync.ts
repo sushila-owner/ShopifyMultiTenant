@@ -2,6 +2,7 @@ import { storage } from "../storage";
 import { createSupplierAdapter } from "../supplierAdapters";
 import type { Supplier, InsertProduct } from "@shared/schema";
 import type { NormalizedProduct, NormalizedInventory } from "../supplierAdapters/types";
+import { categorizationService } from "./categorizationService";
 
 const SYNC_INTERVAL_MS = 15 * 60 * 1000; // 15 minutes
 const BATCH_SIZE = 250;
@@ -166,7 +167,7 @@ class SupplierSyncService {
 
       // Process batch of products
       for (const product of result.items) {
-        await this.upsertProduct(supplier.id, product);
+        await this.upsertProduct(supplier.id, supplier.type as 'gigab2b' | 'shopify', product);
         totalSynced++;
         this.syncStatus.progress.productsProcessed++;
       }
@@ -194,7 +195,7 @@ class SupplierSyncService {
     console.log(`[SupplierSync] ${supplier.name}: Completed - ${totalSynced} products synced`);
   }
 
-  private async upsertProduct(supplierId: number, product: NormalizedProduct): Promise<void> {
+  private async upsertProduct(supplierId: number, supplierType: 'gigab2b' | 'shopify', product: NormalizedProduct): Promise<void> {
     // Check if product already exists
     const existingProducts = await storage.getProductsBySupplierProductId(supplierId, product.supplierProductId);
     
@@ -228,18 +229,46 @@ class SupplierSyncService {
       lastSyncedAt: new Date(),
     };
 
+    // Auto-categorize the product
+    let categoryId: number | null = null;
+    let categoryName: string = product.category || "Uncategorized";
+    
+    try {
+      const categoryMatch = await categorizationService.categorizeProduct(
+        supplierId,
+        supplierType,
+        product.title,
+        product.description,
+        product.category
+      );
+      
+      if (categoryMatch) {
+        categoryId = categoryMatch.categoryId;
+        categoryName = categoryMatch.categoryName;
+      }
+    } catch (error) {
+      // Categorization failed, use raw category from supplier
+      console.error('[SupplierSync] Categorization error:', error);
+    }
+
     if (existingProducts && existingProducts.length > 0) {
       const existingProduct = existingProducts[0];
-      // Preserve admin-assigned category if it exists (categoryId is set)
+      // Preserve admin-assigned category if it exists (categoryId is set manually by admin)
       // Only update category if no admin assignment was made
       if (!existingProduct.categoryId) {
-        (productData as any).category = product.category || "Uncategorized";
+        (productData as any).category = categoryName;
+        if (categoryId) {
+          (productData as any).categoryId = categoryId;
+        }
       }
       // Update existing product (preserving categoryId and category if admin-assigned)
       await storage.updateProduct(existingProduct.id, productData);
     } else {
-      // Create new product with supplier category
-      (productData as any).category = product.category || "Uncategorized";
+      // Create new product with auto-categorized category
+      (productData as any).category = categoryName;
+      if (categoryId) {
+        (productData as any).categoryId = categoryId;
+      }
       await storage.createProduct(productData as InsertProduct);
     }
   }
