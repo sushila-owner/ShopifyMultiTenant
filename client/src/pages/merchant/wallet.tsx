@@ -45,22 +45,16 @@ const dateLocales: Record<string, Locale> = {
 import { Elements, PaymentElement, useStripe, useElements } from "@stripe/react-stripe-js";
 import type { Stripe } from "@stripe/stripe-js";
 
-// Create a lazy-loaded Stripe promise that fetches key from backend
+// Create a lazy-loaded Stripe promise that ALWAYS fetches key from backend
+// This bypasses any cached/corrupted frontend env variables
 const stripePromise: Promise<Stripe | null> = (async () => {
   try {
-    // First try environment variable
-    const envKey = import.meta.env.VITE_STRIPE_PUBLISHABLE_KEY;
-    if (envKey && typeof envKey === "string" && envKey.startsWith("pk_")) {
-      console.log("[Stripe] Using env key");
-      return await loadStripe(envKey);
-    }
-    
-    // Fallback: fetch from backend
+    // Always fetch from backend for reliability
     console.log("[Stripe] Fetching key from backend...");
     const response = await fetch("/api/stripe/config");
     const data = await response.json();
     if (data.success && data.data?.publishableKey) {
-      console.log("[Stripe] Got key from backend");
+      console.log("[Stripe] Got key from backend:", data.data.publishableKey.substring(0, 12) + "...");
       return await loadStripe(data.data.publishableKey);
     }
     
