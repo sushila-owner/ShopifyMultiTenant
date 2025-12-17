@@ -467,10 +467,10 @@ export default function LandingPage() {
                   )}
                   {plan.trialDays === 0 && <div className="mb-6" />}
                   <ul className="space-y-3">
-                    {plan.featureKeys.map((featureKey) => (
-                      <li key={featureKey} className="flex items-center gap-2 text-sm">
+                    {plan.features.map((feature, index) => (
+                      <li key={index} className="flex items-center gap-2 text-sm">
                         <Check className="h-4 w-4 text-chart-2 flex-shrink-0" />
-                        <span>{t(featureKey as any)}</span>
+                        <span>{feature}</span>
                       </li>
                     ))}
                   </ul>
