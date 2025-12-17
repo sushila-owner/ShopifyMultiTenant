@@ -489,44 +489,12 @@ export default function SubscriptionPage() {
                     </CardHeader>
                     <CardContent>
                       <ul className="space-y-2 mb-6 text-sm">
-                        <li className="flex items-start gap-2">
-                          <Check className="h-4 w-4 text-chart-2 flex-shrink-0 mt-0.5" />
-                          <span>
-                            {plan.productLimit === -1 ? "Unlimited products" : `Up to ${(plan.productLimit || 25).toLocaleString()} products`}
-                          </span>
-                        </li>
-                        <li className="flex items-start gap-2">
-                          <Check className="h-4 w-4 text-chart-2 flex-shrink-0 mt-0.5" />
-                          <span>
-                            {plan.orderLimit === -1 ? "Unlimited orders" : `Up to ${(plan.orderLimit || 50).toLocaleString()} orders/month`}
-                          </span>
-                        </li>
-                        {plan.dailyAdsLimit && plan.dailyAdsLimit > 0 && (
-                          <li className="flex items-start gap-2">
+                        {(plan.features as string[] || []).map((feature: string, index: number) => (
+                          <li key={index} className="flex items-start gap-2">
                             <Check className="h-4 w-4 text-chart-2 flex-shrink-0 mt-0.5" />
-                            <span>
-                              {plan.dailyAdsLimit === -1 ? "Unlimited AI ads" : `${plan.dailyAdsLimit} AI ads/day`}
-                            </span>
+                            <span>{feature}</span>
                           </li>
-                        )}
-                        {plan.hasVideoAds && (
-                          <li className="flex items-start gap-2">
-                            <Check className="h-4 w-4 text-chart-2 flex-shrink-0 mt-0.5" />
-                            <span>Video ad generation</span>
-                          </li>
-                        )}
-                        {plan.isWhiteLabel && (
-                          <li className="flex items-start gap-2">
-                            <Check className="h-4 w-4 text-chart-2 flex-shrink-0 mt-0.5" />
-                            <span>White-label branding</span>
-                          </li>
-                        )}
-                        {plan.hasVipSupport && (
-                          <li className="flex items-start gap-2">
-                            <Check className="h-4 w-4 text-chart-2 flex-shrink-0 mt-0.5" />
-                            <span>VIP Support</span>
-                          </li>
-                        )}
+                        ))}
                       </ul>
                       
                       {isCurrentPlan ? (
