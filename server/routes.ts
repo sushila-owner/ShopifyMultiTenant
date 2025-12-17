@@ -4603,8 +4603,8 @@ export async function registerRoutes(
         customerId,
         priceId,
         merchant.id,
-        `${baseUrl}/merchant/subscription?success=true`,
-        `${baseUrl}/merchant/subscription?canceled=true`
+        `${baseUrl}/dashboard/subscription?success=true`,
+        `${baseUrl}/dashboard/subscription?canceled=true`
       );
 
       res.json({ success: true, data: { url: session.url } });
@@ -4624,7 +4624,7 @@ export async function registerRoutes(
 
       const protocol = req.headers['x-forwarded-proto'] || req.protocol;
       const host = req.headers['x-forwarded-host'] || req.get('host');
-      const returnUrl = `${protocol}://${host}/merchant/subscription`;
+      const returnUrl = `${protocol}://${host}/dashboard/subscription`;
 
       const session = await stripeService.createCustomerPortalSession(
         merchant.stripeCustomerId,
