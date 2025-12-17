@@ -33,7 +33,7 @@ export const PRICING_PLANS: PricingPlan[] = [
       "Up to 50 orders",
       "No cost"
     ],
-    featureKeys: ["pricing.features.products25", "pricing.features.orders50", "pricing.features.noCost"],
+    featureKeys: [],
     popular: false,
     badge: null,
     freeForLife: false,
@@ -57,7 +57,7 @@ export const PRICING_PLANS: PricingPlan[] = [
       "Priority support",
       "1 premium Shopify theme included free (worth $400)"
     ],
-    featureKeys: ["pricing.features.products250", "pricing.features.orders5000", "pricing.features.aiAd1", "pricing.features.prioritySupport", "pricing.features.freeTheme"],
+    featureKeys: [],
     popular: false,
     badge: null,
     freeForLife: true,
@@ -81,7 +81,7 @@ export const PRICING_PLANS: PricingPlan[] = [
       "Chat support",
       "1 premium Shopify theme included free (worth $400)"
     ],
-    featureKeys: ["pricing.features.products2000", "pricing.features.orders5000", "pricing.features.aiAd5", "pricing.features.chatSupport", "pricing.features.freeTheme"],
+    featureKeys: [],
     popular: true,
     badge: null,
     freeForLife: true,
@@ -107,7 +107,7 @@ export const PRICING_PLANS: PricingPlan[] = [
       "Dedicated team member assigned",
       "1 premium Shopify theme included free (worth $400)"
     ],
-    featureKeys: ["pricing.features.products10000", "pricing.features.orders50000", "pricing.features.aiAd10", "pricing.features.expertAds", "pricing.features.prioritySupport", "pricing.features.dedicatedTeam", "pricing.features.freeTheme"],
+    featureKeys: [],
     popular: false,
     badge: "popular",
     freeForLife: true,
@@ -134,7 +134,7 @@ export const PRICING_PLANS: PricingPlan[] = [
       "VIP support (response within 10 minutes)",
       "1 premium Shopify theme included free (worth $400)"
     ],
-    featureKeys: ["pricing.features.unlimitedProducts", "pricing.features.unlimitedOrders", "pricing.features.aiAd20", "pricing.features.videoAds", "pricing.features.dedicatedManager", "pricing.features.apiAccess", "pricing.features.vipSupport", "pricing.features.freeTheme"],
+    featureKeys: [],
     popular: false,
     badge: "millionaire",
     freeForLife: true,
@@ -162,7 +162,7 @@ export const FREE_FOR_LIFE_PLAN: PricingPlan = {
     "All premium features",
     "VIP support forever"
   ],
-  featureKeys: ["pricing.features.unlimitedProducts", "pricing.features.unlimitedOrders", "pricing.features.unlimitedTeam", "pricing.features.allPremium", "pricing.features.vipForever"],
+  featureKeys: [],
   popular: false,
   badge: "lifetime",
   freeForLife: false,
