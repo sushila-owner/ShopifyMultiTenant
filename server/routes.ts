@@ -2688,6 +2688,30 @@ export async function registerRoutes(
     }
   });
 
+  // Bulk delete products (Admin)
+  app.post("/api/admin/products/bulk-delete", authMiddleware, adminOnly, async (req: AuthRequest, res: Response) => {
+    try {
+      const { productIds } = req.body;
+      if (!Array.isArray(productIds) || productIds.length === 0) {
+        return res.status(400).json({ success: false, error: "productIds must be a non-empty array" });
+      }
+      
+      let deleted = 0;
+      for (const id of productIds) {
+        try {
+          await storage.deleteProduct(parseInt(id));
+          deleted++;
+        } catch (e) {
+          console.error(`[Admin] Failed to delete product ${id}:`, e);
+        }
+      }
+      
+      res.json({ success: true, data: { deleted, requested: productIds.length } });
+    } catch (error: any) {
+      res.status(400).json({ success: false, error: error.message });
+    }
+  });
+
   // Update single product pricing/markup
   app.patch("/api/admin/products/:id/pricing", authMiddleware, adminOnly, async (req: AuthRequest, res: Response) => {
     try {

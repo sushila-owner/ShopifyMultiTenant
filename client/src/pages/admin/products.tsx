@@ -45,7 +45,19 @@ import {
   Percent,
   Settings,
   Tag,
+  Trash2,
+  Loader2,
 } from "lucide-react";
+import {
+  AlertDialog,
+  AlertDialogAction,
+  AlertDialogCancel,
+  AlertDialogContent,
+  AlertDialogDescription,
+  AlertDialogFooter,
+  AlertDialogHeader,
+  AlertDialogTitle,
+} from "@/components/ui/alert-dialog";
 import { apiRequest, queryClient } from "@/lib/queryClient";
 import { useToast } from "@/hooks/use-toast";
 import type { Product, Supplier, Category } from "@shared/schema";
@@ -102,6 +114,44 @@ export default function AdminProductsPage() {
     description: "",
     category: "",
     status: "active" as string,
+  });
+  const [deleteProductId, setDeleteProductId] = useState<number | null>(null);
+  const [bulkDeleteOpen, setBulkDeleteOpen] = useState(false);
+
+  // Delete single product mutation
+  const deleteProductMutation = useMutation({
+    mutationFn: async (productId: number) => {
+      const response = await apiRequest("DELETE", `/api/admin/products/${productId}`);
+      return response.json();
+    },
+    onSuccess: () => {
+      toast({ title: "Product Deleted", description: "Product has been deleted successfully." });
+      queryClient.invalidateQueries({ queryKey: ["/api/admin/products"] });
+      setDeleteProductId(null);
+    },
+    onError: (error: any) => {
+      toast({ title: "Delete Failed", description: error.message, variant: "destructive" });
+    },
+  });
+
+  // Bulk delete products mutation
+  const bulkDeleteMutation = useMutation({
+    mutationFn: async (productIds: number[]) => {
+      const response = await apiRequest("POST", "/api/admin/products/bulk-delete", { productIds });
+      return response.json();
+    },
+    onSuccess: (data) => {
+      toast({ 
+        title: "Products Deleted", 
+        description: `${data.data?.deleted || 0} products deleted successfully.` 
+      });
+      queryClient.invalidateQueries({ queryKey: ["/api/admin/products"] });
+      setSelectedProducts(new Set());
+      setBulkDeleteOpen(false);
+    },
+    onError: (error: any) => {
+      toast({ title: "Bulk Delete Failed", description: error.message, variant: "destructive" });
+    },
   });
 
   // Debounce search input
@@ -430,6 +480,16 @@ export default function AdminProductsPage() {
                     <Eye className="h-4 w-4" />
                   </Button>
                 </Link>
+                <Button
+                  variant="ghost"
+                  size="icon"
+                  onClick={() => setDeleteProductId(product.id)}
+                  data-testid={`button-delete-product-${product.id}`}
+                  title="Delete Product"
+                  className="text-destructive hover:text-destructive"
+                >
+                  <Trash2 className="h-4 w-4" />
+                </Button>
               </div>
             </TableCell>
           </TableRow>
@@ -473,6 +533,15 @@ export default function AdminProductsPage() {
                 >
                   <DollarSign className="h-4 w-4" />
                   Bulk Edit Markup
+                </Button>
+                <Button
+                  variant="destructive"
+                  onClick={() => setBulkDeleteOpen(true)}
+                  className="gap-2"
+                  data-testid="button-bulk-delete"
+                >
+                  <Trash2 className="h-4 w-4" />
+                  Delete Selected
                 </Button>
                 <Button
                   onClick={() => setBulkCategoryOpen(true)}
@@ -1012,6 +1081,67 @@ export default function AdminProductsPage() {
           </DialogFooter>
         </DialogContent>
       </Dialog>
+
+      {/* Single Delete Confirmation */}
+      <AlertDialog open={deleteProductId !== null} onOpenChange={(open) => !open && setDeleteProductId(null)}>
+        <AlertDialogContent>
+          <AlertDialogHeader>
+            <AlertDialogTitle>Delete Product</AlertDialogTitle>
+            <AlertDialogDescription>
+              Are you sure you want to delete this product? This action cannot be undone.
+            </AlertDialogDescription>
+          </AlertDialogHeader>
+          <AlertDialogFooter>
+            <AlertDialogCancel>Cancel</AlertDialogCancel>
+            <AlertDialogAction
+              onClick={() => deleteProductId && deleteProductMutation.mutate(deleteProductId)}
+              className="bg-destructive text-destructive-foreground hover:bg-destructive/90"
+              disabled={deleteProductMutation.isPending}
+              data-testid="button-confirm-delete"
+            >
+              {deleteProductMutation.isPending ? (
+                <>
+                  <Loader2 className="h-4 w-4 mr-2 animate-spin" />
+                  Deleting...
+                </>
+              ) : (
+                "Delete"
+              )}
+            </AlertDialogAction>
+          </AlertDialogFooter>
+        </AlertDialogContent>
+      </AlertDialog>
+
+      {/* Bulk Delete Confirmation */}
+      <AlertDialog open={bulkDeleteOpen} onOpenChange={setBulkDeleteOpen}>
+        <AlertDialogContent>
+          <AlertDialogHeader>
+            <AlertDialogTitle>Delete {selectedProducts.size} Products</AlertDialogTitle>
+            <AlertDialogDescription>
+              Are you sure you want to delete {selectedProducts.size} selected product{selectedProducts.size > 1 ? "s" : ""}? 
+              This action cannot be undone.
+            </AlertDialogDescription>
+          </AlertDialogHeader>
+          <AlertDialogFooter>
+            <AlertDialogCancel>Cancel</AlertDialogCancel>
+            <AlertDialogAction
+              onClick={() => bulkDeleteMutation.mutate(Array.from(selectedProducts))}
+              className="bg-destructive text-destructive-foreground hover:bg-destructive/90"
+              disabled={bulkDeleteMutation.isPending}
+              data-testid="button-confirm-bulk-delete"
+            >
+              {bulkDeleteMutation.isPending ? (
+                <>
+                  <Loader2 className="h-4 w-4 mr-2 animate-spin" />
+                  Deleting...
+                </>
+              ) : (
+                `Delete ${selectedProducts.size} Products`
+              )}
+            </AlertDialogAction>
+          </AlertDialogFooter>
+        </AlertDialogContent>
+      </AlertDialog>
     </div>
   );
 }
