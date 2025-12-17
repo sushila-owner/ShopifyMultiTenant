@@ -163,14 +163,6 @@ export default function LoginPage() {
                 </span>
               </Link>
             </div>
-
-            <div className="p-4 rounded-lg bg-muted/50">
-              <p className="text-xs text-muted-foreground text-center mb-2">Demo Accounts:</p>
-              <div className="space-y-1 text-xs text-muted-foreground">
-                <p><strong>Admin:</strong> admin@apexmart.com / admin123</p>
-                <p><strong>Merchant:</strong> merchant@test.com / merchant123</p>
-              </div>
-            </div>
           </CardContent>
         </Card>
       </div>
