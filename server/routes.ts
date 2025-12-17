@@ -3591,36 +3591,81 @@ export async function registerRoutes(
     }
   });
 
-  // Shopify GDPR Webhooks (required for Shopify App Store)
-  app.post("/api/shopify/gdpr/customers/data_request", express.json(), async (req: Request, res: Response) => {
+  // Shopify GDPR Webhooks (required for Shopify App Store) - with HMAC verification
+  app.post("/api/shopify/gdpr/customers/data_request", 
+    express.raw({ type: 'application/json' }),
+    async (req: Request, res: Response) => {
     try {
-      const { shop_domain, customer } = req.body;
+      const hmacHeader = req.headers["x-shopify-hmac-sha256"] as string;
+      const rawBody = req.body.toString("utf8");
+      
+      // Verify HMAC signature
+      const { verifyWebhookHmac } = await import("./shopifyOAuth");
+      if (hmacHeader && !verifyWebhookHmac(rawBody, hmacHeader)) {
+        console.error("[Shopify GDPR] HMAC validation failed for customers/data_request");
+        return res.status(401).send("Unauthorized");
+      }
+      
+      const data = JSON.parse(rawBody);
+      const { shop_domain, customer } = data;
+      console.log(`[Shopify GDPR] Customer data request from ${shop_domain}`);
       const { gdprService } = await import("./services/gdprService");
       await gdprService.handleShopifyDataRequest(shop_domain, customer?.id);
       res.status(200).json({ success: true });
     } catch (error: any) {
+      console.error("[Shopify GDPR] Error handling data_request:", error);
       res.status(200).json({ success: true }); // Always return 200 to Shopify
     }
   });
 
-  app.post("/api/shopify/gdpr/customers/redact", express.json(), async (req: Request, res: Response) => {
+  app.post("/api/shopify/gdpr/customers/redact", 
+    express.raw({ type: 'application/json' }),
+    async (req: Request, res: Response) => {
     try {
-      const { shop_domain, customer } = req.body;
+      const hmacHeader = req.headers["x-shopify-hmac-sha256"] as string;
+      const rawBody = req.body.toString("utf8");
+      
+      // Verify HMAC signature
+      const { verifyWebhookHmac } = await import("./shopifyOAuth");
+      if (hmacHeader && !verifyWebhookHmac(rawBody, hmacHeader)) {
+        console.error("[Shopify GDPR] HMAC validation failed for customers/redact");
+        return res.status(401).send("Unauthorized");
+      }
+      
+      const data = JSON.parse(rawBody);
+      const { shop_domain, customer } = data;
+      console.log(`[Shopify GDPR] Customer redact request from ${shop_domain}`);
       const { gdprService } = await import("./services/gdprService");
       await gdprService.handleShopifyCustomerRedact(shop_domain, customer?.id);
       res.status(200).json({ success: true });
     } catch (error: any) {
+      console.error("[Shopify GDPR] Error handling customers/redact:", error);
       res.status(200).json({ success: true });
     }
   });
 
-  app.post("/api/shopify/gdpr/shop/redact", express.json(), async (req: Request, res: Response) => {
+  app.post("/api/shopify/gdpr/shop/redact", 
+    express.raw({ type: 'application/json' }),
+    async (req: Request, res: Response) => {
     try {
-      const { shop_domain } = req.body;
+      const hmacHeader = req.headers["x-shopify-hmac-sha256"] as string;
+      const rawBody = req.body.toString("utf8");
+      
+      // Verify HMAC signature
+      const { verifyWebhookHmac } = await import("./shopifyOAuth");
+      if (hmacHeader && !verifyWebhookHmac(rawBody, hmacHeader)) {
+        console.error("[Shopify GDPR] HMAC validation failed for shop/redact");
+        return res.status(401).send("Unauthorized");
+      }
+      
+      const data = JSON.parse(rawBody);
+      const { shop_domain } = data;
+      console.log(`[Shopify GDPR] Shop redact request from ${shop_domain}`);
       const { gdprService } = await import("./services/gdprService");
       await gdprService.handleShopifyShopRedact(shop_domain);
       res.status(200).json({ success: true });
     } catch (error: any) {
+      console.error("[Shopify GDPR] Error handling shop/redact:", error);
       res.status(200).json({ success: true });
     }
   });
