@@ -3061,21 +3061,19 @@ export async function registerRoutes(
       const images = (product.images as any[]) || [];
       const tags = (product.tags as string[]) || [];
 
-      // Build description with fulfillment fee if present
-      let productDescription = product.description || "";
-      if (product.fulfillmentFee && product.fulfillmentFee > 0) {
-        const fulfillmentNote = `\n\n---\n**Fulfillment Fee:** $${product.fulfillmentFee.toFixed(2)} per order (shipping & handling)`;
-        productDescription = productDescription + fulfillmentNote;
-      }
+      // Calculate total price including fulfillment fee
+      const basePrice = product.merchantPrice || product.supplierPrice || 0;
+      const fulfillmentFee = product.fulfillmentFee || 0;
+      const totalPrice = basePrice + fulfillmentFee;
 
       const result = await shopifyService.createProduct({
         title: product.title,
-        description: productDescription,
+        description: product.description || "",
         productType: product.category || "",
         tags,
         variants: variants.map(v => ({
           title: v.title || "Default Title",
-          price: product.merchantPrice || product.supplierPrice || 0,
+          price: totalPrice,
           sku: v.sku || product.supplierSku || "",
           inventoryQuantity: v.inventoryQuantity || product.inventoryQuantity || 0,
           compareAtPrice: v.compareAtPrice,
@@ -3140,21 +3138,19 @@ export async function registerRoutes(
         const images = (product.images as any[]) || [];
         const tags = (product.tags as string[]) || [];
 
-        // Build description with fulfillment fee if present
-        let productDescription = product.description || "";
-        if (product.fulfillmentFee && product.fulfillmentFee > 0) {
-          const fulfillmentNote = `\n\n---\n**Fulfillment Fee:** $${product.fulfillmentFee.toFixed(2)} per order (shipping & handling)`;
-          productDescription = productDescription + fulfillmentNote;
-        }
+        // Calculate total price including fulfillment fee
+        const basePrice = product.merchantPrice || product.supplierPrice || 0;
+        const fulfillmentFee = product.fulfillmentFee || 0;
+        const totalPrice = basePrice + fulfillmentFee;
 
         const result = await shopifyService.createProduct({
           title: product.title,
-          description: productDescription,
+          description: product.description || "",
           productType: product.category || "",
           tags,
           variants: variants.map(v => ({
             title: v.title || "Default Title",
-            price: product.merchantPrice || product.supplierPrice || 0,
+            price: totalPrice,
             sku: v.sku || product.supplierSku || "",
             inventoryQuantity: v.inventoryQuantity || product.inventoryQuantity || 0,
           })),
