@@ -8,7 +8,7 @@ const BATCH_SIZE = 250;
 
 // Shopify supplier permanent 30% discount (backend only, not shown to merchants)
 // Final Price = Original Price × 0.7
-const SHOPIFY_SUPPLIER_ID = 1;
+const SHOPIFY_SUPPLIER_ID = 3; // Actual ID in database
 const SHOPIFY_PRICE_MULTIPLIER = 0.7;
 
 // GigaB2B permanent pricing markup (60% app profit)
