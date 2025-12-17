@@ -247,13 +247,15 @@ export class ShopifyBillingService {
 export async function getShopifyBillingFromMerchant(merchantId: number): Promise<ShopifyBillingService | null> {
   try {
     const merchant = await storage.getMerchant(merchantId);
-    if (!merchant?.shopifyStoreUrl || !merchant?.shopifyAccessToken) {
+    const shopifyStore = merchant?.shopifyStore as { domain?: string; accessToken?: string } | null;
+    
+    if (!shopifyStore?.domain || !shopifyStore?.accessToken) {
       return null;
     }
 
     return new ShopifyBillingService({
-      storeUrl: merchant.shopifyStoreUrl,
-      accessToken: merchant.shopifyAccessToken,
+      storeUrl: `https://${shopifyStore.domain}`,
+      accessToken: shopifyStore.accessToken,
     });
   } catch (error) {
     console.error("[ShopifyBilling] Failed to get billing service:", error);
