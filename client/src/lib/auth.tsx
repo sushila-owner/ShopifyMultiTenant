@@ -6,6 +6,7 @@ type AuthUser = Omit<User, "password"> & { merchant?: Merchant };
 interface AuthContextType {
   user: AuthUser | null;
   isLoading: boolean;
+  embeddedAuthError: string | null;
   login: (email: string, password: string) => Promise<{ success: boolean; error?: string }>;
   register: (data: { email: string; password: string; name: string; businessName: string }) => Promise<{ success: boolean; error?: string }>;
   logout: () => void;
@@ -46,19 +47,12 @@ async function getShopifySessionToken(maxRetries = 10): Promise<string | null> {
   return null;
 }
 
-// Extend window type for App Bridge
-declare global {
-  interface Window {
-    shopify?: {
-      idToken: () => Promise<string>;
-      config?: { apiKey: string; host: string };
-    };
-  }
-}
+// Window.shopify type is declared in shopify-app-bridge.tsx
 
 export function AuthProvider({ children }: { children: ReactNode }) {
   const [user, setUser] = useState<AuthUser | null>(null);
   const [isLoading, setIsLoading] = useState(true);
+  const [embeddedAuthError, setEmbeddedAuthError] = useState<string | null>(null);
 
   useEffect(() => {
     async function initAuth() {
@@ -118,12 +112,13 @@ export function AuthProvider({ children }: { children: ReactNode }) {
       
       // Method 3: Shopify Session Token auth (for embedded mode)
       if (isEmbedded && shop) {
-        console.log("[Auth] Attempting Shopify Session Token auth...");
+        console.log("[Auth] Attempting Shopify Session Token auth for shop:", shop);
         
         // Wait for App Bridge to be ready
         const sessionToken = await getShopifySessionToken();
         
         if (sessionToken) {
+          console.log("[Auth] Got session token, authenticating...");
           try {
             const res = await fetch("/api/shopify/session-auth", {
               method: "POST",
@@ -141,11 +136,14 @@ export function AuthProvider({ children }: { children: ReactNode }) {
               return;
             }
             console.error("[Auth] Session token auth failed:", data.error);
+            setEmbeddedAuthError(data.error || "Authentication failed. Please reinstall the app.");
           } catch (error) {
             console.error("[Auth] Session token auth error:", error);
+            setEmbeddedAuthError("Connection error. Please try again.");
           }
         } else {
-          console.log("[Auth] Could not get Shopify Session Token");
+          console.log("[Auth] Could not get Shopify Session Token - App Bridge may not be ready");
+          setEmbeddedAuthError("App Bridge not ready. Please refresh the page.");
         }
       }
       
@@ -208,6 +206,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
       value={{
         user,
         isLoading,
+        embeddedAuthError,
         login,
         register,
         logout,

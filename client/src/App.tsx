@@ -117,16 +117,18 @@ function MerchantLayout({ children }: { children: React.ReactNode }) {
 }
 
 function SmartHomePage() {
-  const { user, isLoading } = useAuth();
+  const { user, isLoading, embeddedAuthError } = useAuth();
   
   // Check if we're in embedded mode (has shop/host params)
   const urlParams = new URLSearchParams(window.location.search);
   const isEmbedded = urlParams.has("host") || urlParams.has("shop");
+  const shop = urlParams.get("shop");
   
   if (isLoading) {
     return (
-      <div className="flex h-screen items-center justify-center">
+      <div className="flex h-screen items-center justify-center flex-col gap-4">
         <div className="animate-spin rounded-full h-8 w-8 border-b-2 border-primary"></div>
+        {isEmbedded && <p className="text-sm text-muted-foreground">Connecting to your store...</p>}
       </div>
     );
   }
@@ -139,9 +141,34 @@ function SmartHomePage() {
     return <Redirect to="/dashboard" />;
   }
   
-  // If embedded but not authenticated, show login
+  // If embedded but not authenticated, show helpful message
+  if (isEmbedded && embeddedAuthError) {
+    return (
+      <div className="flex h-screen items-center justify-center flex-col gap-4 p-8 text-center">
+        <div className="bg-destructive/10 text-destructive p-4 rounded-lg max-w-md">
+          <h2 className="font-semibold mb-2">Connection Issue</h2>
+          <p className="text-sm mb-4">{embeddedAuthError}</p>
+          {shop && (
+            <p className="text-xs text-muted-foreground">
+              Store: {shop}
+            </p>
+          )}
+        </div>
+        <p className="text-sm text-muted-foreground max-w-md">
+          If this is your first time using the app, please uninstall and reinstall it from the Shopify App Store.
+        </p>
+      </div>
+    );
+  }
+  
+  // If embedded without error, try refreshing
   if (isEmbedded) {
-    return <Redirect to="/login" />;
+    return (
+      <div className="flex h-screen items-center justify-center flex-col gap-4">
+        <div className="animate-spin rounded-full h-8 w-8 border-b-2 border-primary"></div>
+        <p className="text-sm text-muted-foreground">Loading...</p>
+      </div>
+    );
   }
   
   // Show landing page for non-embedded, non-authenticated users
