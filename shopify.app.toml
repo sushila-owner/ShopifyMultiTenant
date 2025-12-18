@@ -1,12 +1,12 @@
 # Learn more about configuring your app at https://shopify.dev/docs/apps/tools/cli/configuration
 
 client_id = "03fbd0683fd0d0395abd25ef030a8f38"
-name = "Apex mart wholesale"
-application_url = "https://apexmartwholesale.com"
+name = "Apex mart wholesale "
+application_url = "https://apexmartwholesale.com/api/shopify/gdpr/customers/redact"
 embedded = true
 
 [webhooks]
-api_version = "2025-01"
+api_version = "2025-10"
 
   [webhooks.privacy_compliance]
   customer_deletion_url = "https://apexmartwholesale.com/api/shopify/gdpr/customers/redact"
@@ -190,7 +190,7 @@ use_legacy_install_flow = true
 
 [auth]
 redirect_urls = [
-  "https://apexmartwholesale.com//api/shopify/install",
+  "https://apexmartwholesale.com/api/shopify/install",
   "https://apexmartwholesale.com/api/shopify/oauth/callback"
 ]
 
