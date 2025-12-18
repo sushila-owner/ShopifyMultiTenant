@@ -1,12 +1,17 @@
 # Learn more about configuring your app at https://shopify.dev/docs/apps/tools/cli/configuration
 
 client_id = "03fbd0683fd0d0395abd25ef030a8f38"
-name = "Apex mart wholesale "
-application_url = "https://apexmartwholesale.com/api/shopify/gdpr/customers/redact"
+name = "Apex mart wholesale"
+application_url = "https://apexmartwholesale.com"
 embedded = true
 
 [webhooks]
-api_version = "2025-10"
+api_version = "2025-01"
+
+  [webhooks.privacy_compliance]
+  customer_deletion_url = "https://apexmartwholesale.com/api/shopify/gdpr/customers/redact"
+  customer_data_request_url = "https://apexmartwholesale.com/api/shopify/gdpr/customers/data_request"
+  shop_deletion_url = "https://apexmartwholesale.com/api/shopify/gdpr/shop/redact"
 
 [access_scopes]
 # Learn more at https://shopify.dev/docs/apps/tools/cli/configuration#access_scopes
@@ -190,4 +195,4 @@ redirect_urls = [
 ]
 
 [app_preferences]
-url = "https://apexmartwholesale.com/api/shopify/gdpr/customers/redact"
+url = "https://apexmartwholesale.com"
