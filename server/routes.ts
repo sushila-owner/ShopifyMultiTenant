@@ -816,13 +816,11 @@ export async function registerRoutes(
   
   // Shopify orders/create webhook - receives new orders from Shopify
   // Must be registered with Shopify via Admin API after OAuth connection
-  app.post("/api/shopify/webhooks/orders/create", 
-    express.raw({ type: 'application/json' }),
-    async (req: Request, res: Response) => {
+  app.post("/api/shopify/webhooks/orders/create", async (req: Request, res: Response) => {
     try {
       const hmacHeader = req.headers["x-shopify-hmac-sha256"] as string;
       const shopDomain = req.headers["x-shopify-shop-domain"] as string;
-      const rawBody = req.body.toString("utf8");
+      const rawBody = (req as any).rawBody as string;
       
       if (!hmacHeader || !shopDomain) {
         console.error("[Shopify Webhook] Missing required headers");
@@ -954,13 +952,11 @@ export async function registerRoutes(
   });
 
   // Shopify orders/updated webhook - receives order updates from Shopify
-  app.post("/api/shopify/webhooks/orders/updated", 
-    express.raw({ type: 'application/json' }),
-    async (req: Request, res: Response) => {
+  app.post("/api/shopify/webhooks/orders/updated", async (req: Request, res: Response) => {
     try {
       const hmacHeader = req.headers["x-shopify-hmac-sha256"] as string;
       const shopDomain = req.headers["x-shopify-shop-domain"] as string;
-      const rawBody = req.body.toString("utf8");
+      const rawBody = (req as any).rawBody as string;
       
       if (!hmacHeader || !shopDomain) {
         console.error("[Shopify Webhook] Missing required headers");
@@ -1003,13 +999,11 @@ export async function registerRoutes(
   });
 
   // Shopify app/uninstalled webhook - cleanup when merchant uninstalls the app
-  app.post("/api/shopify/webhooks/app/uninstalled", 
-    express.raw({ type: 'application/json' }),
-    async (req: Request, res: Response) => {
+  app.post("/api/shopify/webhooks/app/uninstalled", async (req: Request, res: Response) => {
     try {
       const hmacHeader = req.headers["x-shopify-hmac-sha256"] as string;
       const shopDomain = req.headers["x-shopify-shop-domain"] as string;
-      const rawBody = req.body.toString("utf8");
+      const rawBody = (req as any).rawBody as string;
       
       if (!hmacHeader || !shopDomain) {
         console.error("[Shopify Webhook] Missing required headers");
@@ -1057,13 +1051,11 @@ export async function registerRoutes(
   });
 
   // Shopify app_subscriptions/update webhook - handle billing subscription changes
-  app.post("/api/shopify/webhooks/app_subscriptions/update", 
-    express.raw({ type: 'application/json' }),
-    async (req: Request, res: Response) => {
+  app.post("/api/shopify/webhooks/app_subscriptions/update", async (req: Request, res: Response) => {
     try {
       const hmacHeader = req.headers["x-shopify-hmac-sha256"] as string;
       const shopDomain = req.headers["x-shopify-shop-domain"] as string;
-      const rawBody = req.body.toString("utf8");
+      const rawBody = (req as any).rawBody as string;
       
       if (!hmacHeader || !shopDomain) {
         console.error("[Shopify Billing Webhook] Missing required headers");
