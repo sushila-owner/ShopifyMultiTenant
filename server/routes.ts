@@ -610,19 +610,23 @@ export async function registerRoutes(
           
           console.log(`[Shopify OAuth] Auth code created for merchant ${merchantId}`);
           
-          // For embedded apps, redirect back to Shopify Admin with the host parameter
+          // For embedded apps, redirect back to Shopify Admin with proper embedded app URL
           if (savedHost) {
             try {
-              // Decode the host to get the admin URL
-              const decodedHost = Buffer.from(savedHost, 'base64').toString('utf8');
-              console.log(`[Shopify OAuth] Embedded app redirect to: ${decodedHost}`);
-              
-              // Redirect back to the embedded app in Shopify Admin
-              // The host contains the path like: admin.shopify.com/store/shop-name
-              const embeddedAppUrl = `https://${decodedHost}?code=${authCode}&shop=${encodeURIComponent(shop)}`;
-              return res.redirect(embeddedAppUrl);
-            } catch (decodeError) {
-              console.error("[Shopify OAuth] Failed to decode host:", decodeError);
+              // Get the SHOPIFY_API_KEY for the embedded app path
+              const SHOPIFY_API_KEY = process.env.SHOPIFY_API_KEY;
+              if (SHOPIFY_API_KEY) {
+                // Extract shop handle from the shop domain (e.g., "mystore" from "mystore.myshopify.com")
+                const shopHandle = shop.replace('.myshopify.com', '');
+                
+                // Redirect to embedded app URL format: https://admin.shopify.com/store/{shop}/apps/{api_key}
+                // Pass host parameter (base64 encoded) and code for auth
+                const embeddedAppUrl = `https://admin.shopify.com/store/${shopHandle}/apps/${SHOPIFY_API_KEY}?host=${encodeURIComponent(savedHost)}&code=${authCode}&shop=${encodeURIComponent(shop)}`;
+                console.log(`[Shopify OAuth] Embedded app redirect to: ${embeddedAppUrl}`);
+                return res.redirect(embeddedAppUrl);
+              }
+            } catch (redirectError) {
+              console.error("[Shopify OAuth] Failed to build embedded app URL:", redirectError);
             }
           }
           
@@ -633,10 +637,14 @@ export async function registerRoutes(
         // For embedded apps without auth code, still redirect to Shopify Admin
         if (savedHost) {
           try {
-            const decodedHost = Buffer.from(savedHost, 'base64').toString('utf8');
-            return res.redirect(`https://${decodedHost}?shop=${encodeURIComponent(shop)}`);
-          } catch (decodeError) {
-            console.error("[Shopify OAuth] Failed to decode host:", decodeError);
+            const SHOPIFY_API_KEY = process.env.SHOPIFY_API_KEY;
+            if (SHOPIFY_API_KEY) {
+              const shopHandle = shop.replace('.myshopify.com', '');
+              const embeddedAppUrl = `https://admin.shopify.com/store/${shopHandle}/apps/${SHOPIFY_API_KEY}?host=${encodeURIComponent(savedHost)}&shop=${encodeURIComponent(shop)}`;
+              return res.redirect(embeddedAppUrl);
+            }
+          } catch (redirectError) {
+            console.error("[Shopify OAuth] Failed to build embedded app URL:", redirectError);
           }
         }
 
@@ -3674,12 +3682,12 @@ export async function registerRoutes(
 
   // Shopify GDPR Webhooks (required for Shopify App Store) - with HMAC verification
   // Per Shopify requirements: Must return 401 Unauthorized if HMAC is missing or invalid
-  app.post("/api/shopify/gdpr/customers/data_request", 
-    express.raw({ type: 'application/json' }),
-    async (req: Request, res: Response) => {
+  // Uses req.rawBody captured by express.json verify function in index.ts
+  app.post("/api/shopify/gdpr/customers/data_request", async (req: Request, res: Response) => {
     try {
       const hmacHeader = req.headers["x-shopify-hmac-sha256"] as string;
-      const rawBody = req.body.toString("utf8");
+      // Use rawBody captured by express.json verify function (Buffer)
+      const rawBody = (req as any).rawBody ? (req as any).rawBody.toString("utf8") : JSON.stringify(req.body);
       
       // Verify HMAC signature - MUST reject if missing or invalid per Shopify requirements
       const { verifyWebhookHmac } = await import("./shopifyOAuth");
@@ -3688,8 +3696,7 @@ export async function registerRoutes(
         return res.status(401).json({ error: "Unauthorized" });
       }
       
-      const data = JSON.parse(rawBody);
-      const { shop_domain, customer } = data;
+      const { shop_domain, customer } = req.body;
       console.log(`[Shopify GDPR] Customer data request from ${shop_domain}`);
       const { gdprService } = await import("./services/gdprService");
       await gdprService.handleShopifyDataRequest(shop_domain, customer?.id);
@@ -3700,12 +3707,11 @@ export async function registerRoutes(
     }
   });
 
-  app.post("/api/shopify/gdpr/customers/redact", 
-    express.raw({ type: 'application/json' }),
-    async (req: Request, res: Response) => {
+  app.post("/api/shopify/gdpr/customers/redact", async (req: Request, res: Response) => {
     try {
       const hmacHeader = req.headers["x-shopify-hmac-sha256"] as string;
-      const rawBody = req.body.toString("utf8");
+      // Use rawBody captured by express.json verify function (Buffer)
+      const rawBody = (req as any).rawBody ? (req as any).rawBody.toString("utf8") : JSON.stringify(req.body);
       
       // Verify HMAC signature - MUST reject if missing or invalid per Shopify requirements
       const { verifyWebhookHmac } = await import("./shopifyOAuth");
@@ -3714,8 +3720,7 @@ export async function registerRoutes(
         return res.status(401).json({ error: "Unauthorized" });
       }
       
-      const data = JSON.parse(rawBody);
-      const { shop_domain, customer } = data;
+      const { shop_domain, customer } = req.body;
       console.log(`[Shopify GDPR] Customer redact request from ${shop_domain}`);
       const { gdprService } = await import("./services/gdprService");
       await gdprService.handleShopifyCustomerRedact(shop_domain, customer?.id);
@@ -3726,12 +3731,11 @@ export async function registerRoutes(
     }
   });
 
-  app.post("/api/shopify/gdpr/shop/redact", 
-    express.raw({ type: 'application/json' }),
-    async (req: Request, res: Response) => {
+  app.post("/api/shopify/gdpr/shop/redact", async (req: Request, res: Response) => {
     try {
       const hmacHeader = req.headers["x-shopify-hmac-sha256"] as string;
-      const rawBody = req.body.toString("utf8");
+      // Use rawBody captured by express.json verify function (Buffer)
+      const rawBody = (req as any).rawBody ? (req as any).rawBody.toString("utf8") : JSON.stringify(req.body);
       
       // Verify HMAC signature - MUST reject if missing or invalid per Shopify requirements
       const { verifyWebhookHmac } = await import("./shopifyOAuth");
@@ -3740,8 +3744,7 @@ export async function registerRoutes(
         return res.status(401).json({ error: "Unauthorized" });
       }
       
-      const data = JSON.parse(rawBody);
-      const { shop_domain } = data;
+      const { shop_domain } = req.body;
       console.log(`[Shopify GDPR] Shop redact request from ${shop_domain}`);
       const { gdprService } = await import("./services/gdprService");
       await gdprService.handleShopifyShopRedact(shop_domain);
