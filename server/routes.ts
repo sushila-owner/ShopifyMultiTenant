@@ -379,6 +379,13 @@ export async function registerRoutes(
         return res.status(400).json({ success: false, error: "Merchant not found" });
       }
       
+      // Get user data to return with the token
+      const user = await storage.getUser(userId);
+      if (!user) {
+        console.error("[Shopify] User no longer exists:", userId);
+        return res.status(400).json({ success: false, error: "User not found" });
+      }
+      
       // Generate the JWT
       const token = jwt.sign(
         { userId, role: userRole, merchantId },
@@ -388,10 +395,101 @@ export async function registerRoutes(
       
       console.log(`[Shopify] Auth code exchanged for JWT for merchant ${merchantId}`);
       
-      return res.json({ success: true, token });
+      // Return token and user data (without password)
+      const { password: _, ...safeUser } = user;
+      return res.json({ 
+        success: true, 
+        token,
+        user: { ...safeUser, merchant }
+      });
     } catch (error: any) {
       console.error("[Shopify] Code exchange error:", error);
       return res.status(500).json({ success: false, error: "Failed to exchange code" });
+    }
+  });
+
+  // Session Token authentication for embedded apps
+  // Uses Shopify Session Tokens to authenticate merchants in embedded iframe
+  app.post("/api/shopify/session-auth", async (req: Request, res: Response) => {
+    try {
+      const { sessionToken, shop } = req.body;
+      
+      if (!sessionToken || !shop) {
+        return res.status(400).json({ success: false, error: "Missing session token or shop" });
+      }
+      
+      // Verify the session token using Shopify's JWT verification
+      const SHOPIFY_API_SECRET = process.env.SHOPIFY_API_SECRET;
+      if (!SHOPIFY_API_SECRET) {
+        console.error("[Shopify] API secret not configured");
+        return res.status(500).json({ success: false, error: "Shopify not configured" });
+      }
+      
+      try {
+        // Decode and verify the session token
+        const decoded = jwt.verify(sessionToken, SHOPIFY_API_SECRET, {
+          algorithms: ["HS256"],
+        }) as { iss: string; dest: string; aud: string; sub: string; exp: number; nbf: number; iat: number; jti: string; sid: string };
+        
+        // Validate the token claims
+        const shopDomain = decoded.dest?.replace("https://", "") || decoded.iss?.replace("https://", "");
+        
+        if (!shopDomain?.includes(shop.replace(".myshopify.com", ""))) {
+          console.error("[Shopify] Session token shop mismatch:", { expected: shop, got: shopDomain });
+          return res.status(401).json({ success: false, error: "Invalid session token" });
+        }
+        
+        console.log(`[Shopify] Valid session token for shop: ${shopDomain}`);
+        
+        // Find the merchant by their connected Shopify store
+        const allMerchants = await storage.getAllMerchants();
+        const merchant = allMerchants.find(m => {
+          const store = m.shopifyStore as { domain?: string; isConnected?: boolean } | null;
+          return store?.isConnected && (
+            store.domain === shop || 
+            store.domain?.includes(shop.replace(".myshopify.com", ""))
+          );
+        });
+        
+        if (!merchant) {
+          console.error("[Shopify] No merchant found for shop:", shop);
+          return res.status(404).json({ success: false, error: "Merchant not found for this store" });
+        }
+        
+        // Get the user associated with this merchant
+        const users = await storage.getUsersByMerchant(merchant.id);
+        const user = users[0];
+        
+        if (!user) {
+          console.error("[Shopify] No user found for merchant:", merchant.id);
+          return res.status(404).json({ success: false, error: "User not found" });
+        }
+        
+        // Generate our JWT
+        const token = jwt.sign(
+          { userId: user.id, role: user.role, merchantId: merchant.id },
+          JWT_SECRET!,
+          { expiresIn: "7d" }
+        );
+        
+        console.log(`[Shopify] Session token auth successful for merchant ${merchant.id}`);
+        
+        // Return token and user data (without password)
+        const { password: _, ...safeUser } = user;
+        return res.json({ 
+          success: true, 
+          token,
+          user: { ...safeUser, merchant }
+        });
+        
+      } catch (verifyError: any) {
+        console.error("[Shopify] Session token verification failed:", verifyError.message);
+        return res.status(401).json({ success: false, error: "Invalid or expired session token" });
+      }
+      
+    } catch (error: any) {
+      console.error("[Shopify] Session auth error:", error);
+      return res.status(500).json({ success: false, error: "Session authentication failed" });
     }
   });
 
