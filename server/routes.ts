@@ -3673,6 +3673,7 @@ export async function registerRoutes(
   });
 
   // Shopify GDPR Webhooks (required for Shopify App Store) - with HMAC verification
+  // Per Shopify requirements: Must return 401 Unauthorized if HMAC is missing or invalid
   app.post("/api/shopify/gdpr/customers/data_request", 
     express.raw({ type: 'application/json' }),
     async (req: Request, res: Response) => {
@@ -3680,11 +3681,11 @@ export async function registerRoutes(
       const hmacHeader = req.headers["x-shopify-hmac-sha256"] as string;
       const rawBody = req.body.toString("utf8");
       
-      // Verify HMAC signature
+      // Verify HMAC signature - MUST reject if missing or invalid per Shopify requirements
       const { verifyWebhookHmac } = await import("./shopifyOAuth");
-      if (hmacHeader && !verifyWebhookHmac(rawBody, hmacHeader)) {
+      if (!hmacHeader || !verifyWebhookHmac(rawBody, hmacHeader)) {
         console.error("[Shopify GDPR] HMAC validation failed for customers/data_request");
-        return res.status(401).send("Unauthorized");
+        return res.status(401).json({ error: "Unauthorized" });
       }
       
       const data = JSON.parse(rawBody);
@@ -3695,7 +3696,7 @@ export async function registerRoutes(
       res.status(200).json({ success: true });
     } catch (error: any) {
       console.error("[Shopify GDPR] Error handling data_request:", error);
-      res.status(200).json({ success: true }); // Always return 200 to Shopify
+      res.status(200).json({ success: true }); // Always return 200 to Shopify for processing errors
     }
   });
 
@@ -3706,11 +3707,11 @@ export async function registerRoutes(
       const hmacHeader = req.headers["x-shopify-hmac-sha256"] as string;
       const rawBody = req.body.toString("utf8");
       
-      // Verify HMAC signature
+      // Verify HMAC signature - MUST reject if missing or invalid per Shopify requirements
       const { verifyWebhookHmac } = await import("./shopifyOAuth");
-      if (hmacHeader && !verifyWebhookHmac(rawBody, hmacHeader)) {
+      if (!hmacHeader || !verifyWebhookHmac(rawBody, hmacHeader)) {
         console.error("[Shopify GDPR] HMAC validation failed for customers/redact");
-        return res.status(401).send("Unauthorized");
+        return res.status(401).json({ error: "Unauthorized" });
       }
       
       const data = JSON.parse(rawBody);
@@ -3732,11 +3733,11 @@ export async function registerRoutes(
       const hmacHeader = req.headers["x-shopify-hmac-sha256"] as string;
       const rawBody = req.body.toString("utf8");
       
-      // Verify HMAC signature
+      // Verify HMAC signature - MUST reject if missing or invalid per Shopify requirements
       const { verifyWebhookHmac } = await import("./shopifyOAuth");
-      if (hmacHeader && !verifyWebhookHmac(rawBody, hmacHeader)) {
+      if (!hmacHeader || !verifyWebhookHmac(rawBody, hmacHeader)) {
         console.error("[Shopify GDPR] HMAC validation failed for shop/redact");
-        return res.status(401).send("Unauthorized");
+        return res.status(401).json({ error: "Unauthorized" });
       }
       
       const data = JSON.parse(rawBody);
