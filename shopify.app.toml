@@ -1,0 +1,27 @@
+# Shopify App Configuration
+# This file configures your app settings including GDPR compliance webhooks
+# Deploy with: shopify app deploy (after running: shopify app config link)
+
+name = "Apex Mart Wholesale"
+client_id = "03fbd0683fd0d0395abd25ef030a8f38"
+application_url = "https://apexmartwholesale.com"
+embedded = true
+
+[access_scopes]
+scopes = "read_products,write_products,read_orders,write_orders,read_customers,read_inventory,write_inventory"
+
+[auth]
+redirect_urls = [
+  "https://apexmartwholesale.com/api/shopify/install",
+  "https://apexmartwholesale.com/api/shopify/oauth/callback"
+]
+
+[webhooks]
+api_version = "2024-10"
+
+[[webhooks.subscriptions]]
+compliance_topics = ["customers/data_request", "customers/redact", "shop/redact"]
+uri = "https://apexmartwholesale.com/api/shopify/gdpr/webhooks"
+
+[pos]
+embedded = false

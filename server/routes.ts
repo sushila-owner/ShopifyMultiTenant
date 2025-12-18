@@ -3680,7 +3680,55 @@ export async function registerRoutes(
     }
   });
 
-  // Shopify GDPR Webhooks (required for Shopify App Store) - with HMAC verification
+  // Combined GDPR Webhook Endpoint (for Shopify CLI configuration)
+  // This single endpoint handles all three compliance topics based on x-shopify-topic header
+  app.post("/api/shopify/gdpr/webhooks", async (req: Request, res: Response) => {
+    try {
+      const hmacHeader = req.headers["x-shopify-hmac-sha256"] as string;
+      const topic = req.headers["x-shopify-topic"] as string;
+      const rawBody = (req as any).rawBody ? (req as any).rawBody.toString("utf8") : "";
+      const hasPayload = rawBody && rawBody.length > 0 && rawBody !== "{}";
+      
+      // Shopify automated check sends empty probe - return 200 to confirm endpoint exists
+      if (!hasPayload) {
+        console.log("[Shopify GDPR] Probe request received for combined webhooks - returning 200");
+        return res.status(200).json({ success: true });
+      }
+      
+      // For real webhook with payload, verify HMAC signature
+      const { verifyWebhookHmac } = await import("./shopifyOAuth");
+      if (!hmacHeader || !verifyWebhookHmac(rawBody, hmacHeader)) {
+        console.error(`[Shopify GDPR] HMAC validation failed for topic: ${topic}`);
+        return res.status(401).json({ error: "Unauthorized" });
+      }
+      
+      const { shop_domain, customer } = req.body;
+      console.log(`[Shopify GDPR] Received webhook topic: ${topic} from ${shop_domain}`);
+      
+      const { gdprService } = await import("./services/gdprService");
+      
+      switch (topic) {
+        case "customers/data_request":
+          await gdprService.handleShopifyDataRequest(shop_domain, customer?.id);
+          break;
+        case "customers/redact":
+          await gdprService.handleShopifyCustomerRedact(shop_domain, customer?.id);
+          break;
+        case "shop/redact":
+          await gdprService.handleShopifyShopRedact(shop_domain);
+          break;
+        default:
+          console.log(`[Shopify GDPR] Unknown topic: ${topic}`);
+      }
+      
+      res.status(200).json({ success: true });
+    } catch (error: any) {
+      console.error("[Shopify GDPR] Error handling webhook:", error);
+      res.status(200).json({ success: true }); // Always return 200 to Shopify for processing errors
+    }
+  });
+
+  // Individual GDPR Webhooks (legacy endpoints for backward compatibility)
   // Per Shopify requirements: 
   // - Return 200 for Shopify's automated probe requests (empty body, no HMAC)
   // - Return 401 for requests with payload but invalid/missing HMAC
