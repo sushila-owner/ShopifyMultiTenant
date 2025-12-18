@@ -21,17 +21,57 @@ export function AuthProvider({ children }: { children: ReactNode }) {
   const [isLoading, setIsLoading] = useState(true);
 
   useEffect(() => {
-    const storedUser = localStorage.getItem("apex_user");
-    const token = localStorage.getItem("apex_token");
-    if (storedUser && token) {
-      try {
-        setUser(JSON.parse(storedUser));
-      } catch {
-        localStorage.removeItem("apex_user");
-        localStorage.removeItem("apex_token");
+    async function initAuth() {
+      // Check for auth code in URL (from Shopify App Store install)
+      const urlParams = new URLSearchParams(window.location.search);
+      const authCode = urlParams.get("code");
+      
+      if (authCode && authCode.startsWith("auth_")) {
+        console.log("[Auth] Exchanging auth code for token...");
+        try {
+          const res = await fetch("/api/shopify/exchange-code", {
+            method: "POST",
+            headers: { "Content-Type": "application/json" },
+            body: JSON.stringify({ code: authCode }),
+          });
+          const data = await res.json();
+          
+          if (data.success && data.token && data.user) {
+            console.log("[Auth] Successfully authenticated via Shopify");
+            localStorage.setItem("apex_token", data.token);
+            localStorage.setItem("apex_user", JSON.stringify(data.user));
+            setUser(data.user);
+            
+            // Clean up URL by removing the code param
+            const cleanUrl = new URL(window.location.href);
+            cleanUrl.searchParams.delete("code");
+            window.history.replaceState({}, "", cleanUrl.toString());
+            
+            setIsLoading(false);
+            return;
+          } else {
+            console.error("[Auth] Code exchange failed:", data.error);
+          }
+        } catch (error) {
+          console.error("[Auth] Code exchange error:", error);
+        }
       }
+      
+      // Check localStorage for existing session
+      const storedUser = localStorage.getItem("apex_user");
+      const token = localStorage.getItem("apex_token");
+      if (storedUser && token) {
+        try {
+          setUser(JSON.parse(storedUser));
+        } catch {
+          localStorage.removeItem("apex_user");
+          localStorage.removeItem("apex_token");
+        }
+      }
+      setIsLoading(false);
     }
-    setIsLoading(false);
+    
+    initAuth();
   }, []);
 
   const login = async (email: string, password: string) => {

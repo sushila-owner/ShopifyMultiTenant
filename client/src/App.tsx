@@ -116,11 +116,43 @@ function MerchantLayout({ children }: { children: React.ReactNode }) {
   );
 }
 
+function SmartHomePage() {
+  const { user, isLoading } = useAuth();
+  
+  // Check if we're in embedded mode (has shop/host params)
+  const urlParams = new URLSearchParams(window.location.search);
+  const isEmbedded = urlParams.has("host") || urlParams.has("shop");
+  
+  if (isLoading) {
+    return (
+      <div className="flex h-screen items-center justify-center">
+        <div className="animate-spin rounded-full h-8 w-8 border-b-2 border-primary"></div>
+      </div>
+    );
+  }
+  
+  // Redirect authenticated users to dashboard
+  if (user) {
+    if (user.role === "admin") {
+      return <Redirect to="/admin" />;
+    }
+    return <Redirect to="/dashboard" />;
+  }
+  
+  // If embedded but not authenticated, show login
+  if (isEmbedded) {
+    return <Redirect to="/login" />;
+  }
+  
+  // Show landing page for non-embedded, non-authenticated users
+  return <LandingPage />;
+}
+
 function Router() {
   return (
     <Switch>
       {/* Public Routes */}
-      <Route path="/" component={LandingPage} />
+      <Route path="/" component={SmartHomePage} />
       <Route path="/login" component={LoginPage} />
       <Route path="/register" component={RegisterPage} />
       <Route path="/features" component={FeaturesPage} />
